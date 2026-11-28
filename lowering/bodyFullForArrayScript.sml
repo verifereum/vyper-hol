@@ -2057,8 +2057,9 @@ Theorem for_nonslot_array_prefix_full:
   (contract_inv mods exps ctx c cx /\
      module_body_inv mods c.ce_module tops c cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\ expr_body_pre_mods mods c cx env e es /\
   well_typed_iterator env elem (Array e) /\ supported_iterator tops elem (Array e) n /\
-  (!nid. e = TopLevelName (expr_type e) nid ==>
-     IS_SOME (supported_immutable_type tops nid)) /\
+  (!src name. e = TopLevelName (expr_type e) (src,name) ==>
+     ?ts. ALOOKUP mods src = SOME ts /\
+       IS_SOME (supported_immutable_type ts (NONE,name))) /\
   (~(?ty nid. e = TopLevelName ty nid) ==>
    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
   expr_type e = ArrayT elem bd /\

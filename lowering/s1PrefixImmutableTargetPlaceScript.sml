@@ -361,6 +361,6 @@ Proof
   rpt strip_tac >>
   `type_place_target env bt = SOME (Type ty)` by fs[well_typed_target_def] >>
   `gas_admissible (eval_target_place cx bt) target_place_res_ok es` by
-    (irule tuple_place_target_gas_admissible >> metis_tac[]) >>
+    (irule tuple_place_target_gas_admissible >> fs[expr_sim_inv_def] >> metis_tac[]) >>
   irule immutable_target_place_prefix_ind >> metis_tac[]
 QED

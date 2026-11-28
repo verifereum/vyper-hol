@@ -6893,7 +6893,10 @@ QED
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `type_place_target env bt = SOME (Type ty)` by fs[well_typed_target_def] >>
-  drule_all_then assume_tac tuplePlaceTargetGasTheory.tuple_place_target_gas_admissible >>
+  `gas_admissible (eval_target_place cx bt) target_place_res_ok es` by
+    (irule tuplePlaceTargetGasTheory.tuple_place_target_gas_admissible >>
+     fs[expr_sim_inv_def, exprSimHypsDefsTheory.expr_sim_inv_mods_def] >>
+     metis_tac[]) >>
   mp_tac (Q.SPECL [`bt`,`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,`func`,
                    `shadow_func`,`cenv`,`cx`,`env`,`es`,`id`]
     bodyFullTargetTheory.body_imm_target_place_sim_full) >>
@@ -7394,6 +7397,8 @@ Proof
   `call_evaluation_safe cx (int_calls_target bt)` by
     qpat_assum `call_evaluation_safe cx (int_calls_atargets (_ :: todo))`
       (mp_then Any ACCEPT_TAC call_evaluation_safe_append_left o REWRITE_RULE [int_calls_atarget_def]) >>
+  qpat_assum `expr_sim_inv_mods cenv.ce_modules cenv cx env src`
+    (strip_assume_tac o REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_mods_def]) >>
   drule_all tuplePlaceTargetGasTheory.tuple_place_target_gas_admissible >>
   rewrite_tac[bodyPtrPopTargetFragTransportTheory.eval_target_place_as_bind] >>
   disch_then (mp_then Any irule exprSimSliceComposeTheory.slice_gas_admissible_bind_head) >>
@@ -8182,8 +8187,8 @@ Proof
       (irule fn_has_code_split >> asm_rewrite_tac[])) >>>
   HEADGOAL (sg `gas_admissible (eval_target_place cx bt) target_place_res_ok src`) >>>
   HEADGOAL (irule tuplePlaceTargetGasTheory.tuple_place_target_gas_admissible) >>>
-  HEADGOAL (conj_tac >- first_assum ACCEPT_TAC >>
-    qexistsl_tac [`cenv`,`env`,`sty`] >> asm_rewrite_tac[]) >>>
+  HEADGOAL (fs[expr_sim_inv_def, exprSimHypsDefsTheory.expr_sim_inv_mods_def] >>
+    metis_tac[]) >>>
   HEADGOAL (
     `bodyFullTargetDefs$target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
        cenv cx env bt src` by
@@ -13455,8 +13460,8 @@ Proof
      drule_then assume_tac bodyFullTupleTargetProjectionTheory.body_tuple_target_full_ok_base >>
      asm_rewrite_tac[]) >>
   asm_simp_tac bool_ss [] >> conj_tac
-  >- (irule tuple_place_target_gas_admissible >> simp[] >>
-      qexistsl_tac [`cenv`,`env`,`ty`] >> simp[]) >>
+  >- (irule tuple_place_target_gas_admissible >>
+      fs[exprSimHypsDefsTheory.expr_sim_inv_mods_def] >> metis_tac[]) >>
   `assign_tuple_targets cx (BaseTarget head) (EL i vs) =
      bind (eval_target_place cx head) (\p. write_place cx p (EL i vs))` by
     simp_tac bool_ss [Once evaluate_def] >>

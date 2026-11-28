@@ -4815,19 +4815,16 @@ Proof
     `type_widens_to env.type_defs (post_value_type c e) (expr_type e)` by
       (irule post_value_type_widens >> conj_tac >- fs[well_typed_iterator_def] >>
        qexistsl [`cx`,`em`] >> first_assum ACCEPT_TAC) >>
-    `!src name. e = TopLevelName (expr_type e) (src,name) ==>
-       ?ts. ALOOKUP mods src = SOME ts /\
-            IS_SOME (supported_immutable_type ts (NONE,name))` by
-      (rpt gen_tac >> strip_tac >>
-       qpat_assum `!nid. e = TopLevelName _ nid ==> _`
-         (qspec_then `(src,name)` (drule_then assume_tac)) >>
-       Cases_on `src` >>
-       gvs[alistTheory.ALOOKUP_def, supportedDeclsTheory.supported_immutable_type_def,
-            supportedDeclsTheory.supported_lookup_other_module]) >>
     mp_tac (Q.INST [`et` |-> `fty`]
               for_nonslot_array_capture_classify_mods) >>
     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-    fs[exprSimHypsDefsTheory.cx_const_name_split_def]) >>
+    strip_tac >> first_x_assum (drule_then strip_assume_tac) >>
+    qexistsl [`src`,`name`] >> simp[] >>
+    qpat_assum `~cx_const_name_mods mods (src,name)` mp_tac >>
+    Cases_on `src` >>
+    simp[exprSimHypsDefsTheory.cx_const_name_def,
+         exprSimHypsDefsTheory.cx_const_name_mods_def, cx_tops_def,
+         vyperContextTheory.get_module_code_def]) >>
   simp[] >> qexistsl [`fty`,`n`] >> simp[]
 QED
 *)
@@ -4842,8 +4839,9 @@ Theorem for_nonslot_array_round_source_pre:
   (contract_inv mods exps ctx c cx /\
      module_body_inv mods c.ce_module tops c cx) /\ expr_body_pre_mods mods c cx env e es0 /\
   type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
-  (!nid. e = TopLevelName (expr_type e) nid ==>
-     IS_SOME (supported_immutable_type tops nid)) /\
+  (!src name. e = TopLevelName (expr_type e) (src,name) ==>
+     ?ts. ALOOKUP mods src = SOME ts /\
+       IS_SOME (supported_immutable_type ts (NONE,name))) /\
   (~(?ty nid. e = TopLevelName ty nid) ==>
    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
   stmt_loop_calls_ok mods (For id fty (Array e) n loop_body) /\
@@ -4885,8 +4883,9 @@ Theorem for_nonslot_array_round_contracts:
   supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
   type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
   stmt_exprs_ok c (For id fty (Array e) n loop_body) /\
-  (!nid. e = TopLevelName (expr_type e) nid ==>
-     IS_SOME (supported_immutable_type tops nid)) /\
+  (!src name. e = TopLevelName (expr_type e) (src,name) ==>
+     ?ts. ALOOKUP mods src = SOME ts /\
+       IS_SOME (supported_immutable_type ts (NONE,name))) /\
   (~(?ty nid. e = TopLevelName ty nid) ==>
    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
   stmt_loop_calls_ok mods (For id fty (Array e) n loop_body) /\

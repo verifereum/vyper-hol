@@ -233,6 +233,15 @@ Finalise for_nonslot_array_round_prefix_contracts_at
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  `!src name. e = TopLevelName (expr_type e) (src,name) ==>
+     ?ts. ALOOKUP [(NONE,tops)] src = SOME ts /\
+       IS_SOME (supported_immutable_type ts (NONE,name))` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!nid. e = TopLevelName _ nid ==> _`
+       (qspec_then `(src,name)` (drule_then assume_tac)) >>
+     Cases_on `src` >>
+     gvs[alistTheory.ALOOKUP_def, supportedDeclsTheory.supported_immutable_type_def,
+         supportedDeclsTheory.supported_lookup_other_module]) >>
   drule_all_then (map_every assume_tac o CONJUNCTS o Q.SPEC `av`)
     (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
       for_nonslot_array_round_source_pre) >>
