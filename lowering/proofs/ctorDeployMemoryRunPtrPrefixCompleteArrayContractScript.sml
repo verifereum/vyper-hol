@@ -128,8 +128,11 @@ Proof
  rpt strip_tac >> BETA_TAC >> first_x_assum irule >> asm_rewrite_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem prefix_dynamic_array_loop_complete_mode_contract_fmp:
+ (^CshiftModeWithFmp) checked ty tv /\
+ (is_abi_dynamic ce.ce_struct_fields ty \/
+   dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
+ (^CshiftModeWithFmp) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
 Proof
  disch_then (CONJUNCTS_THEN2 (mk_asm "child") assume_tac) >>
  simp_tac bool_ss [] >> rpt gen_tac >>
@@ -214,15 +217,6 @@ Proof
  simp_tac bool_ss [not_fresh_at_def] >>
  qpat_x_assum `!x. abi_decoder_older_vars _ x ==> lookup_var x actual = _` mp_tac >>
  simp[abi_decoder_older_vars_def]
-QED
-*)
-Theorem prefix_dynamic_array_loop_complete_mode_contract_fmp:
- (^CshiftModeWithFmp) checked ty tv /\
- (is_abi_dynamic ce.ce_struct_fields ty \/
-   dec_info_needs_clamp (type_to_abi_dec_info sf ce ty)) ==>
- (^CshiftModeWithFmp) checked (ArrayT ty (Dynamic maxn)) (ArrayTV tv (Dynamic maxn))
-Proof
-  cheat
 QED
 
 

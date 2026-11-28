@@ -1023,35 +1023,6 @@ Proof
   simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> ho_match_mp_tac supportedExprsTheory.supported_pure_expr_ind >>
-  rpt conj_tac >> rpt gen_tac >> simp[supportedExprsTheory.supported_pure_expr_def]
-  >- simp[cj 1 well_typed_expr_def, defaults_env_def]
-  >- simp[cj 33 evaluate_def, return_def]
-  >- suspend "global"
-  >- (PairCases_on `id` >>
-      simp[cj 31 evaluate_def, lookup_flag_mem_def] >> rpt strip_tac >>
-      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]))
-  >- suspend "ifexp"
-  >- suspend "structlit"
-  >- suspend "subscript"
-  >- suspend "attribute"
-  >- suspend "builtin"
-  >- suspend "typebuiltin"
-  >- suspend "pop"
-  >- suspend "call"
-  >- simp[cj 30 well_typed_expr_def, cj 49 evaluate_def, return_def]
-  >- suspend "cons"
-  >- simp[cj 34 well_typed_expr_def, cj 49 evaluate_def, return_def]
-  >- suspend "fields_cons"
-  >- simp[cj 1 well_typed_expr_def, defaults_env_def, well_typed_expr_def]
-  >- suspend "place_global"
-  >- suspend "place_subscript"
-  >> suspend "place_rest"
-QED
-*)
 Theorem intcall_args_defaults_scope_with_code_addr:
   (!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
     !cx s sc. conditional_result cx r (s with scopes := sc) =
@@ -1109,7 +1080,30 @@ Theorem intcall_args_defaults_scope_with_code_addr:
       (!s r t. eval_expr cx e s = (INL r,t) ==>
         !id path. r <> PlaceR (MemoryPlace id path)))
 Proof
-  cheat
+  strip_tac >> ho_match_mp_tac supportedExprsTheory.supported_pure_expr_ind >>
+  rpt conj_tac >> rpt gen_tac >> simp[supportedExprsTheory.supported_pure_expr_def]
+  >- simp[cj 1 well_typed_expr_def, defaults_env_def]
+  >- simp[cj 33 evaluate_def, return_def]
+  >- suspend "global"
+  >- (PairCases_on `id` >>
+      simp[cj 31 evaluate_def, lookup_flag_mem_def] >> rpt strip_tac >>
+      rpt (BasicProvers.FULL_CASE_TAC >> gvs[return_def, raise_def]))
+  >- suspend "ifexp"
+  >- suspend "structlit"
+  >- suspend "subscript"
+  >- suspend "attribute"
+  >- suspend "builtin"
+  >- suspend "typebuiltin"
+  >- suspend "pop"
+  >- suspend "call"
+  >- simp[cj 30 well_typed_expr_def, cj 49 evaluate_def, return_def]
+  >- suspend "cons"
+  >- simp[cj 34 well_typed_expr_def, cj 49 evaluate_def, return_def]
+  >- suspend "fields_cons"
+  >- simp[cj 1 well_typed_expr_def, defaults_env_def, well_typed_expr_def]
+  >- suspend "place_global"
+  >- suspend "place_subscript"
+  >> suspend "place_rest"
 QED
 
 (* SCRATCH MEASUREMENT: original continuation.

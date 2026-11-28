@@ -349,8 +349,23 @@ Proof
   Cases_on `method_id_opt` >> simp[] >> decide_tac
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem abi_scratch_builtin_pre_caller:
+  let outsz = 32+32*word_size (maxlen+(case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4)) in
+  let allocated = abi_builtin_allocate_state st.cs_next_id outsz initial in
+  let cap = allocated.vs_alloca_next+32*CARD (abi_decoder_missing first last allocated) in
+  alloca_inv initial /\ cap < dimword (:256) /\
+  FLOOKUP initial.vs_allocas source_id = SOME (sb,source_cap) /\ source_id <> st.cs_next_id /\
+  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
+    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
+  st.cs_next_id < first /\ first <= st.cs_next_id+(case method_id_opt of NONE => 2 | SOME _ => 4) /\
+  ~(source_id IN abi_decoder_ids first last) /\
+  (!id off sz. id IN abi_decoder_ids first last /\
+    FLOOKUP allocated.vs_allocas id = SOME (off,sz) ==> sz = 32) /\
+  abi_encoder_input ei at av sb source_cap initial.vs_memory /\
+  eval_operand src initial = SOME (n2w sb) /\ abi_decoder_operand_live st.cs_next_var src /\
+  LENGTH (enc at av) <= maxlen /\
+  (method_id_opt = NONE \/ sb+source_cap <= p+32 \/ p+64 <= sb) ==>
+  abi_scratch_builtin_pre ei at av st method_id_opt src sb source_cap p maxlen first last 0 cap initial
 Proof
   PURE_REWRITE_TAC [LET_THM] >> BETA_TAC >> disch_then (MAP_EVERY assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`s` |-> `initial:venom_state`, `site` |-> `st.cs_next_id`,
@@ -380,27 +395,6 @@ Proof
   qpat_assum `Abbrev (allocated = _)` (fn th =>
     PURE_REWRITE_TAC [GSYM (REWRITE_RULE [markerTheory.Abbrev_def] th)]) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem abi_scratch_builtin_pre_caller:
-  let outsz = 32+32*word_size (maxlen+(case method_id_opt of NONE => 0 | SOME (_:bytes32) => 4)) in
-  let allocated = abi_builtin_allocate_state st.cs_next_id outsz initial in
-  let cap = allocated.vs_alloca_next+32*CARD (abi_decoder_missing first last allocated) in
-  alloca_inv initial /\ cap < dimword (:256) /\
-  FLOOKUP initial.vs_allocas source_id = SOME (sb,source_cap) /\ source_id <> st.cs_next_id /\
-  ((FLOOKUP initial.vs_allocas st.cs_next_id = NONE /\ p = initial.vs_alloca_next) \/
-    FLOOKUP initial.vs_allocas st.cs_next_id = SOME (p,outsz)) /\
-  st.cs_next_id < first /\ first <= st.cs_next_id+(case method_id_opt of NONE => 2 | SOME _ => 4) /\
-  ~(source_id IN abi_decoder_ids first last) /\
-  (!id off sz. id IN abi_decoder_ids first last /\
-    FLOOKUP allocated.vs_allocas id = SOME (off,sz) ==> sz = 32) /\
-  abi_encoder_input ei at av sb source_cap initial.vs_memory /\
-  eval_operand src initial = SOME (n2w sb) /\ abi_decoder_operand_live st.cs_next_var src /\
-  LENGTH (enc at av) <= maxlen /\
-  (method_id_opt = NONE \/ sb+source_cap <= p+32 \/ p+64 <= sb) ==>
-  abi_scratch_builtin_pre ei at av st method_id_opt src sb source_cap p maxlen first last 0 cap initial
-Proof
-  cheat
 QED
 
 Theorem lower_abi_encode_scratch_caller:
