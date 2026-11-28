@@ -7,7 +7,7 @@
  * TOP-LEVEL: body_expr_full_ok_leaf and the body_*_case_full cases.
  *)
 Theory bodyFullCases
-Ancestors bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallSource
+Ancestors constSubstMods bodyFullIntCall bodyFullIntCallArgs bodyFullIntCallCallee bodyIntCallSource
   intCallResultsProps[qualified,ignore_grammar]
   bodyFullAssign bodyFullAssignTuple bodyFullAugAssign bodyFullAnnAssign
   bodyFullAppend bodyFullIfExp bodyFullAttribute
@@ -60,7 +60,7 @@ QED
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
-  rw[body_stmt_full_ok_def] >>
+  rw[bodyFullPredsModsTheory.body_stmt_full_ok_mods_def] >>
   Cases_on `is_word_type typ`
   >- (irule body_annassign_word_full >> metis_tac[]) >>
   `0 < type_memory_bytes cenv typ` by
@@ -118,7 +118,7 @@ QED
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
-  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  rpt strip_tac >> rewrite_tac[bodyFullPredsModsTheory.body_stmt_full_ok_mods_def] >> rpt strip_tac >>
   irule compile_assert_reason_frag_full >> metis_tac[]
 QED
 *)
@@ -709,7 +709,7 @@ QED
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
-  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  rpt strip_tac >> rewrite_tac[bodyFullPredsModsTheory.body_stmt_full_ok_mods_def] >> rpt strip_tac >>
   `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
     (drule body_inv_contract >>
      MATCH_ACCEPT_TAC contract_inv_singleton_source_modules) >>
@@ -841,10 +841,10 @@ Theorem body_intcall_case_full:
        get_module_code cx src_id_opt = SOME ts /\
        lookup_callable_function cx.in_deploy fn ts = SOME (mut,nr,args,dflts,ret,ss) ==>
        body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (src_id_opt,fn))
-         (subst_consts_stmts (module_consts_env (cx_tops cx) []) ss) /\
+         (subst_consts_stmts_mods (consts_env_mods mods) ss) /\
        body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (src_id_opt,fn))
          (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
-           (subst_consts_exprs (module_consts_env (cx_tops cx) []) dflts))) /\
+           (subst_consts_exprs_mods (consts_env_mods mods) dflts))) /\
     (!s'' x t s'3' ts t' s'4' tup t'' mut stup nr stup2 args sstup dflts sstup2
          ret body' s'5' x' t'3'.
        type_check (~MEM (src_id_opt,fn) cx.stk) "recursion" s'' = (INL x,t) /\
@@ -909,7 +909,7 @@ QED
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
-  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  rpt strip_tac >> rewrite_tac[bodyFullPredsModsTheory.body_stmt_full_ok_mods_def] >> rpt strip_tac >>
   irule compile_raise_reason_frag_full >> metis_tac[]
 QED
 *)

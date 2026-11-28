@@ -73,17 +73,21 @@ Theorem compile_for_storage_subplace_array_frag_full:
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
     ~supported_expr_exists (const_name_root cx) e /\
     stmt_exprs_ok cenv (For id typ (Array e) n body) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (For id typ (Array e) n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ~(?ty nid. e = TopLevelName ty nid) /\
-    (?tgt nid. loop_iterator_place e = SOME tgt /\
-       target_root tgt = TopLevelNameTarget nid /\
-       ((?vis kind ty slot.
-          supported_variable_decl tops nid = SOME (vis,kind,ty,SOME slot) /\
-          (kind = Storage \/ kind = Transient)) \/
-        (?vis transient kt vt slot.
-          supported_hashmap_decl tops nid = SOME (vis,transient,kt,vt,SOME slot)))) ==>
+    (?tgt src name ts. loop_iterator_place e = SOME tgt /\
+       target_root tgt = TopLevelNameTarget (src,name) /\
+       ALOOKUP mods src = SOME ts /\
+       ((?tr ty slot.
+           find_var_decl_by_name name ts = SOME (StorageVarDecl tr ty,name) /\
+           lookup_var_slot_from_layout cx tr src name = SOME slot) \/
+        (?tr kt vt slot.
+           find_var_decl_by_name name ts = SOME (HashMapVarDecl tr kt vt,name) /\
+           lookup_var_slot_from_layout cx tr src name = SOME slot))) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
@@ -201,7 +205,7 @@ Theorem selected_array_code_frame:
   evaluate_type (get_tenv cx) (ArrayT typ bd) = SOME (ArrayTV tyv bd) /\
   post_value_type c e = ArrayT typ bd ==>
   !a. read_result cx (PlaceR (ImmutablePlace src name path)) em = (INL (ArrayV a),em) ==>
-  for_nonslot_code_frame c cx env ctx func id e body
+  for_nonslot_code_frame mods c cx env ctx func id e body
     (case vv_location vv of NONE => LocMemory | SOME l => l)
     (PlaceR (ImmutablePlace src name path)) vv a em u
 Proof
@@ -270,12 +274,15 @@ Theorem compile_for_immutable_subplace_array_frag_full:
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
     ~supported_expr_exists (const_name_root cx) e /\
     stmt_exprs_ok cenv (For id typ (Array e) n body) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (For id typ (Array e) n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ~(?ty nid. e = TopLevelName ty nid) /\
-    (?tgt nid. loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget nid /\
-       IS_SOME (supported_immutable_type tops nid)) ==>
+    (?tgt src name ts. loop_iterator_place e = SOME tgt /\
+       target_root tgt = TopLevelNameTarget (src,name) /\
+       ALOOKUP mods src = SOME ts /\ is_immutable_decl name ts) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))

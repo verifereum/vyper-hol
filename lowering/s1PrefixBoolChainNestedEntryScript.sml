@@ -8,7 +8,7 @@ Theorem bool_chain_nested_prefix_at_entry:
   !cx p n e DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es
      st0 sa sb shadow_sa shadow_sb rv s0 G0 tn0.
     builtin_args_length_ok (BoolChain p n) (LENGTH [e]) /\
-    bool_chain_full_ok cx (bool_chain_operands p (n - 1) e) /\
+    bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (bool_chain_operands p (n - 1) e) /\
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     body_const_cells_agree [(NONE,tops)] cx env es /\
     expr_body_pre cenv cx env (Builtin (BaseT BoolT) (BoolChain p n) [e]) es /\

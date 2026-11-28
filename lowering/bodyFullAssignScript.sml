@@ -10282,7 +10282,10 @@ Proof
   qpat_x_assum `assign_target_place_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE[bodyFullTargetDefsTheory.assign_target_place_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`ty`,`ss`,`st`,`shss`,`shst`,`r`,`u`,`Gf`,`tnf`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qspec_then `[(NONE,cx_tops cx)]`
+      (assume_tac o REWRITE_RULE [GSYM gas_outcome_full_singleton_def]) o
+    MATCH_MP gas_outcome_full_mods_change_modules) >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ (eval_target_place cx t) _ targetQ targetR` >>
   irule gasOutcomeFullComposeTheory.gas_outcome_full_bind_all >> BETA_TAC >>
   conj_tac >- simp[vyperStorageTraceTheory.storage_trace_frame_write_place] >>
@@ -12672,7 +12675,10 @@ Proof
   qpat_x_assum `assign_target_place_sim_full _ _ _ _ _ _`
     (mp_tac o REWRITE_RULE [bodyFullTargetDefsTheory.assign_target_place_sim_full_def]) >>
   disch_then (qspecl_then [`st0`,`ty`,`sr`,`st`,`shadow_sr`,`shadow_st`,`r`,`s`,`G`,`tn`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (qspec_then `[(NONE,cx_tops cx)]`
+      (assume_tac o REWRITE_RULE [GSYM gas_outcome_full_singleton_def]) o
+    MATCH_MP gas_outcome_full_mods_change_modules) >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_bind_all >> BETA_TAC >> rpt conj_tac
   >~ [`storage_trace_frame (eval_target_place _ _)`]

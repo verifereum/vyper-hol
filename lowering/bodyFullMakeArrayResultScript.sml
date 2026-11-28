@@ -5,7 +5,7 @@ Ancestors
   exprSimBuffer exprSimProps exprLoweringProps exprSimMemDefs
   exprSimHyps loweringPosts bodyPtrDefs compileEnv context valueEncoding
   vyperInterpreter vyperState venomState venomInst fragExec words
-  bodyFullHashKeccakFixed
+  bodyFullHashKeccakFixed bodySimStmtFacts[qualified] exprSimHypsDefs vyperTypeInvariants
 
 val _ = Parse.hide "base";
 
@@ -17,10 +17,19 @@ Proof
   qpat_x_assum `e = Builtin _ _ _` (fn th => rewrite_tac[GSYM th]) >>
   `post_value_type ce e = expr_type e` by metis_tac[post_value_type_lowered] >>
   `base < dimword (:256)` by decide_tac >>
+  `bind (eval_expr cx e) (read_result cx) (es with gas_obs := gs) = (INL v,ee)` by
+    simp[bind_def, read_result_def, return_def] >>
+  `expr_body_pre_mods ce.ce_modules ce cx env e (es with gas_obs := gs)` by
+    fs[expr_body_pre_mods_def] >>
+  `value_runtime_typed env (expr_type e) v` by
+    (drule_all_then strip_assume_tac
+       (REWRITE_RULE [ETA_AX] bodySimStmtFactsTheory.expr_body_pre_eval_mods) >> simp[]) >>
+  `env.type_defs = get_tenv cx` by
+    fs[expr_body_pre_mods_def, expr_sim_inv_mods_def, env_consistent_def,
+       env_context_consistent_def] >>
   `val_wf tv v` by
-    (irule aggregate_materialised_child_wf >>
-     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-     simp[read_result_def, return_def] >> metis_tac[]) >>
+    (gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def] >>
+     drule_then ACCEPT_TAC (cj 1 typed_value_wf)) >>
   `val_footprint tv v <= cap /\ val_store_size tv v <= cap` by
     metis_tac[val_footprint_le,val_store_size_le] >>
   `~expr_has_effect e ==> pure_frame ce func es sa s0 t` by

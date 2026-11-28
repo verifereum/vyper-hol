@@ -1,5 +1,5 @@
 Theory bodyFullIntCallCheckedBody
-Ancestors
+Ancestors constSubstMods
   bodyFullPreds bodySim exprSimHypsDefs
   constSubstStmtsPreserve constSubstStmts constSubst
   compileEnv supportedStmts alist
@@ -18,10 +18,10 @@ Proof
 QED
 *)
 Theorem intcall_checked_body_const_name_free:
-  body_inv tops ctx ce cx /\
-  body_const_cells_agree [(NONE,tops)] cx env st ==>
-  ~supported_stmts_expr_exists (const_name_root_mods ce.ce_modules)
-    (subst_consts_stmts (module_consts_env tops []) ss)
+  contract_inv mods exps ctx ce cx /\
+  body_const_cells_agree mods cx env st ==>
+  ~supported_stmts_expr_exists (const_name_root_mods mods)
+    (subst_consts_stmts_mods (consts_env_mods mods) ss)
 Proof
   cheat
 QED

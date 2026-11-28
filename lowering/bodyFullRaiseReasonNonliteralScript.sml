@@ -1,6 +1,7 @@
 (* Nonliteral RaiseReason over the joint finite-horizon judgment. *)
 Theory bodyFullRaiseReasonNonliteral
 Ancestors
+  bodyActiveStmtCallsMods[qualified]
   bodyFullShadowBodyInv bodyInvCodeProps bodyInvMetadataProps exprBodyPreProps
   stateRelProj
   bodyFullRaiseReasonContinuation bodyFullPreds bodySimFull bodyFullShared
@@ -25,31 +26,33 @@ Proof
   `supported_string_reason tops e` by
     gvs[supported_stmt_raise_reason, supported_raise_reason_def] >>
   `well_typed_expr env e` by fs[type_stmt_raise_reason] >>
-  drule_all_then assume_tac bodySingletonCallSupportTheory.body_inv_typed_calls_main >>
-  drule_all_then strip_assume_tac supported_string_reason_body_calls >>
-  drule_then strip_assume_tac body_inv_main_code >>
-  drule_then assume_tac body_inv_contract >>
-  drule_then assume_tac body_inv_module >>
-  drule_all_then strip_assume_tac bodyInvSplitTheory.contract_inv_module_gate >>
-  `get_tenv cx = type_env tops` by
-    (drule_then assume_tac contract_inv_type_env >>
-     fs[vyperContextTheory.type_env_all_modules_def, vyperContextTheory.type_env_def,
-        finite_mapTheory.FUNION_FEMPTY_2]) >>
-  `alloc_limits_expr cenv e` by fs[bodySimTheory.stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
-          allocLimitsTheory.alloc_limits_raise_def] >>
+  `EVERY (source_body_call_supported cx)
+     (int_calls_stmt (Raise (RaiseReason e)))` by
+    (drule_all_then (mp_tac o CONJUNCT1)
+       bodyActiveStmtCallsModsTheory.active_stmt_calls_resolve_mods >>
+     metis_tac[]) >>
+  `supported_expr tops e` by
+    (Cases_on `e` >> gvs[supported_string_reason_def, supportedExprsTheory.supported_expr_def,
+                             supportedExprsTheory.supported_pure_expr_def] >>
+     Cases_on `l` >> gvs[supported_string_reason_def, supportedExprsTheory.supported_expr_def,
+                             supportedExprsTheory.supported_pure_expr_def]) >>
+  `~expr_has_evm_run e` by metis_tac[supported_expr_no_evm_run] >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  drule_then assume_tac contract_inv_type_env >>
+  `alloc_limits_expr cenv e` by
+    fs[stmt_exprs_ok_def, allocLimitsTheory.alloc_limits_stmt_def,
+       allocLimitsTheory.alloc_limits_raise_def] >>
   `~is_extcode e` by metis_tac[allocLimitsPropsTheory.alloc_limits_expr_not_extcode] >>
-  `~supported_expr_exists (const_name_root cx) e` by
-    (drule_all body_inv_stmt_const_name_free >>
-     simp[supported_stmt_expr_exists_def, supported_raise_exists_def]) >>
-  `expr_body_pre cenv cx env e es` by
-    (irule stmt_expr_body_pre >>
+  `expr_body_pre_mods mods cenv cx env e es` by
+    (irule (Q.INST [`calls` |-> `[]`] (SPEC_ALL stmt_expr_body_pre_mods)) >>
      gvs[type_stmt_raise_reason, stmt_exprs_ok_flat, supported_stmt_expr_exists_def,
-         supported_raise_exists_def, int_calls_stmt_def,
-         int_calls_raise_reason_def] >>
-     qexists_tac `[]` >> simp[]) >>
-  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+         supported_raise_exists_def, int_calls_stmt_def, int_calls_raise_reason_def] >>
+     metis_tac[bodyInvModulePropsTheory.module_body_inv_lookup, alistTheory.ALOOKUP_MEM]) >>
+  `expr_vv_sim_full_mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx (expr_type e) e es` by
-    metis_tac[body_expr_full_ok_def] >>
+    (qpat_x_assum `body_expr_full_ok_mods _ _ _ _`
+       (strip_assume_tac o ONCE_REWRITE_RULE [bodyFullPredsModsTheory.body_expr_full_ok_mods_def]) >>
+     metis_tac[]) >>
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   drule compile_raise_reason_parts >> strip_tac >> gvs[] >>
   suspend "layout"
@@ -70,6 +73,8 @@ Theorem compile_raise_reason_nonliteral_frag_full:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Raise (RaiseReason e)) = SOME env' /\
     stmt_exprs_ok cenv (Raise (RaiseReason e)) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (Raise (RaiseReason e)) /\
     call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason e))) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\

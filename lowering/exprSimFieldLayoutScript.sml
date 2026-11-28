@@ -37,6 +37,34 @@ Proof
   Induct >> simp[] >> PairCases >> rpt strip_tac >> gvs[]
 QED
 
+Theorem struct_fields_layout_consistent:
+  !cenv cx sid stv.
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+                               sz = type_memory_size tv) fields) /\
+    evaluate_type (get_tenv cx) (StructT sid) = SOME stv ==>
+    ?fs. stv = StructTV fs /\
+         fields_layout
+           (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  simp[sfields_tenv_consistent_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+            sz = type_memory_size tv) fields` by
+    (qpat_assum `!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==> EVERY _ fields`
+       (drule_then ACCEPT_TAC)) >>
+  simp[get_struct_fields_def] >>
+  qpat_x_assum `MAP FST fields = _` (SUBST1_TAC o SYM) >>
+  irule fields_layout_zip >> simp[] >>
+  drule (cj 2 evaluate_type_mono) >> strip_tac >>
+  gvs[vyperValueTheory.evaluate_types_OPT_MMAP] >>
+  qexists_tac `get_tenv cx` >> simp[]
+QED
+
 Theorem struct_fields_layout:
   !cenv cx env es sid stv.
     expr_sim_inv cenv cx env es /\
@@ -45,22 +73,10 @@ Theorem struct_fields_layout:
          fields_layout
            (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid)) fs
 Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
-    gvs[expr_sim_inv_def] >>
-  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
-  simp[sfields_tenv_consistent_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  `EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
-            sz = type_memory_size tv) fields` by
-    (fs[expr_sim_inv_def] >> metis_tac[]) >>
-  simp[get_struct_fields_def] >>
-  qpat_x_assum `MAP FST fields = _` (SUBST1_TAC o SYM) >>
-  irule fields_layout_zip >> simp[] >>
-  drule (cj 2 evaluate_type_mono) >> strip_tac >>
-  gvs[vyperValueTheory.evaluate_types_OPT_MMAP] >>
-  qexists_tac `get_tenv cx` >> simp[]
+  rpt strip_tac >> irule struct_fields_layout_consistent >> qexists_tac `cx` >>
+  fs[expr_sim_inv_def] >> rpt strip_tac >>
+  qpat_assum `!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==> _`
+    (drule_then (ACCEPT_TAC o CONJUNCT2))
 QED
 
 Theorem fields_in_memory_field:

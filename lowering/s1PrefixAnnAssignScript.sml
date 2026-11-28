@@ -1,6 +1,7 @@
 (* Request-prefix companion to bodyFullAnnAssign. *)
 Theory s1PrefixAnnAssign
 Ancestors
+  bodySingletonStmtGuards[qualified]
   s1PrefixPreds bodyFullAnnAssign s1PrefixDefs
   s1PrefixAnnAssignAllocRhs s1PrefixAnnAssignEmptyRhs s1PrefixAnnAssignSourceTrace
   s1PrefixInvalidTraceDomain s1PrefixAnnAssignWord exprBodyPreProps bodySimDeclCases bodyExprPreFacts
@@ -11,6 +12,10 @@ Ancestors
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
+  drule_all_then strip_assume_tac bodySingletonStmtGuardsTheory.singleton_stmt_expr_guards >>
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
+  fs[bodySimTheory.body_inv_split_def, exprSimHypsDefsTheory.expr_sim_inv_split_def,
+     bodyInvSplitTheory.module_body_inv_def, alistTheory.ALOOKUP_def] >>
   drule_all_then strip_assume_tac annassign_word_full_source >>
   `body_expr_prefix_ok cx e` by
     (first_x_assum irule >>
@@ -125,6 +130,10 @@ Proof
   irule annassign_memory_prefix_execution >>
   rpt (conj_tac ORELSE qexistsl_tac [`env`,`tops`]) >> simp[] >>
   rpt gen_tac >> disch_tac >>
+  drule_all_then strip_assume_tac bodySingletonStmtGuardsTheory.singleton_stmt_expr_guards >>
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
+  fs[bodySimTheory.body_inv_split_def, exprSimHypsDefsTheory.expr_sim_inv_split_def,
+     bodyInvSplitTheory.module_body_inv_def, alistTheory.ALOOKUP_def] >>
   drule_all_then strip_assume_tac annassign_full_declared_rhs_pre >>
   simp[]
   >- (irule bodyFullSimProjectionTheory.body_expr_full_ok_simulations >> metis_tac[]) >>
@@ -205,6 +214,10 @@ Proof
      expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
        ce cx (expr_type e) e es` by
     (rpt gen_tac >> strip_tac >>
+     drule_all_then strip_assume_tac bodySingletonStmtGuardsTheory.singleton_stmt_expr_guards >>
+     drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
+     fs[bodySimTheory.body_inv_split_def, exprSimHypsDefsTheory.expr_sim_inv_split_def,
+        bodyInvSplitTheory.module_body_inv_def, alistTheory.ALOOKUP_def] >>
      drule_all_then strip_assume_tac annassign_full_declared_rhs_pre >>
      metis_tac[CONJUNCT1 body_expr_prefix_ok_def]) >>
   rewrite_tac[stmt_frag_prefix_def] >> rpt gen_tac >> strip_tac >>
@@ -300,6 +313,10 @@ Proof
       (conj_tac >- metis_tac[]) >>
       qexistsl_tac [`env`,`tops`] >> simp[] >>
       conj_tac >> rpt gen_tac >> disch_tac >>
+      drule_all_then strip_assume_tac bodySingletonStmtGuardsTheory.singleton_stmt_expr_guards >>
+      drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
+      fs[bodySimTheory.body_inv_split_def, exprSimHypsDefsTheory.expr_sim_inv_split_def,
+         bodyInvSplitTheory.module_body_inv_def, alistTheory.ALOOKUP_def] >>
       drule_all_then strip_assume_tac annassign_full_declared_rhs_pre >>
       metis_tac[body_expr_full_ok_simulations, CONJUNCT1 body_expr_prefix_ok_def]) >>
   `0 < type_memory_bytes cenv typ` by

@@ -86,7 +86,7 @@ Theorem concat_loop_initial_entry:
   s0.vs_inst_idx = LENGTH sa.cs_current_insts /\
   storage_trace_domain cx st0 es.storage_trace ==>
   ?s4 s5 shadow_s4 shadow_s5 t4 G4 tn4 dp ov ow binst B bsz oinst buf bv fo s6 u' tvr.
-    concat_loop_ready args 0 0 DF lo d ctx shadow_ctx PG tops func shadow_func cenv cx env
+    concat_loop_ready args 0 0 DF lo d ctx shadow_ctx PG mods exps tops func shadow_func cenv cx env
       st0 es s4 s5 shadow_s4 shadow_s5 t4 G4 tn4 dp ov ow binst B bsz oinst /\
     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (s0,G0,tn0) [] (OK t4,G4,tn4)) /\

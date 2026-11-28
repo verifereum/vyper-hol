@@ -29,11 +29,11 @@ Ancestors
 
 (* Each operand is ok, a later one where the one before evaluates. *)
 Definition bool_chain_full_ok_def:
-  bool_chain_full_ok cx [] = T /\
-  bool_chain_full_ok cx (e::es) =
-    (body_expr_full_ok cx e /\
+  bool_chain_full_ok mods exps cx [] = T /\
+  bool_chain_full_ok mods exps cx (e::es) =
+    (body_expr_full_ok_mods mods exps cx e /\
      ((?s tv s'. eval_expr cx e s = (INL tv, s')) ==>
-      bool_chain_full_ok cx es))
+      bool_chain_full_ok mods exps cx es))
 End
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
@@ -53,7 +53,7 @@ QED
 *)
 Theorem bool_chain_ops_outcome_full:
   !k x sa shadow_sa es s G tn.
-  bool_chain_full_ok cx (bool_chain_operands p k x) /\ expr_type x = BaseT BoolT /\
+  bool_chain_full_ok mods exps cx (bool_chain_operands p k x) /\ expr_type x = BaseT BoolT /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
   body_const_cells_agree mods cx env es /\ expr_body_pre_mods mods cenv cx env x es /\
@@ -186,7 +186,7 @@ Resume bool_chain_ops_outcome_full[continue]:
      irule body_const_cells_agree_expr_read >>
      qpat_assum `bind (eval_expr cx c) _ _ = (_,mid)` (irule_at Any) >>
      simp[] >> metis_tac[expr_body_pre_static_facts]) >>
-  `bool_chain_full_ok cx (bool_chain_operands p k tail)` by
+  `bool_chain_full_ok mods exps cx (bool_chain_operands p k tail)` by
     (simp[bool_chain_full_ok_def] >> first_x_assum irule >>
      qabbrev_tac `src = es with gas_obs := gas_explicit marks s.vs_gas_readings` >>
      qpat_assum `bind (eval_expr cx c) _ src = (INL _,mid)`
@@ -301,7 +301,7 @@ QED
 *)
 Theorem bool_chain_expr_full_ok:
   !cx ann is_and n e.
-    bool_chain_full_ok cx (bool_chain_operands is_and (n - 1) e) ==>
+    bool_chain_full_ok mods exps cx (bool_chain_operands is_and (n - 1) e) ==>
     body_expr_full_ok_mods mods exps cx (Builtin ann (BoolChain is_and n) [e])
 Proof
   cheat

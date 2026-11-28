@@ -1,6 +1,7 @@
 (* Compose the checked condition with the lazy custom-error branch. *)
 Theory bodyFullAssertCustomError
 Ancestors
+  bodyActiveStmtCallsMods[qualified]
   bodyFullShadowBodyInv
   bodyFullCustomErrorSource bodyFullCustomErrorLayout
   bodyFullAssertReasonControl bodyFullShared
@@ -19,7 +20,12 @@ val _ = Parse.hide "body";
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
-  `expr_body_pre cenv cx env e es` by
+  `EVERY (source_body_call_supported cx)
+     (int_calls_stmt (Assert e (AssertCustomError err)))` by
+    (drule_all_then (mp_tac o CONJUNCT1)
+       bodyActiveStmtCallsModsTheory.active_stmt_calls_resolve_mods >>
+     metis_tac[]) >>
+  `expr_body_pre_mods mods cenv cx env e es` by
     (irule assert_custom_condition_source_pre >> metis_tac[]) >>
   `expr_type e = BaseT BoolT` by fs[type_stmt_assert_custom] >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -99,6 +105,8 @@ Theorem compile_assert_custom_frag_full_from_raise:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assert e (AssertCustomError err)) = SOME env' /\
     stmt_exprs_ok cenv (Assert e (AssertCustomError err)) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (Assert e (AssertCustomError err)) /\
     call_evaluation_safe cx (int_calls_stmt (Assert e (AssertCustomError err))) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
@@ -206,7 +214,13 @@ Resume compile_assert_custom_frag_full_from_raise[false]:
     (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                                   gas_outcome_full_zero_prefix)) >>
   drule_all assert_custom_false_source_ready >> strip_tac >>
-  `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])` by
+  `~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+     (Raise (RaiseCustomError err))` by
+    (qpat_assum `~supported_stmt_expr_exists _ (Assert e (AssertCustomError err))` mp_tac >>
+     simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+          supportedStmtTraverseTheory.supported_assert_exists_def,
+          supportedStmtTraverseTheory.supported_raise_exists_def]) >>
+  `body_const_cells_agree mods cx env (mid with gas_obs := [])` by
     (irule body_const_cells_agree_expr_read >>
      qpat_assum `!tail. bind (eval_expr cx e) (read_result cx) _ = _`
        (qspec_then `[]` (irule_at Any)) >>

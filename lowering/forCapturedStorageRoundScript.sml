@@ -1,5 +1,6 @@
 Theory forCapturedStorageRound
 Ancestors
+  bodyFullPredsMods[qualified]
   forCapturedStorageLive bodyFullForStorage bodyFullPreds bodyFullForFrame
   loweringStateRelDefs stmtSimDefs bodyPtrDefs allocaHistory ptrDiscipline
   compileEnv vyperStorageFootprint vyperState fragExec venomState venomInst
@@ -22,7 +23,7 @@ Theorem for_captured_storage_nil_full:
   get_instruction bb 0 = SOME (mk_inst eid EQ [Var idx; lvo] [dv]) /\
   get_instruction bb 1 = SOME (mk_inst (eid+1) JNZ [Var dv; Label exit; Label bod] []) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
-    ?k. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+    ?k. for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
       (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
       (lvo,idx,cond) (p,dst,nb,sd) (H,k,[],es,G,tn,s)) ==>
   ?t G1 tn1. !H. valid_horizon cx st0 H es.storage_trace ==>
@@ -51,10 +52,10 @@ QED
    to the outer source scope, so neither the subregion witness nor its trace
    prefix changes along this edge. *)
 Theorem for_captured_storage_increment_post[local]:
-  for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+  for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
     (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
     (lvo,idx,incr) (p,dst,nb,sd) (H,k,a::rs,ee,G,tn,s) /\
-  k < len /\ body_stmts_full_ok cx stmts /\
+  k < len /\ body_stmts_full_ok_mods c0.ce_modules exps cx stmts /\
   local_ptrs_reserved c0 sa0 /\ ~not_fresh_at sa0 idx /\ ~not_fresh_at sa0 out /\
   (!x sz. c0.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
   (!x sz. c0.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa0 x) /\
@@ -67,7 +68,7 @@ Theorem for_captured_storage_increment_post[local]:
   op_taint tf (Var idx) = {} /\
   (!x. x <> idx /\ x <> out ==> lookup_var x t = lookup_var x s /\
     FLOOKUP Gf x = FLOOKUP G x /\ op_taint tf (Var x) = op_taint tn (Var x)) ==>
-  for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+  for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
     (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
     (lvo,idx,cond) (p,dst,nb,sd) (H,SUC k,rs,ee,Gf,tf,t)
 Proof
@@ -168,14 +169,14 @@ Theorem for_captured_storage_backedge[local]:
   p <> idx /\ p <> out /\
   (!x. lvo = Var x ==> x <> idx /\ x <> out) /\
   (!x. bop = Var x ==> x <> idx /\ x <> out) /\
-  k < len /\ body_stmts_full_ok cx stmts /\
+  k < len /\ body_stmts_full_ok_mods c0.ce_modules exps cx stmts /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
-    for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+    for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
       (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
       (lvo,idx,si.cs_current_bb) (p,dst,nb,sd) (H,k,a::rs,ee,G,tn,s)) ==>
   ?t Gf tf. !H. valid_horizon cx st0 H ee.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,Gf,tf) /\
-    for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+    for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
       (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
       (lvo,idx,cond) (p,dst,nb,sd) (H,SUC k,rs,ee,Gf,tf,t)
 Proof
@@ -185,7 +186,7 @@ Proof
             `tn with t_var := (tn.t_var |+ (out,{})) |+ (idx,{})`] >>
   qx_gen_tac `H` >> disch_tac >>
   qpat_assum `!H. valid_horizon _ _ _ _ ==> _` drule >> disch_tac >>
-  qpat_assum `for_captured_storage_live _ _ _ _ _ _`
+  qpat_assum `for_captured_storage_live _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [for_captured_storage_live_def]) >>
   `allocas_from lo s` by
     (qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
@@ -259,9 +260,9 @@ QED
 
 (* The scalar/copy endpoint supplies the resources for the scoped body. *)
 Definition for_captured_storage_round_entry_def:
-  for_captured_storage_round_entry (DF,lo,d,ctx,func) (cx,c0,bc,env,sb0,stmts)
+  for_captured_storage_round_entry exps (DF,lo,d,ctx,func) (cx,c0,bc,env,sb0,stmts)
     (e0,sa0,s0,G0,tn0) (idx,p,dst,lvo,len,inst,nb) (H,eb,j,z,GG,tt) <=>
-    expr_sim_inv bc cx env eb /\
+    expr_sim_inv_mods c0.ce_modules bc cx env eb /\
     ce_locals_declared bc env /\ locals_alloc_ok bc env /\
     cenv_top_ext c0 bc eb.scopes /\ stmt_state_rel H ctx func bc cx eb z /\
     storage_well_formed_on cx eb (FST H) /\
@@ -284,7 +285,7 @@ Definition for_captured_storage_round_entry_def:
     op_taint tt (Var idx) = {} /\ lookup_var p z = SOME dst /\
     eval_operand lvo z = SOME (n2w len) /\ op_prov GG lvo = NONE /\ op_taint tt lvo = {} /\
     FLOOKUP z.vs_allocas inst.inst_id = SOME (w2n dst,nb) /\ ptr_covers GG tt p z nb /\
-    body_stmts_full_ok cx stmts
+    body_stmts_full_ok_mods c0.ce_modules exps cx stmts
 End
 
 (* Run one nonempty round. Cleanup and the backedge both use the actual
@@ -305,7 +306,7 @@ Proof
   ho_match_mp_tac (BETA_RULE (Q.INST [`ok` |-> `stmt_res_ok lctx`,
     `Guard` |-> `body_const_cells_agree [(NONE,cx_tops cx)] cx env`,
     `Entry` |-> `\H ei v j z GG tt.
-      for_captured_storage_round_entry (DF,lo,d,ctx,func)
+      for_captured_storage_round_entry exps (DF,lo,d,ctx,func)
         (cx,c0,bc,extend_local env id typ F,sb0,stmts) (e0,sa0,s0,G0,tn0)
         (idx,p,dst,lvo,len,inst,nb)
         (H,for_captured_storage_round_scope id tyv ei v,j,z,GG,tt)`]
@@ -354,7 +355,7 @@ Theorem for_captured_storage_round_from_head:
   (!x. lvo = Var x ==> x <> idx /\ x <> out) /\ (!x. bop = Var x ==> x <> idx /\ x <> out) /\
   ~s.vs_halted /\ (!f inst u. frag_reachable ctx func s f inst u ==> dalloca_fmp_headroom inst u) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
-    for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+    for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
       (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
       (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,es,G,tn,s)) /\
   body_const_cells_agree [(NONE,cx_tops cx)] cx env es /\
@@ -365,7 +366,7 @@ Theorem for_captured_storage_round_from_head:
       (\H res eb GG tt z. res = INL () /\ eb.gas_obs = [] /\
         ?v j. eb = for_captured_storage_round_scope id tyv (es with gas_obs := []) v /\
           read_result cx a es = (INL v,es) /\
-          for_captured_storage_round_entry (DF,lo,d,ctx,func)
+          for_captured_storage_round_entry exps (DF,lo,d,ctx,func)
             (cx,c0,bc,extend_local env id typ F,sb0,stmts) (e0,sa0,s0,G0,tn0)
             (idx,p,dst,lvo,len,inst,nb) (H,eb,j,z,GG,tt) /\
           eval_operand bop z = SOME slot /\ op_taint tt bop = {} /\ a::rs = DROP j vs)
@@ -379,7 +380,7 @@ Theorem for_captured_storage_round_from_head:
         (b ==> for_array_loop_post (DF,lo,d,ctx,func) c0 cx lctx
           (e0,sa0,s0,G0,tn0) sb H (INL ()) ee GG tt z) /\
         (~b ==> body_const_cells_agree [(NONE,cx_tops cx)] cx env ee /\
-          ?j. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+          ?j. for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
           (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
           (lvo,idx,cond) (p,dst,nb,sd) (H,j,rs,ee,GG,tt,z)))
     (\H res ee gt r. ?ex. res = INR ex /\ for_array_loop_exit ctx cx RetQ H (INR ex) ee gt r)
@@ -393,7 +394,7 @@ Resume for_captured_storage_round_from_head[head]:
   qabbrev_tac `H0 = storage_trace_horizon es.storage_trace` >>
   `valid_horizon cx st0 H0 es.storage_trace` by
     simp[Abbr `H0`,GSYM storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> for_captured_storage_live _ _ _ _ _ _`
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> for_captured_storage_live _ _ _ _ _ _ _`
     (qspec_then `H0` (drule_then (strip_assume_tac o REWRITE_RULE [for_captured_storage_live_def]))) >>
   irule gas_outcome_full_post_mono >>
   qpat_assum `storage_trace_domain _ _ _ ==> gas_outcome_full _ _ _ _ _ _ _ _` drule >>
@@ -425,7 +426,7 @@ Resume for_captured_storage_round_from_head[body]:
   qabbrev_tac `H0 = storage_trace_horizon eb.storage_trace` >>
   `valid_horizon cx st0 H0 eb.storage_trace` by simp[Abbr `H0`,GSYM storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H eb.storage_trace ==>
-     for_captured_storage_round_entry _ _ _ _ _`
+     for_captured_storage_round_entry _ _ _ _ _ _`
     (qspec_then `H0` (drule_then mp_tac)) >>
   qpat_assum `for_captured_storage_round_scope _ _ _ _ = eb`
     (fn th => simp[NoAsms,th,for_captured_storage_round_entry_def]) >>
@@ -459,7 +460,7 @@ Resume for_captured_storage_round_from_head[invoke]:
      ghost_inv_at (DF H) lo d bc cx eb GG tt z` by
     (qx_gen_tac `H` >> disch_tac >>
      qpat_assum `!H. valid_horizon _ _ H eb.storage_trace ==>
-       for_captured_storage_round_entry _ _ _ _ _`
+       for_captured_storage_round_entry _ _ _ _ _ _`
        (qspec_then `H` (drule_then mp_tac)) >>
      qpat_assum `for_captured_storage_round_scope _ _ _ _ = eb`
        (fn eq => simp[NoAsms,eq,for_captured_storage_round_entry_def])) >>
@@ -513,7 +514,7 @@ Resume for_captured_storage_round_from_head[raw_land]:
      qexists_tac `ret_ty` >> simp[]) >>
   `valid_horizon cx st0 H es.storage_trace` by
     (qpat_assum `eb.storage_trace = es.storage_trace` (SUBST1_TAC o SYM) >> first_assum ACCEPT_TAC) >>
-  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> for_captured_storage_live _ _ _ _ _ _`
+  qpat_assum `!H. valid_horizon _ _ H es.storage_trace ==> for_captured_storage_live _ _ _ _ _ _ _`
     (qspec_then `H` (drule_then (strip_assume_tac o REWRITE_RULE [for_captured_storage_live_def]))) >>
   qpat_assum `!H. valid_horizon _ _ H eb.storage_trace ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
     (qspec_then `H` (drule_then strip_assume_tac)) >>

@@ -38,7 +38,7 @@ Theorem ctor_positional_row_at[local]:
     H (INL vs) ee G tn s ==>
   !i e sv v. i < LENGTH args /\ e = EL i args /\ sv = EL i svs /\ v = EL i vs ==>
   stmt_state_rel H ctx func ce cx ee s /\
-  expr_sim_inv ce cx env ee /\
+  expr_sim_inv_mods ce.ce_modules ce cx env ee /\
   vv_storage_live H cx sv ee s /\
   ?si sm ss vv raw copy.
     compile_expr ce (expr_type e) e si = (vv,sm) /\
@@ -212,6 +212,15 @@ Resume ctor_encoder_length_witness[execute_row]:
   disch_then (CONJUNCTS_THEN2 kall_tac (CONJUNCTS_THEN2 assume_tac
     (CONJUNCTS_THEN2 kall_tac (qx_choosel_then [`si`,`sm`,`ss`,`vv`,`raw`,`copy`]
       (MAP_EVERY assume_tac o CONJUNCTS))))) >>
+  `expr_sim_inv ce cx env ee` by
+    (qpat_assum `body_inv _ _ _ _` (assume_tac o MATCH_MP bodySimTheory.body_inv_contract) >>
+     qpat_assum `body_inv _ _ _ _` (strip_assume_tac o
+       MATCH_MP bodyInvCodePropsTheory.body_inv_module_locations) >>
+     `ce.ce_modules = [(NONE,tops)] /\ ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+       metis_tac[bodyInvCodePropsTheory.contract_inv_cenv_modules,
+                 contractInvContextPropsTheory.contract_inv_singleton_source_modules] >>
+     fs[bodyFullPostsModsTheory.expr_sim_inv_mods_singleton,
+        bodyInvCodePropsTheory.body_inv_unit_immutable_layout]) >>
   `MEM e args` by simp[Abbr `e`, EL_MEM] >>
   qpat_assum `!e. MEM e args ==> _` (drule_then strip_assume_tac) >>
   qpat_assum `!i. i < LENGTH args ==> ?tv ann. _`

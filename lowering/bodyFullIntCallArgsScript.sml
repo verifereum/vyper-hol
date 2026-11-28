@@ -6,7 +6,7 @@
  *   intcall_args_full
  *)
 Theory bodyFullIntCallArgs
-Ancestors bodyCallSupport bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragGasPath compileVyper[qualified,ignore_grammar] pair[qualified,ignore_grammar] vyperStorageBackend[qualified,ignore_grammar] vyperStorageFootprint[qualified,ignore_grammar] freshWrites[qualified,ignore_grammar] bodyFullAllocaFresh[qualified,ignore_grammar] bodyIntCallSource[qualified,ignore_grammar] bodySim[qualified,ignore_grammar] supportedProgram[qualified,ignore_grammar] supportedNames[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
+Ancestors constSubstMods bodyCallSupport bodyFullShadowBodyInv vyperCallOutcome[qualified,ignore_grammar] fragGasPath compileVyper[qualified,ignore_grammar] pair[qualified,ignore_grammar] vyperStorageBackend[qualified,ignore_grammar] vyperStorageFootprint[qualified,ignore_grammar] freshWrites[qualified,ignore_grammar] bodyFullAllocaFresh[qualified,ignore_grammar] bodyIntCallSource[qualified,ignore_grammar] bodySim[qualified,ignore_grammar] supportedProgram[qualified,ignore_grammar] supportedNames[qualified,ignore_grammar] ptrDiscipline[qualified,ignore_grammar]
   compileExprAllocaFresh[qualified,ignore_grammar]
   compilerInstructionSuffix[qualified,ignore_grammar]
   abiEncoderProps[qualified,ignore_grammar]
@@ -2148,11 +2148,11 @@ Theorem intcall_args_defaults_pre[local]:
     (int_calls_expr (Call ann (IntCall (NONE,name)) es dflt)) /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-  dflts' = subst_consts_exprs (module_consts_env tops []) dflts /\
+  dflts' = subst_consts_exprs_mods (consts_env_mods mods) dflts /\
   well_typed_exprs (defaults_env (tenv with current_src := NONE)) dflts' /\
   supported_pure_exprs tops dflts' /\
   int_calls_exprs (DROP k dflts') = int_calls_exprs (DROP k dflts) /\
-  ~supported_exprs_exists (const_name_root cx) (DROP k dflts') /\
+  ~supported_exprs_exists (const_name_root_mods mods) (DROP k dflts') /\
   (!target. supported_exprs_exists (expr_abi_decode_target_root target) dflts' ==>
     supported_exprs_exists (expr_abi_decode_target_root target) dflts) ==>
   EVERY (\e. expr_body_pre_mods mods (cenv_without_defaults cenv name)
@@ -5565,7 +5565,7 @@ Definition intcall_args_stage_post_def:
     (flags,dtys,newops,ops,vals,ptys,pflags,pin,clean_words,keep_sites)
     H res ee G1 tn1 t <=>
     ?xs. res = INL xs /\
-      LENGTH xs = LENGTH es /\ expr_sim_inv cenv cx tenv ee /\
+      LENGTH xs = LENGTH es /\ expr_sim_inv_mods cenv.ce_modules cenv cx tenv ee /\
       (?ws1.
         LENGTH ws1 = LENGTH (ops ++ newops) /\
         LENGTH (vals ++ xs) = LENGTH (ops ++ newops) /\
@@ -6011,7 +6011,7 @@ QED
 Theorem intcall_args_selected_invoke[local]:
   body_inv tops ctx cenv cx /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm
+  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm
     vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 u G tn ==>
   ?bb inst ops argv callee setup entered.
     lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
@@ -6040,8 +6040,8 @@ Proof
      simp[] >> first_assum (irule_at Any) >>
      fs[supportedProgramTheory.supported_program_def,
         supportedNamesTheory.supported_declaration_names_def]) >>
-  qhdtm_x_assum `intcall_entry_full`
-    (strip_assume_tac o REWRITE_RULE [intcall_entry_full_def]) >>
+  qhdtm_x_assum `intcall_entry_full_mods`
+    (strip_assume_tac o REWRITE_RULE [intcall_entry_full_mods_def]) >>
   map_every (fn p => qpat_assum p mp_tac)
     [`cenv.ce_func_ids = _`, `cenv.ce_is_ctor = _`,
      `cenv.ce_func_param_types name = _`, `_ = internal_fn_label _ _ _ _`,
@@ -6058,7 +6058,7 @@ QED
 (* Recover the argument evidence at the selected package and the
    decoded INVOKE, before entering the callee. *)
 Theorem intcall_args_selected_package_entry[local]:
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm
+  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm
     vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 u G tn /\
   lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb u.vs_inst_idx = SOME inst /\
@@ -6066,9 +6066,8 @@ Theorem intcall_args_selected_package_entry[local]:
   lookup_function label ctx.ctx_functions = SOME callee /\
   setup_callee callee argv u = SOME setup /\
   set_internal_package_target cenv.ce_target
-    (package_internal_fn tops T (K global_nonreentrant_slot) cenv.ce_is_ctor
-      (if cenv.ce_is_ctor then imm_len tops else 0)
-      (mut,nr,rr,name,args,(dflts : expr list),ret,ss)) =
+    (package_internal_fn_unit mods T (K global_nonreentrant_slot) cenv.ce_is_ctor
+      package_imm_len (NONE,(mut,nr,rr,name,args,(dflts : expr list),ret,ss))) =
     (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,ss,rt) ==>
   (!mem. mem_agree_outside tn.t_mem u.vs_memory mem ==>
     internal_args_rel ce params penv (if has_rb then 1 else 0) argv
@@ -6085,8 +6084,8 @@ Theorem intcall_args_selected_package_entry[local]:
   ghost_inv_at (DF H) lo d cenv cx (es1 with scopes := prev) G tn u
 Proof
   strip_tac >>
-  qhdtm_x_assum `intcall_entry_full`
-    (strip_assume_tac o REWRITE_RULE [intcall_entry_full_def]) >>
+  qhdtm_x_assum `intcall_entry_full_mods`
+    (strip_assume_tac o REWRITE_RULE [intcall_entry_full_mods_def]) >>
   `bb' = bb` by
     (ntac 2 (qpat_x_assum `lookup_block u.vs_current_bb func.fn_blocks = SOME _` mp_tac) >>
      POP_ASSUM_LIST (K ALL_TAC) >> simp[]) >>
@@ -6474,7 +6473,7 @@ QED
 (* At the selected INVOKE, the captured values give the initial
    materialization invariant for the same runtime state and argument map. *)
 Theorem intcall_args_capture_materialization_pre[local]:
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm
+  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm
     vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 u G tn /\
   lookup_block u.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb u.vs_inst_idx = SOME inst /\
@@ -6484,9 +6483,8 @@ Theorem intcall_args_capture_materialization_pre[local]:
   enters_block callee setup entered /\ (HD callee.fn_blocks).bb_label = label /\
   new_block label before = (old,entry) /\
   set_internal_package_target cenv.ce_target
-    (package_internal_fn tops T (K global_nonreentrant_slot) cx.in_deploy
-       (if cx.in_deploy then imm_len tops else 0)
-       (mut,nr,rr,name,args,(dflts : expr list),ret,ss)) =
+    (package_internal_fn_unit mods T (K global_nonreentrant_slot) cx.in_deploy
+      package_imm_len (NONE,(mut,nr,rr,name,args,(dflts : expr list),ret,ss))) =
     (label,ce,params,has_rb,nr',key,trans,view,ctor,ilen,ss,rt) /\
   (cx.in_deploy = cenv.ce_is_ctor) /\
   compile_internal_entry_prefix ce params has_rb entry = ((ce1,caps,rpc),cap_end) /\
@@ -7183,10 +7181,10 @@ Proof
   `cx.in_deploy = cenv.ce_is_ctor` by
     (drule_then ACCEPT_TAC intcall_args_body_inv_constructor) >>
   `ctx_has_dalloca ctx ==> allocas_below_fmp u` by
-    (qhdtm_assum `intcall_entry_full`
+    (qhdtm_assum `intcall_entry_full_mods`
        (ACCEPT_TAC o MATCH_MP
          bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp o cj 7 o
-         PURE_REWRITE_RULE [intcall_entry_full_def])) >>
+         PURE_REWRITE_RULE [intcall_entry_full_mods_def])) >>
   `fmp_room ctx callee setup` by
     (drule_all bodyFullIntCallByteFrameTheory.intcall_entry_full_fmp_room >>
      simp[]) >>
@@ -7231,7 +7229,7 @@ Proof
           venomInstIdsPropsTheory.fn_insts_blocks_map_id]) >>
   `!nm entry. FLOOKUP penv nm = SOME entry ==> value_has_type entry.type entry.value` by
     (`scope_well_typed penv` by
-       (qhdtm_assum `intcall_entry_full` (strip_assume_tac o REWRITE_RULE [intcall_entry_full_def]) >>
+       (qhdtm_assum `intcall_entry_full_mods` (strip_assume_tac o REWRITE_RULE [intcall_entry_full_mods_def]) >>
         drule_then ACCEPT_TAC
           vyperTypeBindArgumentsTheory.bind_arguments_scope_well_typed_from_success) >>
      pop_assum (mp_tac o REWRITE_RULE [vyperTypeInvariantsTheory.scope_well_typed_def]) >>
@@ -7352,7 +7350,7 @@ Proof
      qpat_assum `!H. valid_horizon cx st0 H ed.storage_trace ==> _`
        (qspec_then `H` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >>
-     disch_then (strip_assume_tac o REWRITE_RULE [intcall_entry_full_def]) >>
+     disch_then (strip_assume_tac o REWRITE_RULE [intcall_entry_full_mods_def]) >>
      qpat_assum `ghost_inv_at (DF H) _ _ _ _ _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
      rewrite_tac[ghost_inv_at_def, return_buf_ptr_def] >>
@@ -7452,10 +7450,10 @@ Proof
        (irule stateRelProjTheory.stmt_state_rel_state_rel >>
         qexists_tac `ctx` >>
         qpat_assum `!H. valid_horizon cx st0 H ed.storage_trace ==>
-           intcall_entry_full _ H _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+           intcall_entry_full_mods _ H _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
           (qspec_then `H` mp_tac) >>
         (impl_tac >- first_assum ACCEPT_TAC) >>
-        disch_then (mp_tac o cj 7 o PURE_REWRITE_RULE [intcall_entry_full_def]) >>
+        disch_then (mp_tac o cj 7 o PURE_REWRITE_RULE [intcall_entry_full_mods_def]) >>
         simp[NoAsms]) >>
      `global_nonreentrant_slot < dimword (:256)` by
        simp[NoAsms, contextTheory.global_nonreentrant_slot_def] >>
@@ -7533,7 +7531,7 @@ Theorem intcall_args_failed_lock_invoke_outcome[local]:
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!H. valid_horizon cx st0 H ed.storage_trace ==>
-    intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm
+    intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm
       vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) ed.scopes penv rtv
       (ed with scopes := [penv]) u G tn) /\
   (?H. valid_horizon cx st0 H ed.storage_trace) /\
@@ -7727,13 +7725,13 @@ QED
 *)
 Theorem args_return_buffer_geometry[local]:
   (ret <> NoneT ==> 0 < type_memory_size tv) /\
-  get_module_code cx NONE = SOME tops /\
+  contract_inv mods exps ctx ce cx /\
   expr_sim_inv_mods mods ce cx env es /\
-  ce.ce_struct_fields = make_struct_fields_map tops /\
+  ce.ce_struct_fields = make_struct_fields_map_mods mods /\
   evaluate_type (get_tenv cx) ret = SOME tv /\
   compute_func_info
-    (\k. MAP (FST o SND) (get_struct_fields (make_struct_fields_map tops) k))
-    ret (type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ret)
+    (\k. MAP (FST o SND) (get_struct_fields (make_struct_fields_map_mods mods) k))
+    ret (type_mem_bytes (get_struct_fields (make_struct_fields_map_mods mods)) ret)
     ty_args = (nrc,rbs,pvs) ==>
   ((nrc = 0 /\ ret <> NoneT) <=> nrc = 0 /\ 0 < rbs) /\
   (nrc = 0 /\ 0 < rbs ==> rbs = type_memory_size tv)
@@ -8353,12 +8351,13 @@ Proof
 QED
 *)
 Theorem intcall_args_defaults_source_cong[local]:
-  body_inv tops ctx cenv cx /\
-  body_const_cells_agree [(NONE,tops)] cx tenv ee /\
+  (contract_inv mods exps ctx cenv cx /\
+   module_body_inv mods NONE tops cenv cx) /\
+  body_const_cells_agree mods cx tenv ee /\
   well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt) /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) ==>
   !gs. eval_exprs (cx with stk updated_by CONS (NONE,name))
-          (DROP k (subst_consts_exprs (module_consts_env tops []) dflts))
+          (DROP k (subst_consts_exprs_mods (consts_env_mods mods) dflts))
           (ee with gas_obs := gs) =
        eval_exprs (cx with stk updated_by CONS (NONE,name)) (DROP k dflts)
           (ee with gas_obs := gs)
@@ -11598,8 +11597,8 @@ Theorem intcall_args_after_defaults_data:
   cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc',rbs,pvs) /\
   cenv.ce_func_info (nsid_to_string (NONE,name)) =
     compute_func_info
-      (\n. MAP (FST o SND) (get_struct_fields (make_struct_fields_map tops) n))
-      ret (type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ret)
+      (\n. MAP (FST o SND) (get_struct_fields (make_struct_fields_map_mods mods) n))
+      ret (type_mem_bytes (get_struct_fields (make_struct_fields_map_mods mods)) ret)
       (MAP SND args) /\
   cenv.ce_func_param_types (nsid_to_string (NONE,name)) = MAP SND args /\
   pvs = compute_pass_via_stack (MAP SND args) rc' /\
@@ -11737,7 +11736,7 @@ Theorem intcall_args_after_defaults_data:
        !tail. after_defaults ed.scopes dvs (ed with gas_obs := tail) =
          (INR err,failed with <|scopes := ed.scopes; gas_obs := tail|>)) /\
      (!H. valid_horizon cx st0 H ed.storage_trace ==>
-       intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm
+       intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm
          vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) ed.scopes penv tv
          (ed with scopes := [penv]) u Gd tnd) /\
      body_const_cells_agree [(NONE,tops)] cx tenv (ed with scopes := [penv]) /\

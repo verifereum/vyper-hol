@@ -1,6 +1,7 @@
 (* Join the saved argument values and the custom-error exit at one horizon. *)
 Theory bodyFullRaiseCustomError
 Ancestors
+  bodyActiveStmtCallsMods[qualified]
   bodyFullCustomErrorSource bodyFullCustomErrorLayout bodyFullCustomErrorExit
   bodyFullCustomErrorEncode bodyFullExtCallPosList bodyFullExtCallBufferSetup
   bodyFullExtCallRequestPostGasPacking bodyFullHashKeccakFixed[qualified,ignore_grammar]
@@ -45,8 +46,13 @@ QED
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `err` >> rename1 `CustomError id pos kw` >>
+  `EVERY (source_body_call_supported cx)
+     (int_calls_stmt (Raise (RaiseCustomError (CustomError id pos kw))))` by
+    (drule_all_then (mp_tac o CONJUNCT1)
+       bodyActiveStmtCallsModsTheory.active_stmt_calls_resolve_mods >>
+     metis_tac[]) >>
   drule_all custom_error_raise_source >>
-  disch_then (qx_choosel_then [`params`,`args`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`etops`,`params`,`args`] strip_assume_tac) >>
   `body_exprs_full_ok cx args` by metis_tac[] >>
   pure_rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >> strip_tac >>
   fs[gas_shadow_stmt_def, gas_shadow_raise_reason_def] >>
@@ -119,6 +125,8 @@ Theorem compile_raise_custom_frag_full:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Raise (RaiseCustomError err)) = SOME env' /\
     stmt_exprs_ok cenv (Raise (RaiseCustomError err)) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (Raise (RaiseCustomError err)) /\
     call_evaluation_safe cx (int_calls_stmt (Raise (RaiseCustomError err))) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>

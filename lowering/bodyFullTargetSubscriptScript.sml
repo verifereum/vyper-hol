@@ -7,6 +7,10 @@
      target_subscript_sim_full -- base and index compose with a tail *)
 Theory bodyFullTargetSubscript
 Ancestors
+  bodySimStmtFacts exprBodyPreProps typedMemoryCopy
+  gasOutcomeFullBindMods gasExemptCertMods
+  bodyFullPostsMods
+  gasOutcomeFullMods[qualified]
   bodyFullShadowBodyInv bodySim bodyInvMetadataProps targetSubscriptContinuation
   bodyFullTargetDefs bodyFullTargetRoots bodyFullTargetImmutableArray bodyFullTargetImmutableWrite
   bodyFullSubscriptLiveImmSelect bodySimAugPlaceLoad immutableDeployAssignFacts
@@ -77,7 +81,7 @@ Definition subscript_tail_full_def:
               not_fresh_at sa x) /\
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
-      expr_sim_inv cenv cx env mid1 /\ mid1.gas_obs = [] /\
+      expr_sim_inv_mods cenv.ce_modules cenv cx env mid1 /\ mid1.gas_obs = [] /\
       eval_base_place cx bt (es with gas_obs := base_gas) =
         (INL pv, mid1) /\
       bind (eval_expr cx e) (read_result cx)
@@ -109,9 +113,9 @@ Definition subscript_tail_full_def:
         (~is_word_type (post_value_type cenv e) ==>
          ptr_buf_ok cenv e iop G2 t2) /\
         ghost_kept_at lo cenv mid1 sm G1 tn1 t1 G2 tn2) ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (extend_place cx pv (ValueSubscript v))
+        cenv.ce_modules cx st0 (extend_place cx pv (ValueSubscript v))
         (mid2, t2, G2, tn2)
         (\H res ee G tn t. ?pv'. res = INL pv' /\
           target_post H ctx func cenv cx es sa sb s0 ee pv' vt r t /\
@@ -260,7 +264,7 @@ Theorem target_subscript_sim_full:
   shadow_body_inv_mods mods exps ctx shadow_ctx /\
   body_base_target_full_ok_mods mods exps cx (SubscriptTarget bt e) /\
   body_const_cells_agree mods cx env es /\
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  target_pre_mods mods cenv cx env (SubscriptTarget bt e) es /\
   target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env bt es /\
   subscript_tail_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -426,11 +430,13 @@ Resume target_subscript_sim_full[index_run]:
     (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `idxR`, Abbr `childR`] >> rpt strip_tac >>
-  Cases_on `res` >> fs[expr_exit_def] >>
+  Cases_on `res`
+  >- (qpat_assum `expr_exit (INL _) _` mp_tac >> simp[expr_exit_INL]) >>
   conj_tac
   >- (qpat_x_assum `expr_exit (INR _) _`
         (MATCH_ACCEPT_TAC o MATCH_MP expr_exit_INR_retype)) >>
-  fs[halt_exit_def]
+  qpat_assum `halt_exit _ _ _ (INR _) _` mp_tac >>
+  simp_tac bool_ss [halt_exit_def]
 QED
 *)
 
@@ -588,8 +594,93 @@ Proof
   Cases_on `x` >> simp[get_place_def,return_def,raise_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem body_expr_full_ok_linked_simulation[local]:
+  body_expr_full_ok_mods mods exps cx e /\
+  contract_inv mods exps ctx cenv cx /\ module_body_inv mods src tops cenv cx /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_const_cells_agree mods cx env es /\ expr_body_pre_mods mods cenv cx env e es ==>
+  expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es
+Proof
+  strip_tac >>
+  qpat_x_assum `body_expr_full_ok_mods _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [bodyFullPredsModsTheory.body_expr_full_ok_mods_def]) >>
+  fs[expr_sim_full_mods_widened] >> metis_tac[]
+QED
+
+Theorem expr_body_pre_mods_value_type[local]:
+  expr_body_pre_mods mods cenv cx env e es /\
+  bind (eval_expr cx e) (read_result cx) es = (res,es') ==>
+  expr_sim_inv_mods mods cenv cx env es' /\
+  !v. res = INL v ==>
+    ?tyv. evaluate_type (get_tenv cx) (expr_type e) = SOME tyv /\
+          value_has_type tyv v
+Proof
+  strip_tac >> drule_all (REWRITE_RULE [ETA_AX] expr_body_pre_eval_mods) >> strip_tac >>
+  `env.type_defs = get_tenv cx` by
+    gvs[expr_body_pre_mods_def,expr_sim_inv_mods_def,env_consistent_def,
+        env_context_consistent_def] >>
+  gvs[vyperTypeExprSoundnessTheory.value_runtime_typed_def]
+QED
+
+Theorem expr_body_pre_mods_lower_value_word_shape[local]:
+  lower_value compile_expr cenv ty e sa = (op, sb) /\
+  expr_body_pre_mods mods cenv cx env e es /\ is_word_type (expr_type e) ==>
+  (!z. op = Var z ==> not_fresh_at sb z) /\ (!l. op <> Label l)
+Proof
+  strip_tac >>
+  `well_typed_expr env e` by fs[expr_body_pre_mods_def] >>
+  `!id t. FLOOKUP env.var_types id = SOME t ==>
+          well_formed_type env.type_defs t` by
+    (fs[expr_body_pre_mods_def,expr_sim_inv_mods_def] >>
+     `env.type_defs = get_tenv cx` by fs[env_consistent_def,env_context_consistent_def] >>
+     simp[well_formed_type_def] >> metis_tac[env_consistent_var_type_evaluates]) >>
+  drule lower_value_word_shape >> disch_then (qspec_then `env` mp_tac) >>
+  simp[] >> metis_tac[]
+QED
+
+Theorem expr_sim_inv_mods_memory_bytes[local]:
+  expr_sim_inv_mods mods cenv cx env es /\
+  evaluate_type (get_tenv cx) ty = SOME rt ==>
+  type_memory_bytes cenv ty = type_memory_size rt
+Proof
+  strip_tac >> irule typed_copy_memory_size >>
+  qexists_tac `get_tenv cx` >>
+  fs[expr_sim_inv_mods_def] >> metis_tac[]
+QED
+
+Theorem immutable_target_offset_bound[local]:
+  expr_sim_inv_mods mods cenv cx env es /\
+  FLOOKUP env.bare_globals (src,id) = SOME ty /\
+  FLOOKUP env.bare_global_assignable (src,id) = SOME ty /\
+  FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+  evaluate_type (get_tenv cx) ty = SOME tv ==>
+  off + type_memory_size tv < dimword (:256)
+Proof
+  strip_tac >>
+  qpat_x_assum `expr_sim_inv_mods _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_sim_inv_mods_def]) >>
+  qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\ _ ==> _`
+    (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+  simp[SF CONJ_ss]
+QED
+
+Theorem immutable_target_subscript_sim_full:
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
+  shadow_body_inv_mods mods exps ctx shadow_ctx /\
+  body_base_target_full_ok_mods mods exps cx (SubscriptTarget bt e) /\
+  body_const_cells_agree mods cx env es /\
+  expr_sim_inv_mods mods cenv cx env es /\
+  target_indices_pre_mods mods cenv cx env bt /\
+  ~target_subscript_overlap cenv bt e /\
+  (!ix. expr_sim_inv_mods mods cenv cx env ix ==>
+        expr_body_pre_mods mods cenv cx env e ix) /\
+  cx.in_deploy /\ immutable_root cx bt /\ ~cx_const_name cx (NONE,id) /\
+  target_root bt = TopLevelNameTarget (NONE,id) /\
+  imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx env bt es ==>
+  imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx env (SubscriptTarget bt e) es
 Proof
   strip_tac >> simp[imm_target_place_sim_full_def] >> rpt gen_tac >> strip_tac >>
   qpat_assum `type_place_target _ (SubscriptTarget _ _) = _`
@@ -638,26 +729,7 @@ Proof
     metis_tac[fn_has_code_split, cs_extends_trans] >>
   suspend "base"
 QED
-*)
-Theorem immutable_target_subscript_sim_full:
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-  shadow_body_inv_mods mods exps ctx shadow_ctx /\
-  body_base_target_full_ok_mods mods exps cx (SubscriptTarget bt e) /\
-  body_const_cells_agree mods cx env es /\
-  expr_sim_inv_mods mods cenv cx env es /\
-  target_indices_pre cenv cx env (SubscriptTarget bt e) /\
-  cx.in_deploy /\ immutable_root cx bt /\ ~cx_const_name cx (NONE,id) /\
-  target_root bt = TopLevelNameTarget (NONE,id) /\
-  imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx env bt es ==>
-  imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx env (SubscriptTarget bt e) es
-Proof
-  cheat
-QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_subscript_sim_full[base]:
   drule_then (fn th => RULE_ASSUM_TAC (REWRITE_RULE[th, GSYM bind_assoc]) >>
                        REWRITE_TAC[th, GSYM bind_assoc])
@@ -673,14 +745,14 @@ Resume immutable_target_subscript_sim_full[base]:
                            `shadow_sm`, `rb`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac
-    `gas_outcome_full _ _ _ _ (eval_target_place cx bt) _ childQ childR` >>
-  irule gas_outcome_full_bind_all_path >>
+    `gas_outcome_full_mods _ _ _ _ (eval_target_place cx bt) _ childQ childR` >>
+  irule gas_outcome_full_mods_bind_all_path >>
   rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_bind_place >>
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_bind_place >>
       qexistsl_tac [`mid`, `t`, `v`] >> fs[])
-  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_error_place >> simp[])
+  >~ [`gas_exempt_cert_mods _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_error_place >> simp[])
   >~ [`storage_trace_frame (eval_target_place _ _)`]
   >- simp[evaluate_storage_trace_frame]
   >~ [`storage_trace_frame _`]
@@ -694,15 +766,13 @@ Resume immutable_target_subscript_sim_full[base]:
   conj_tac
   >~ [`storage_trace_domain _ _ _`]
   >- suspend "index" >>
-  irule gas_outcome_full_post_source >>
-  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
+  irule gas_outcome_full_mods_post_source >>
+  qpat_assum `gas_outcome_full_mods _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `childR`] >> rpt strip_tac >>
   Cases_on `res` >> fs[expr_exit_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_subscript_sim_full[index]:
   qx_genl_tac [`marks`, `res`, `mid1`, `G1`, `tn1`, `t1`] >>
   BETA_TAC >> strip_tac >> disj1_tac >>
@@ -726,32 +796,29 @@ Resume immutable_target_subscript_sim_full[index]:
   `eval_base_place cx bt (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
       (INL (PlaceR p),mid1)` by
     (irule tuplePlaceSourceHeadTheory.tuple_place_target_base_inversion >> simp[]) >>
-  `target_indices_pre cenv cx env bt` by fs[target_indices_pre_def] >>
-  `body_const_cells_agree [(NONE,tops)] cx env mid1` by
+  `body_const_cells_agree mods cx env mid1` by
     (irule body_const_cells_agree_base >>
      qpat_assum `eval_base_place cx bt _ = (INL (PlaceR p),mid1)` (irule_at Any) >>
      simp[]) >>
-  `expr_sim_inv cenv cx env mid1` by
+  `expr_sim_inv_mods mods cenv cx env mid1` by
     (mp_tac (Q.INST [`s` |-> `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-       `s'` |-> `mid1`,`t` |-> `bt`,`r` |-> `INL p`] aug_place_target_inv) >>
-     simp[expr_sim_inv_gas_obs]) >>
-  `expr_body_pre cenv cx env e mid1` by
-    fs[target_indices_pre_def] >>
-  `body_expr_full_ok cx e` by
-    (fs[body_base_target_full_ok_def] >> first_x_assum irule >> metis_tac[]) >>
+       `s'` |-> `mid1`,`t` |-> `bt`,`r` |-> `INL p`] aug_place_target_inv_mods) >>
+     simp[]) >>
+  `expr_body_pre_mods mods cenv cx env e mid1` by
+    metis_tac[] >>
+  `body_expr_full_ok_mods mods exps cx e` by
+    (fs[bodyFullPredsModsTheory.body_base_target_full_ok_mods_def] >> first_x_assum irule >> metis_tac[]) >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cenv cx (expr_type e) e mid1` by
-    (drule_all body_expr_full_ok_simulations >> simp[]) >>
+    (drule_all body_expr_full_ok_linked_simulation >> simp[]) >>
   suspend "index_run"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_subscript_sim_full[index_run]:
   `!fn inst s. frag_reachable ctx func t1 fn inst s ==>
     dalloca_fmp_headroom inst s` by
     (`!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
-       metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi] >>
+       metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi_mods] >>
      qpat_assum `!H. valid_horizon _ _ H mid1.storage_trace ==>
        gas_origin_ptr_path _ (s0,G0,tn0) marks (OK t1,G1,tn1)`
        (qspec_then `storage_trace_horizon mid1.storage_trace` mp_tac) >>
@@ -793,14 +860,14 @@ Resume immutable_target_subscript_sim_full[index_run]:
       fs[imm_target_post_def]) >>
   strip_tac >>
   qmatch_asmsub_abbrev_tac
-    `gas_outcome_full _ _ _ _ (bind (eval_expr cx e) _) _ idxQ idxR` >>
-  irule gas_outcome_full_bind_all >>
+    `gas_outcome_full_mods _ _ _ _ (bind (eval_expr cx e) _) _ idxQ idxR` >>
+  irule gas_outcome_full_mods_bind_all >>
   rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_bind_value >>
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_bind_value >>
       qexistsl_tac [`mid`, `t`, `v`] >> fs[])
-  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_error_value >> simp[])
+  >~ [`gas_exempt_cert_mods _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_error_value >> simp[])
   >~ [`storage_trace_frame (bind _ _)`]
   >- (irule storage_trace_frame_bind_all >>
       simp[evaluate_storage_trace_frame, storage_trace_frame_read_result])
@@ -812,8 +879,8 @@ Resume immutable_target_subscript_sim_full[index_run]:
   conj_tac
   >~ [`storage_trace_domain _ _ _`]
   >- suspend "tail" >>
-  irule gas_outcome_full_post_source >>
-  qpat_assum `gas_outcome_full _ _ _ _ (bind (eval_expr _ _) _) _ _ _`
+  irule gas_outcome_full_mods_post_source >>
+  qpat_assum `gas_outcome_full_mods _ _ _ _ (bind (eval_expr _ _) _) _ _ _`
     (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `idxR`, Abbr `childR`] >> rpt strip_tac >>
@@ -823,9 +890,7 @@ Resume immutable_target_subscript_sim_full[index_run]:
         (MATCH_ACCEPT_TAC o MATCH_MP expr_exit_INR_retype)) >>
   fs[halt_exit_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_subscript_sim_full[tail]:
   qx_genl_tac [`marks2`,`res2`,`mid2`,`G2`,`tn2`,`t2`] >>
   BETA_TAC >> strip_tac >> disj1_tac >>
@@ -846,7 +911,8 @@ Resume immutable_target_subscript_sim_full[tail]:
      qpat_assum `mid2 with gas_obs := [] = mid2` (fn th => rewrite_tac[th]) >>
      simp[]) >>
   qabbrev_tac `ix = mid1 with gas_obs := gas_explicit marks2 t1.vs_gas_readings` >>
-  `expr_body_pre cenv cx env e ix` by simp[Abbr `ix`,expr_body_pre_gas_obs] >>
+  `expr_body_pre_mods mods cenv cx env e ix` by
+    (simp[Abbr `ix`] >> metis_tac[]) >>
   `is_int_type (expr_type e) /\ ty = et` by
     (qpat_assum `subscript_vtype (Type (ArrayT et bd)) (expr_type e) = SOME (Type ty)` mp_tac >>
      simp_tac (srw_ss()) [subscript_vtype_def,AllCaseEqs()]) >>
@@ -855,7 +921,7 @@ Resume immutable_target_subscript_sim_full[tail]:
      rename1 `is_word_type (BaseT bt')` >> Cases_on `bt'` >>
      gvs[is_int_type_def,is_word_type_def]) >>
   drule_all_then strip_assume_tac
-    (SIMP_RULE (srw_ss() ++ ETA_ss) [] expr_body_pre_word_type_result) >>
+    (SIMP_RULE (srw_ss() ++ ETA_ss) [] expr_body_pre_mods_value_type) >>
   qpat_assum `!w. INL v = INL w ==> _`
     (qspec_then `v` (strip_assume_tac o SIMP_RULE (srw_ss()) [])) >>
   gvs[] >>
@@ -891,24 +957,20 @@ Resume immutable_target_subscript_sim_full[tail]:
       (CONJUNCTS_THEN2 (strip_assume_tac o REWRITE_RULE[imm_target_post_def])
         assume_tac))) >>
   `IS_SOME (type_place_target env bt)` by simp[] >>
-  drule_all_then (qx_choosel_then [`root`,`root_ty`] strip_assume_tac)
+  drule_all_then (qx_choosel_then [`root_src`,`root`,`root_ty`] strip_assume_tac)
     typed_immutable_target_root >>
-  `root = id` by
-    (qpat_assum `target_root bt = TopLevelNameTarget (NONE,root)` mp_tac >>
+  `root_src = NONE /\ root = id` by
+    (qpat_assum `target_root bt = TopLevelNameTarget (root_src,root)` mp_tac >>
      qpat_assum `target_root bt = TopLevelNameTarget (NONE,id)` (fn th => simp[NoAsms,th])) >>
-  qpat_x_assum `root = id` SUBST_ALL_TAC >>
-  `cenv.ce_module = NONE /\ evaluate_type (get_tenv cx) root_ty = SOME itv` by
+  gvs[] >>
+  `evaluate_type (get_tenv cx) root_ty = SOME itv` by
     (qunabbrev_tac `p` >>
      drule_all_then strip_assume_tac immutable_target_write_root >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   `off + type_memory_size itv < dimword (:256)` by
-    (drule_all_then (strip_assume_tac o Q.SPEC `compile_expr`) immutable_assign_target_layout >>
-     `off' = off` by
-       (qpat_assum `FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off')` mp_tac >>
-        qpat_assum `FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off)`
-          (fn th => simp[NoAsms,th])) >>
-     qpat_x_assum `off' = off` SUBST_ALL_TAC >>
-     first_assum (drule_then ACCEPT_TAC)) >>
+    (mp_tac (Q.INST [`es` |-> `mid1`, `src` |-> `NONE`,
+                   `ty` |-> `root_ty`, `tv` |-> `itv`] immutable_target_offset_bound) >>
+     simp[]) >>
   `?raw. eval_expr cx e ix = (INL raw,mid2)` by
     (qpat_assum `bind (eval_expr cx e) (read_result cx) ix = (INL _,mid2)`
        (mp_tac o MATCH_MP (SIMP_RULE (srw_ss() ++ ETA_ss) [] eval_expr_read_INL)) >>
@@ -917,10 +979,7 @@ Resume immutable_target_subscript_sim_full[tail]:
      qexists_tac `raw` >> first_assum ACCEPT_TAC) >>
   rename1 `evaluate_subscripts itv iv path = INL base_v` >>
 
-  `~target_subscript_overlap cenv bt e` by
-    (qpat_assum `target_indices_pre _ _ _ (SubscriptTarget bt e)` mp_tac >>
-     simp[NoAsms,target_indices_pre_def]) >>
-  `expr_sim_inv cenv cx env mid2 /\
+  `expr_sim_inv_mods mods cenv cx env mid2 /\
     ?current a. FLOOKUP (case ALOOKUP mid2.immutables cx.txn.target of
       NONE => FEMPTY | SOME imms => get_source_immutables NONE imms) id =
       SOME (itv,current) /\ evaluate_subscripts itv current path = INL a` by
@@ -939,9 +998,7 @@ Resume immutable_target_subscript_sim_full[tail]:
      IF_CASES_TAC >> simp[NoAsms]) >>
   qpat_x_assum `ptv = ArrayTV etv bd` SUBST_ALL_TAC >>
   `value_has_type (ArrayTV etv bd) a` by
-    (qspecl_then [`cenv`,`cx`,`env`,`mid2`,`NONE`,`id`,`path`,
-      `itv`,`current`,`k`,`ArrayTV etv bd`,`a`] mp_tac imm_place_at_value_type >>
-     simp[]) >>
+    (drule_all_then mp_tac immutable_path_value_type >> simp[]) >>
   Cases_on `a` >> gvs[value_has_type_def] >>
   rename1 `evaluate_subscripts itv current path = INL (ArrayV av)` >>
   `target_subscript_suffix cenv e rb iop sn = (r,sb)` by
@@ -949,7 +1006,8 @@ Resume immutable_target_subscript_sim_full[tail]:
        (mp_tac o MATCH_MP target_subscript_compile_decompose) >>
      simp[] >> TRY (disch_then ACCEPT_TAC)) >>
   `type_memory_bytes cenv et = type_memory_size etv` by
-    (irule expr_sim_inv_memory_size >> qexistsl [`cx`,`env`,`mid2`] >> simp[]) >>
+    (mp_tac (Q.INST [`es` |-> `mid2`, `ty` |-> `et`, `rt` |-> `etv`]
+       expr_sim_inv_mods_memory_bytes) >> simp[]) >>
   `rb = (FST rb,SOME LocCode,SOME (ValPT (ArrayT et bd)))` by
     (PairCases_on `rb` >> gvs[]) >>
   qpat_assum `rb = _` (fn th =>
@@ -960,11 +1018,10 @@ Resume immutable_target_subscript_sim_full[tail]:
   qpat_x_assum `r = (_,_,_)` SUBST_ALL_TAC >>
   suspend "run_tail"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_subscript_sim_full[run_tail]:
-  `!l. FST rb <> Label l` by drule_all_then ACCEPT_TAC target_subscript_typed_base_not_label >>
+  `!l. FST rb <> Label l` by
+    drule_all_then ACCEPT_TAC target_subscript_typed_base_not_label_mods >>
   `sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
   `local_ptrs_reserved cenv sn` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
@@ -984,7 +1041,7 @@ Resume immutable_target_subscript_sim_full[run_tail]:
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[arithmeticTheory.ADD_COMM]) >>
   `post_value_type cenv e = expr_type e` by simp[] >>
   `copy_old_operand sn iop /\ (!l. iop <> Label l)` by
-    (drule_all_then strip_assume_tac expr_body_pre_lower_value_word_shape >>
+    (drule_all_then strip_assume_tac expr_body_pre_mods_lower_value_word_shape >>
      rewrite_tac[copy_old_operand_def] >> conj_tac >> first_assum ACCEPT_TAC) >>
   `op_taint tn2 iop = {} /\ op_prov G2 iop = NONE` by
     (qpat_assum `is_word_type (expr_type e)` (fn word =>
@@ -1008,20 +1065,21 @@ Resume immutable_target_subscript_sim_full[run_tail]:
        qpat_assum `compile_array_subscript _ _ _ _ _ _ _ _ _ = (dst,sb)`
          (ACCEPT_TAC o SIMP_RULE std_ss [is_slot_addressed_def,bytes]))) >>
   qunabbrev_tac `p` >>
-  irule gas_outcome_full_post_source >>
+  irule gas_outcome_full_mods_post_source >>
   irule_at Any immutable_target_array_tail >>
   simp[Abbr `childR`] >>
-  qexistsl [`tops`,`tn0`,`sn`,`is_signed_type (expr_type e)`,`sb`,`sa`,
-    `s0`,`off`,`iw`,`iop`,`et`,`es`,`env`,`dst`,`d`,`cenv`,
-    `FST rb`,`G0`] >>
+  qexistsl [`tops`,`tn0`,`sn`,`is_signed_type (expr_type e)`,`sb`,`sa`,`s0`,
+    `mods`,`iw`,`iop`,`exps`,`et`,`es`,`env`,`dst`,`d`,`FST rb`,`G0`] >>
   simp[arithmeticTheory.ADD_COMM] >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   suspend "tail_post"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_subscript_sim_full[tail_post]:
+  conj_tac >-
+    (qpat_assum `cenv.ce_is_ctor` (fn ctor =>
+       qpat_assum `compile_array_subscript _ _ _ _ 32 (type_memory_size etv) _ _ _ = _`
+         (ACCEPT_TAC o REWRITE_RULE [EQT_INTRO ctor]))) >>
   conj_tac >-
     (gen_tac >> strip_tac >>
      qpat_assum `!H. valid_horizon cx st0 H mid2.storage_trace ==>
@@ -1048,9 +1106,7 @@ Resume immutable_target_subscript_sim_full[tail_post]:
   qpat_assum `target_place_type cenv bt = SOME (ValPT (ArrayT et (Dynamic n)))`
     (fn ty => simp[NoAsms,Once allocLimitsTheory.target_through_dynarray_def,ty])
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_subscript_sim_full[frames]:
   gen_tac >> strip_tac >>
   `valid_horizon cx st0 H mid1.storage_trace` by
@@ -1083,8 +1139,5 @@ Resume immutable_target_subscript_sim_full[frames]:
     (INST_TYPE [beta |-> ``:256``] wordArgsPtrTheory.ghost_kept_at_wb_trans)) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise immutable_target_subscript_sim_full
-*)

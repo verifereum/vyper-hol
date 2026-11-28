@@ -1,6 +1,7 @@
 (* Request-prefix companion to bodyFullForArrayBranch. *)
 Theory s1PrefixForArrayBranch
 Ancestors
+  bodySingletonStmtGuards[qualified] stmtExprAllocationPreProps[qualified]
   s1PrefixPreds bodyFullForArrayBranch s1PrefixDefs
   s1PrefixForArrayRound s1PrefixForRounds s1PrefixCompose s1PrefixOfVV
   bodyTypedTargetScope[qualified,ignore_grammar] bodyInvCodeProps
@@ -40,8 +41,18 @@ Proof
     suspend "toplevel_scope" >>
   `!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)` by suspend "toplevel_immutable" >>
+  drule_all_then strip_assume_tac bodySingletonStmtGuardsTheory.singleton_stmt_expr_guards >>
   `expr_body_pre cenv cx env e es` by
-    (irule nonslot_iterator_expr_pre >> goal_assum (drule_at Any) >>
+    (mp_tac (Q.INST [`s` |-> `(For id typ (Array e) n loop_body)`,
+                     `tops` |-> `tops`, `ctx` |-> `ctx`]
+        stmtExprAllocationPrePropsTheory.body_inv_stmt_expr_pre_singleton) >>
+     simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+          supportedStmtTraverseTheory.supported_iterator_exists_def] >>
+     disch_then irule >> strip_tac >>
+     irule nonslot_iterator_expr_pre >>
+     fs[bodySimTheory.body_inv_split_def,
+        bodyInvSplitTheory.module_body_inv_def, alistTheory.ALOOKUP_def] >>
+     metis_tac[]) >>
      qexistsl_tac [`bd`,`ctx`,`id`,`loop_body`,`n`,`tops`,`typ`] >> simp[]) >>
   mp_tac (Q.INST [`c` |-> `cenv`,`sty` |-> `typ`,`fty` |-> `typ`,
       `loop_body` |-> `loop_body`,`sa0` |-> `sa`,`shadow_sa0` |-> `shadow_sa`]
@@ -70,10 +81,29 @@ Proof
   drule_then assume_tac exprSimHypsTheory.expr_body_pre_vv_gas_admissible >>
   `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cx st0
      (eval_iterator cx (Array e)) (es,s0,G0,tn0)` by suspend "iterator_prefix" >>
-  mp_tac (Q.INST [`PG` |-> `PG`,`st0` |-> `st0`,`c` |-> `cenv`,
+  drule_then assume_tac body_inv_contract >>
+  drule_then strip_assume_tac body_inv_main_code >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+    cenv.ce_modules = [(NONE,tops)]` by
+    metis_tac[contractInvContextPropsTheory.contract_inv_singleton_source_modules,
+              contract_inv_cenv_modules] >>
+  `!src name. e = TopLevelName (expr_type e) (src,name) ==>
+     ?ts. ALOOKUP [(NONE,tops)] src = SOME ts /\
+       IS_SOME (supported_immutable_type ts (NONE,name))` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!nid. e = TopLevelName _ nid ==> _`
+       (qspec_then `(src,name)` (drule_then assume_tac)) >>
+     Cases_on `src` >>
+     gvs[alistTheory.ALOOKUP_def, supportedDeclsTheory.supported_immutable_type_def,
+         supportedDeclsTheory.supported_lookup_other_module]) >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+      `PG` |-> `PG`,`st0` |-> `st0`,`c` |-> `cenv`,
       `elem` |-> `typ`,`s` |-> `s0`,`G` |-> `G0`,`tn` |-> `tn0`,
       `sb` |-> `sbExpr`,`shadow_sb` |-> `shadow_sbExpr`,`sc` |-> `saL`]
       for_nonslot_array_prefix_full) >>
+  simp[GSYM gas_outcome_full_singleton_def,
+       bodyFullPredsModsTheory.body_iterator_full_ok_mods_singleton,
+       GSYM bodyFullShadowBodyInvTheory.shadow_body_inv_split_def] >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   strip_tac >>
   drule_all_then (assume_tac o BETA_RULE)
@@ -165,19 +195,36 @@ QED
 Resume compile_for_nonslot_array_frag_prefix[toplevel_immutable]:
   drule_then assume_tac body_inv_contract >>
   drule_then strip_assume_tac body_inv_main_code >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx env es` by
+    fs[exprSimHypsDefsTheory.expr_sim_inv_split_def] >>
+  `~supported_expr_exists (unallocated_bare_global_root cenv env) e` by
+    metis_tac[exprSimHypsDefsTheory.expr_sim_inv_no_unallocated_bare_globals] >>
+  `~(?bd src name ts tr slot.
+      e = TopLevelName (ArrayT typ bd) (src,name) /\
+      ALOOKUP [(NONE,tops)] src = SOME ts /\
+      find_var_decl_by_name name ts = SOME (StorageVarDecl tr (ArrayT typ bd),name) /\
+      lookup_var_slot_from_layout cx tr src name = SOME slot)` by
+    (strip_tac >> Cases_on `src` >> gvs[alistTheory.ALOOKUP_def] >>
+     drule_then strip_assume_tac entryStateRelTheory.find_var_decl_by_name_mem >> gvs[] >>
+     `supported_declaration_headers tops` by
+       metis_tac[body_inv_main_support, supportedProgramTheory.supported_program_def] >>
+     drule_all_then strip_assume_tac entryStateRelTheory.supported_storage_decl_slot >>
+     `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel (NONE:num option)) tops))` by
+       metis_tac[moduleVariableKeyPropsTheory.contract_inv_unqualified_variable_keys,
+                 alistTheory.ALOOKUP_def] >>
+     drule_all_then assume_tac supportedNameRootTheory.supported_variable_decl_distinct_mem >>
+     fs[supportedDeclsTheory.supported_declaration_headers_def, EVERY_MEM] >>
+     first_x_assum (drule_then assume_tac) >>
+     gvs[supportedDeclsTheory.supported_declaration_header_def,
+         supportedExprFormsTheory.supported_storage_value_def]) >>
   mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
                    `c` |-> `cenv`, `bd` |-> `bd`, `n` |-> `n`,
-                   `ctx` |-> `ctx`, `typ` |-> `typ`]
+                   `ctx` |-> `ctx`, `typ` |-> `typ`,
+                   `env` |-> `env`, `es` |-> `es`]
             nonslot_iterator_bare_immutable_mods) >>
-  fs[compileUnitTheory.main_module_def, alistTheory.ALOOKUP_def,
-     GSYM exprSimHypsDefsTheory.const_name_root_mods_singleton] >>
-  strip_tac >> rpt gen_tac >> strip_tac >>
-  `FST nid = NONE` by
-    (qpat_assum `!nid. e = TopLevelName (expr_type e) nid ==> FST nid = NONE`
-       (qspec_then `nid` mp_tac) >> simp[]) >>
-  qpat_assum `!nid. _ ==> IS_SOME (supported_immutable_type tops (NONE,SND nid))`
-    (qspec_then `nid` mp_tac) >>
-  PairCases_on `nid` >> gvs[]
+  rewrite_tac[GSYM exprSimHypsDefsTheory.const_name_root_mods_singleton] >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  simp[alistTheory.ALOOKUP_def, pairTheory.FORALL_PROD] >> metis_tac[]
 QED
 *)
 

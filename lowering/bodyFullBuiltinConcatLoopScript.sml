@@ -42,7 +42,7 @@ Proof
         ghost_kept_at_refl]) >>
   rename1 `EVERY _ (e::args)` >>
   `concat_loop_ready (e::args) P k DF lo d ctx shadow_ctx PG
-      tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
+      mods exps tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
       s0 G0 tn0 dv ov ow binst B bsz oinst` by
     (pure_rewrite_tac [concat_loop_ready_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   drule concat_loop_head_entry >>

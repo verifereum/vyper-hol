@@ -14,6 +14,7 @@
  *)
 Theory bodyFullTarget
 Ancestors
+  gasOutcomeFullBindMods gasExemptCertMods
   bodyFullShadowBodyInv
   bodyFullTargetRoots bodyFullTargetAttribute bodyFullTargetSubscript
   bodyFullTargetArray bodyFullTargetMapping bodyFullTargetDefs bodyFullPreds
@@ -23,15 +24,16 @@ Ancestors
   loweringPosts bodyPtrPopTargetFragTransport
   vyperStorageTrace vyperTypeEnv vyperTypeSystem vyperInterpreter vyperState
   vyperAST pair list exprSimDefs exprSimHypsDefs vyperStorageFootprint
-  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] supportedExprs
 
 val _ = Parse.hide "body";
 
 (* The element suffix exists for both kinds of subscriptable base; any
    other base has no subscript type. *)
 Theorem subscript_tail_full_ok:
-  body_inv tops ctx cenv cx /\
-  target_pre cenv cx env (SubscriptTarget bt e) es ==>
+  contract_inv mods exps ctx cenv cx /\
+  module_body_inv mods cenv.ce_module tops cenv cx /\
+  target_pre_mods mods cenv cx env (SubscriptTarget bt e) es ==>
   subscript_tail_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env bt e es
 Proof
@@ -45,44 +47,42 @@ Proof
   irule target_mapping_tail_full >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
-  >- simp[target_root_def]
-  >- (rpt strip_tac >> gvs[target_root_def] >>
-      irule immutable_toplevel_target_sim_full >> simp[] >> metis_tac[])
-  >- (strip_tac >> rpt gen_tac >> strip_tac >>
-      `body_base_target_full_ok cx bt /\ target_indices_pre cenv cx env bt` by
-        fs[body_base_target_full_ok_def,target_indices_pre_def] >>
-      `target_root bt = TopLevelNameTarget (NONE,id) /\ immutable_root cx bt` by
-        fs[immutable_root_def,target_root_def] >>
-      match_mp_tac (Q.INST [`id` |-> `id`,`tops` |-> `tops`]
-        immutable_target_subscript_sim_full) >>
-      simp[] >> first_x_assum drule_all >> simp[]) >>
-  strip_tac >> rpt gen_tac >> strip_tac >>
-  `body_base_target_full_ok cx bt /\ target_indices_pre cenv cx env bt` by
-    fs[body_base_target_full_ok_def,target_indices_pre_def] >>
-  `target_root bt = TopLevelNameTarget (NONE,id) /\ immutable_root cx bt` by
-    fs[immutable_root_def,target_root_def] >>
-  irule immutable_target_attribute_sim_full >> simp[] >>
-  first_x_assum drule_all >> simp[]
-QED
-*)
 Theorem body_imm_target_place_sim_full:
   !bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es id.
     (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
     body_base_target_full_ok_mods mods exps cx bt /\
     body_const_cells_agree mods cx env es /\
-    expr_sim_inv_mods mods cenv cx env es /\ target_indices_pre cenv cx env bt /\
+    expr_sim_inv_mods mods cenv cx env es /\ target_indices_pre_mods mods cenv cx env bt /\
+    (!e ix. MEM e (target_indices bt) /\ expr_sim_inv_mods mods cenv cx env ix ==>
+            expr_body_pre_mods mods cenv cx env e ix) /\
     cx.in_deploy /\ immutable_root cx bt /\
     target_root bt = TopLevelNameTarget (NONE,id) /\
     ~cx_const_name cx (NONE,id) ==>
     imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx env bt es
 Proof
-  cheat
+  recInduct base_assignment_target_induct >>
+  simp[target_root_def, target_indices_pre_mods_def, target_indices_def,
+       bodyFullPredsModsTheory.body_base_target_full_ok_mods_def] >>
+  rpt conj_tac
+  >- (rpt strip_tac >> gvs[] >>
+      mp_tac immutable_toplevel_target_sim_full >> simp[])
+  >- (rpt strip_tac >>
+      `immutable_root cx bt` by fs[immutable_root_def,target_root_def] >>
+      `imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+         cenv cx env bt es` by
+        (first_x_assum irule >> simp[] >> metis_tac[]) >>
+      mp_tac immutable_target_subscript_sim_full >>
+      simp[Once bodyFullPredsModsTheory.body_base_target_full_ok_mods_def] >>
+      metis_tac[]) >>
+  rpt strip_tac >>
+  `immutable_root cx bt` by fs[immutable_root_def,target_root_def] >>
+  `imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx env bt es` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  irule immutable_target_attribute_sim_full >> simp[] >>
+  qexists_tac `mods` >> simp[]
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
@@ -115,7 +115,7 @@ Theorem body_target_sim_full:
     shadow_body_inv_mods mods exps ctx shadow_ctx /\
     body_base_target_full_ok_mods mods exps cx bt /\
     body_const_cells_agree mods cx env es /\
-    target_pre cenv cx env bt es ==>
+    target_pre_mods mods cenv cx env bt es ==>
     target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx env bt es
 Proof
@@ -132,7 +132,7 @@ Theorem body_target_place_sim_full:
     shadow_body_inv_mods mods exps ctx shadow_ctx /\
     body_base_target_full_ok_mods mods exps cx bt /\
     body_const_cells_agree mods cx env es /\
-    target_pre cenv cx env bt es ==>
+    target_pre_mods mods cenv cx env bt es ==>
     target_place_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx env bt es
 Proof
@@ -157,14 +157,14 @@ Proof
                            `shadow_sb`, `r`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac
-    `gas_outcome_full _ _ _ _ (eval_base_place cx bt) _ childQ childR` >>
-  irule gas_outcome_full_bind_all >>
+    `gas_outcome_full_mods _ _ _ _ (eval_base_place cx bt) _ childQ childR` >>
+  irule gas_outcome_full_mods_bind_all >>
   rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_bind_result >>
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_bind_result >>
       qexistsl_tac [`mid`, `t`, `v`] >> fs[])
-  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_error_result >> simp[])
+  >~ [`gas_exempt_cert_mods _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_error_result >> simp[])
   >~ [`storage_trace_frame (eval_base_place _ _)`]
   >- simp[evaluate_storage_trace_frame]
   >~ [`storage_trace_frame _`]
@@ -176,8 +176,8 @@ Proof
   conj_tac
   >~ [`storage_trace_domain _ _ _`]
   >- suspend "place" >>
-  irule gas_outcome_full_post_source >>
-  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
+  irule gas_outcome_full_mods_post_source >>
+  qpat_assum `gas_outcome_full_mods _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `childR`] >> rpt strip_tac >>
   Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def] >>
@@ -213,7 +213,7 @@ Resume body_target_place_sim_full[place]:
      disch_then (qspec_then `gas_explicit marks s0.vs_gas_readings` mp_tac) >>
      simp[bind_def, get_place_def, raise_def, target_place_res_ok_def]) >>
   gvs[get_place_def] >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  irule gas_outcome_full_mods_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G1`, `mid`, `INL p`, `t`, `tn1`] >>
   conj_tac >- simp[return_def] >>
   rpt strip_tac >>
@@ -226,10 +226,10 @@ QED
 Resume body_target_place_sim_full[live]:
   `target_root bt = NameTarget id` by
     metis_tac[target_base_memory_root_ptr] >>
-  `target_pre cenv cx env bt
+  `target_pre_mods mods cenv cx env bt
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings)` by
-    fs[target_pre_def] >>
-  drule_all local_base_place_live >> strip_tac >> gvs[] >>
+    fs[target_pre_mods_def] >>
+  drule_all local_base_place_live_mods >> strip_tac >> gvs[] >>
   metis_tac[]
 QED
 

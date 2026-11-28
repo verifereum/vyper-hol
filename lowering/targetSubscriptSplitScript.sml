@@ -1084,18 +1084,14 @@ Proof
   metis_tac[target_subscript_index_readable]
 QED
 
-Theorem target_subscript_typed_base_not_label:
-  expr_sim_inv cenv cx env es /\
-  type_place_target env bt = SOME bvt /\
+Theorem target_subscript_base_not_label[local]:
+  (!id. bt = NameTarget id ==> ?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
   compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) ==>
   !l. FST rb <> Label l
 Proof
   Cases_on `bt`
   >~ [`NameTarget id`]
-  >- (simp[type_place_target_NameTarget, AllCaseEqs()] >> strip_tac >>
-      `?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)` by
-        metis_tac[expr_sim_inv_def] >>
-      gvs[compile_get_target_ptr_def, comp_return_def])
+  >- (simp[] >> strip_tac >> gvs[compile_get_target_ptr_def, comp_return_def])
   >~ [`TopLevelNameTarget nsid`]
   >- (simp[compile_get_target_ptr_def] >> rpt strip_tac >>
       Cases_on `FLOOKUP cenv.ce_module_vars nsid` >>
@@ -1112,6 +1108,30 @@ Proof
   rpt (pairarg_tac >> gvs[comp_return_def]) >>
   imp_res_tac (cj 1 subscript_pop_not_label) >>
   imp_res_tac (cj 2 subscript_pop_not_label) >> gvs[]
+QED
+
+Theorem target_subscript_typed_base_not_label:
+  expr_sim_inv cenv cx env es /\
+  type_place_target env bt = SOME bvt /\
+  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) ==>
+  !l. FST rb <> Label l
+Proof
+  strip_tac >> drule_at_then (Pat `compile_get_target_ptr _ _ _ _ = _`) irule
+    target_subscript_base_not_label >>
+  rpt strip_tac >> gvs[type_place_target_NameTarget, AllCaseEqs()] >>
+  fs[expr_sim_inv_def]
+QED
+
+Theorem target_subscript_typed_base_not_label_mods:
+  expr_sim_inv_mods mods cenv cx env es /\
+  type_place_target env bt = SOME bvt /\
+  compile_get_target_ptr compile_expr cenv bt sa = (rb,sm) ==>
+  !l. FST rb <> Label l
+Proof
+  strip_tac >> drule_at_then (Pat `compile_get_target_ptr _ _ _ _ = _`) irule
+    target_subscript_base_not_label >>
+  rpt strip_tac >> gvs[type_place_target_NameTarget, AllCaseEqs()] >>
+  fs[expr_sim_inv_mods_def]
 QED
 
 Theorem target_subscript_index_source_diagnostic:

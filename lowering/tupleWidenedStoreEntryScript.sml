@@ -1,5 +1,6 @@
 Theory tupleWidenedStoreEntry
 Ancestors
+  bodyFullPredsMods[qualified]
   bodyFullPreds bodySimFull stmtLowering gasShadow gasShadowState
   gasShadowCompileBase vyperInterpreter fragExec contextRawReachable
   unitTransformDefs valueEncoding valueEncodingDefs vyperStorageFootprint
@@ -11,7 +12,7 @@ Ancestors
 (* The fixed parameters describe the original statement boundary and the
    detached tuple snapshot; the cursor describes the remaining stores. *)
 Definition tuple_widened_store_entry_def:
-  tuple_widened_store_entry
+  tuple_widened_store_entry exps
     (DF,lo,d,ctx:venom_context,func:ir_function,shadow_func:ir_function)
     (cenv:compile_env,cx:evaluation_context,env:typing_env,st0,
      es:evaluation_state,ee:evaluation_state)
@@ -24,7 +25,8 @@ Definition tuple_widened_store_entry_def:
   compile_tuple_store_all (gas_shadow_env T cenv) (DROP i tys)
     (DROP i (MAP gas_shadow_assignment gs)) (DROP i elems) sh = ((),shadow_sb) /\
   fn_has_code c sb func /\ fn_has_code sh shadow_sb shadow_func /\ gas_shadow_state c sh /\
-  expr_sim_inv cenv cx env src /\ body_tuple_targets_full_ok cx (DROP i gs) (DROP i vs) /\
+  expr_sim_inv_mods cenv.ce_modules cenv cx env src /\
+  body_tuple_targets_full_ok_mods cenv.ce_modules exps cx (DROP i gs) (DROP i vs) /\
   storage_trace_domain cx st0 src.storage_trace /\
   (!tail. assign_tuple_target_list cx (TAKE i gs) (TAKE i vs)
     (ee with gas_obs := obs ++ tail) = (INL (),src with gas_obs := tail)) /\
@@ -70,7 +72,7 @@ Definition tuple_widened_store_entry_def:
 End
 
 Theorem tuple_widened_store_entry_slices:
-  tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+  tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
     (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) i c sh src s G tn obs ==>
   compile_tuple_store_all cenv (DROP i tys) (DROP i gs) (DROP i elems) c = ((),sb) /\
   compile_tuple_store_all (gas_shadow_env T cenv) (DROP i tys)

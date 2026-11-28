@@ -13,24 +13,53 @@ Ancestors
   ptrDiscipline vyperArray vyperTypeValues vyperValueOperation vyperTyping
   vyperFixedShapePath vyperPlaceResultTyping vyperState vyperStorageFootprint valueEncoding
   valueEncodingProps exprSimFieldLayout vyperAST venomState list finite_map words
-  bodyInvSplit[qualified]
+  bodyInvSplit[qualified] bodyMainModuleProps bodyInvCodeProps
   gasOutcomeFullMods[qualified]
+
+Theorem immutable_path_value_type:
+  expr_sim_inv_mods mods cenv cx env es /\
+  FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
+             NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
+    SOME (itv,iv) /\
+  mem_path_offset itv path = SOME (k,tv) /\
+  evaluate_subscripts itv iv path = INL v ==>
+  value_has_type tv v
+Proof
+  rpt strip_tac >>
+  `state_well_typed es` by fs[expr_sim_inv_mods_def] >>
+  Cases_on `ALOOKUP es.immutables cx.txn.target` >> gvs[] >>
+  drule_all vyperTypeEnvTheory.state_well_typed_immutables_ALOOKUP >>
+  strip_tac >>
+  drule_all vyperTypeEnvTheory.imms_well_typed_get_source_immutables >>
+  strip_tac >>
+  drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >>
+  metis_tac[vyperPlaceStatePreservationTheory.evaluate_subscripts_type]
+QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
+  disch_then (map_every assume_tac o CONJUNCTS) >> gvs[] >>
   qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
   `valid_horizon cx st0 H0 ee.storage_trace` by
     simp[Abbr `H0`,GSYM storage_trace_domain_def] >>
   qpat_assum `!H. valid_horizon _ _ H _ ==> _` (drule_then strip_assume_tac) >>
+  `value_has_type (ArrayTV etv bd) (ArrayV av)` by
+    (drule_all_then ACCEPT_TAC immutable_path_value_type) >>
+  `sub_layout itv iv k (ArrayTV etv bd) (ArrayV av)` by
+    (simp[sub_layout_def] >> conj_tac >- metis_tac[mem_path_offset_sound] >>
+     rpt strip_tac >> irule mem_path_offset_current_value >>
+     goal_assum (drule_at Any) >> qexists_tac `path` >> simp[]) >>
   `immutable_holds cenv cx (ArrayT et bd) (PlaceR (ImmutablePlace NONE id path))
       (n2w (off+k)) ee s` by
-    (qpat_assum `cenv.ce_module = NONE`
-       (fn eq => irule (REWRITE_RULE[eq] (INST_TYPE [``:'a`` |-> ``:256``] live_immutable_path_holds))) >>
-     simp[] >> conj_tac >- (qexists_tac `env` >> simp[]) >>
-     qexistsl [`H0`,`ctx`,`func`] >> simp[]) >>
-  drule_all_then strip_assume_tac imm_place_at_value_type >>
+    (drule_then assume_tac contract_inv_cenv_modules >>
+     drule_then assume_tac contract_inv_main_module >>
+     simp[immutable_holds_def] >>
+     qexistsl_tac [`NONE`, `id`, `off`, `itv`, `iv`, `k`, `ArrayV av`] >> simp[] >>
+     Cases_on `ALOOKUP ee.immutables cx.txn.target` >> gvs[] >>
+     simp[read_result_def,read_place_def,get_immutables_def,
+          get_address_immutables_def,bind_def,lift_option_type_def,
+          lift_sum_def,return_def]) >>
   `val_wf (ArrayTV etv bd) (ArrayV av)` by
     metis_tac[valueTypingMemoryPropsTheory.value_has_type_memory_wf] >>
   qabbrev_tac `cnt = array_length (ArrayTV etv bd) av` >>
@@ -70,12 +99,12 @@ QED
 *)
 Theorem immutable_target_array_tail:
   (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ cenv.ce_is_ctor /\ cenv.ce_module = NONE /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ cenv.ce_is_ctor /\ src = NONE /\
   expr_sim_inv_mods mods cenv cx env ee /\ ee.gas_obs = [] /\
   storage_trace_domain cx st0 ee.storage_trace /\
-  FLOOKUP cenv.ce_module_vars (NONE,id) = SOME (ImmutableLoc off) /\
+  FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
   FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-    | SOME imms => get_source_immutables NONE imms) id = SOME (itv,iv) /\
+    | SOME imms => get_source_immutables src imms) id = SOME (itv,iv) /\
   off + type_memory_size itv < dimword (:256) /\
   mem_path_offset itv path = SOME (k,ArrayTV etv bd) /\
   evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
@@ -105,17 +134,17 @@ Theorem immutable_target_array_tail:
     wb_frame cenv es ee sa s0 s /\ ghost_inv_at (DF H) lo d cenv cx ee G tn s /\
     ghost_kept_at lo cenv es sa G0 tn0 s0 G tn) ==>
   gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
-    (bind (extend_place cx (PlaceR (ImmutablePlace NONE id path))
+    (bind (extend_place cx (PlaceR (ImmutablePlace src id path))
              (ValueSubscript (IntV i))) get_place) (ee,s,G,tn)
     (\H res fin G' tn' q.
-       res = INL (ImmutablePlace NONE id (path ++ [ValueSubscript (IntV i)])) /\
+       res = INL (ImmutablePlace src id (path ++ [ValueSubscript (IntV i)])) /\
        imm_target_post H ctx func cenv cx es sa sb s0 fin id
          (path ++ [ValueSubscript (IntV i)]) et (dst,SOME LocCode,SOME (ValPT et)) q /\
        q.vs_current_bb = sb.cs_current_bb /\ q.vs_inst_idx = LENGTH sb.cs_current_insts /\
        alloca_history func q /\ (ctx_has_dalloca ctx ==> allocas_below_fmp q) /\
        s0.vs_alloca_next <= q.vs_alloca_next /\
        ghost_inv_at (DF H) lo d cenv cx fin G' tn' q /\
-       target_ptr_ok cenv (PlaceR (ImmutablePlace NONE id (path ++ [ValueSubscript (IntV i)])))
+       target_ptr_ok cenv (PlaceR (ImmutablePlace src id (path ++ [ValueSubscript (IntV i)])))
          (dst,SOME LocCode,SOME (ValPT et)) G' tn' q /\
        op_prov G' dst = NONE /\ ghost_kept_at lo cenv es sa G0 tn0 s0 G' tn')
     (\H res fin gt r. expr_exit res r /\ halt_exit H cx fin res r /\
@@ -145,9 +174,9 @@ Resume immutable_target_array_tail[header]:
     (MATCH_MP_TAC (Q.INST [`entry` |-> `ee`, `H` |->
        `H0:((bool # bytes32 # type_value) list # num list)`,
        `D` |-> `DF (H0:((bool # bytes32 # type_value) list # num list))`,
-       `env` |-> `env`, `tops` |-> `tops`, `ctx` |-> `ctx`,
+       `env` |-> `env`, `mods` |-> `mods`, `exps` |-> `exps`, `ctx` |-> `ctx`,
        `func` |-> `func`, `d` |-> `d`, `G` |-> `G`]
-       (INST_TYPE [alpha |-> ``:256``] extcall_request_saved_ctor_read)) >>
+       (INST_TYPE [alpha |-> ``:256``] extcall_request_saved_ctor_read_mods)) >>
      asm_rewrite_tac[] >> simp[] >>
      qexists_tac `PlaceR (ImmutablePlace NONE id path)` >> simp[]) >>
   pop_assum (qspecl_then [`ArrayTV etv (Dynamic n)`,`n2w (off+k):bytes32`] mp_tac) >>
@@ -199,7 +228,7 @@ Resume immutable_target_array_tail[in_range]:
      gvs[]) >>
   drule_then assume_tac
     (CONJUNCT2 (CONJUNCT2 exprOperandVarTheory.compiler_subscript_ops_var)) >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  irule gasOutcomeFullModsTheory.gas_outcome_full_mods_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`Gf`,`ee`,`INL (ImmutablePlace NONE id (path ++ [ValueSubscript (IntV i)]))`,
     `q`,`tnf`] >> simp[] >>
   gen_tac >> strip_tac >>
@@ -253,7 +282,7 @@ Resume immutable_target_array_tail[out_of_range]:
        `value` |-> `ArrayV av`, `sb` |-> `ValueSubscript (IntV i)`]
        immutable_target_extend) >>
      simp[]) >>
-  irule gas_outcome_full_intro >>
+  irule gasOutcomeFullModsTheory.gas_outcome_full_mods_intro >>
   qexistsl [`Gf`,`ee`,`[]`,`Abort Revert_abort q`,
             `INR (Error (RuntimeError "evaluate_subscripts array_index"))`,`tnf`] >>
   simp[gas_explicit_def,exit_result_def,expr_exit_def,halt_exit_def] >>

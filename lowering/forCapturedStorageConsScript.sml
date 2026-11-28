@@ -12,7 +12,7 @@ Theorem for_captured_storage_cons_from_stages:
   (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
   (!f inst u. frag_reachable ctx func s f inst u ==> dalloca_fmp_headroom inst u) /\
   (!H. valid_horizon cx st0 H es.storage_trace ==>
-    for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+    for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
       (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
       (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,es,G,tn,s)) /\
   gas_admissible (eval_for cx tyv id stmts (a::rs)) ok es /\
@@ -43,7 +43,7 @@ Theorem for_captured_storage_cons_from_stages:
        (\H (res:bool + exception) ee G1 tn1 t.
          ee.gas_obs = [] /\ ~t.vs_halted /\
          ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\
-             (~b ==> Guard ee /\ for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+             (~b ==> Guard ee /\ for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
                (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
                (lvo,idx,incr) (p,dst,nb,sd) (H,k,a::rs,ee,G1,tn1,t) /\
                k < len /\ body_stmts_full_ok cx stmts))
@@ -51,12 +51,12 @@ Theorem for_captured_storage_cons_from_stages:
   (!ee G1 tn1 t.
      k < len /\ body_stmts_full_ok cx stmts /\
      (!H. valid_horizon cx st0 H ee.storage_trace ==>
-       for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+       for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
          (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
          (lvo,idx,incr) (p,dst,nb,sd) (H,k,a::rs,ee,G1,tn1,t)) ==>
      ?u G2 tn2. !H. valid_horizon cx st0 H ee.storage_trace ==>
        gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (t,G1,tn1) [] (OK u,G2,tn2) /\
-       for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+       for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
          (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
          (lvo,idx,cond) (p,dst,nb,sd) (H,SUC k,rs,ee,G2,tn2,u)) ==>
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
@@ -66,12 +66,12 @@ Theorem for_captured_storage_cons_from_stages:
     (es,s,G,tn)
     (\H res ee G1 tn1 t. ee.gas_obs = [] /\ ~t.vs_halted /\
       ?b. res = INL b /\ (b ==> Done H ee G1 tn1 t) /\
-          (~b ==> Guard ee /\ ?j. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+          (~b ==> Guard ee /\ ?j. for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
             (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
             (lvo,idx,cond) (p,dst,nb,sd) (H,j,rs,ee,G1,tn1,t)))
     (\H res ee gt r. ?ex. res = INR ex /\ R H ex ee gt r)
 Proof
-  qabbrev_tac `Live = for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
+  qabbrev_tac `Live = for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,stmts)
     (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)` >>
   qabbrev_tac `head = bind (read_result cx a) (push_scope_with_var id tyv)` >>
   qabbrev_tac `clean = finally (try (ignore_bind (eval_stmts cx stmts) (return F))

@@ -58,7 +58,7 @@ QED
 (* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_widened_prefix_from_heads[nested_head]:
   `j < LENGTH tys /\ LENGTH gs = LENGTH tys /\ LENGTH gs = LENGTH vs` by decide_tac >>
-  qpat_assum `tuple_widened_store_entry _ _ _ _ j _ _ _ _ _ _ _`
+  qpat_assum `tuple_widened_store_entry _ _ _ _ _ j _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [tuple_widened_store_entry_def]) >>
   drule_all tuple_widened_head_static >>
   disch_then (qx_choose_then `bt` strip_assume_tac) >>
@@ -147,7 +147,7 @@ Resume tuple_assign_widened_prefix_from_heads[write]:
      ff.storage_trace = mid.storage_trace /\
      (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (sp,Gp,tp) [] (OK q,Gq,tq)) /\
-     tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+     tuple_widened_store_entry [] (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
        (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) (SUC j)
        write_cs shadow_write_cs ff q Gq tq (obs0 ++ gas_explicit marks s1.vs_gas_readings)` by
     (irule tuple_widened_nested_write_advance >>
@@ -173,7 +173,7 @@ Resume tuple_assign_widened_prefix_from_heads[write]:
   qpat_x_assum `INL _ = INL _` (SUBST_ALL_TAC o SIMP_RULE (srw_ss()) []) >>
   qexistsl_tac [`ff`,`q`,`Gq`,`tq`] >> rpt conj_tac
   >- first_assum ACCEPT_TAC
-  >- (qpat_assum `tuple_widened_store_entry _ _ _ _ (SUC j) _ _ ff _ _ _ _` mp_tac >>
+  >- (qpat_assum `tuple_widened_store_entry _ _ _ _ _ (SUC j) _ _ ff _ _ _ _` mp_tac >>
       simp[NoAsms,tuple_widened_store_entry_def])
   >- (rpt strip_tac >> first_assum MATCH_ACCEPT_TAC) >>
   qexistsl_tac [`write_cs`,`shadow_write_cs`,`obs0 ++ gas_explicit marks s1.vs_gas_readings`] >>

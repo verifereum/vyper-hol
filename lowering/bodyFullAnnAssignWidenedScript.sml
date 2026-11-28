@@ -36,8 +36,8 @@ Theorem annassign_widened_full_layout:
     arg_type_fits (lowered_value_type ce e) (expr_type e)) /\
   evaluate_type (get_tenv cx) typ = SOME tyv /\
   type_memory_bytes ce typ < 2 ** 64 /\
-  supported_expr tops e /\ ce.ce_func_return_type = build_func_return_type tops /\
-  supported_program tops /\ get_module_code cx NONE = SOME tops ==>
+  supported_expr tops e /\ ce.ce_func_return_type = build_func_return_type_mods mods /\
+  contract_inv mods exps ctx ce cx /\ module_body_inv mods ce.ce_module tops ce cx ==>
   ?stv.
     ~is_bytestring_type typ /\
     ~is_word_type (lowered_value_type ce e) /\

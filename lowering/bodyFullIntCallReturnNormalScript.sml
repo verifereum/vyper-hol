@@ -77,7 +77,7 @@ Theorem intcall_return_caller_frame[local]:
   mut nr args ret ss rr prev penv rtv es1 t G tn rc rb v ee Gc tc ir cs
   out outs returned.
  body_inv tops ctx cenv cx /\
- intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
+ intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv
    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
  local_ptrs_reserved cenv sa /\
  intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc rb
@@ -115,14 +115,14 @@ QED
 *)
 (* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_caller_frame[vars]:
- qhdtm_assum `intcall_entry_full` mp_tac >>
- pure_rewrite_tac[intcall_entry_full_def] >> metis_tac[]
+ qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+ pure_rewrite_tac[intcall_entry_full_mods_def] >> metis_tac[]
 QED
 *)
 (* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_caller_frame[allocas]:
- qhdtm_assum `intcall_entry_full` mp_tac >>
- pure_rewrite_tac[intcall_entry_full_def] >> metis_tac[]
+ qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+ pure_rewrite_tac[intcall_entry_full_mods_def] >> metis_tac[]
 QED
 *)
 (* SCRATCH MEASUREMENT: original continuation.
@@ -133,8 +133,8 @@ Resume intcall_return_caller_frame[bytes]:
   expr_sim_inv cenv cx tenv (es1 with scopes := prev) /\
   FLOOKUP t.vs_allocas aid = SOME (b,sz) /\
   mem_bytes_at b sz t.vs_memory = mem_bytes_at b sz s0.vs_memory` by
-   (qhdtm_assum `intcall_entry_full` mp_tac >>
-    pure_rewrite_tac[intcall_entry_full_def] >> metis_tac[]) >>
+   (qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+    pure_rewrite_tac[intcall_entry_full_mods_def] >> metis_tac[]) >>
  `alloca_inv t /\
   immutable_decl_sep cenv cx prev t.vs_vars t.vs_allocas t.vs_alloca_next` by
    (drule stmt_state_rel_local_ptrs_alloca >>
@@ -142,7 +142,7 @@ Resume intcall_return_caller_frame[bytes]:
     simp[immutable_alloca_sep_def]) >>
  `cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b` by
    (strip_tac >> `b <= b /\ b < b + sz` by simp[] >>
-    drule_all bodyFullIntCallReturnFrameTheory.intcall_alloca_immutable_prefix_disjoint >> simp[]) >>
+    drule_all bodyFullIntCallReturnFrameTheory.intcall_alloca_immutable_prefix_disjoint_mods >> simp[]) >>
  `b + sz <= t.vs_alloca_next` by
    metis_tac[allocaSiteResourceTheory.alloca_site_registered_below] >>
  `!id a len. FLOOKUP t.vs_allocas id = SOME (a,len) /\
@@ -170,7 +170,7 @@ Resume intcall_return_caller_frame[locals]:
   locals_kept cenv es0 (es1 with scopes := prev) s0 t /\
   (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
      lookup_var x t = SOME w)` by
-   (fs[intcall_entry_full_def] >> metis_tac[]) >>
+   (fs[intcall_entry_full_mods_def] >> metis_tac[]) >>
  `!x. not_fresh_at sa x ==> lookup_var x returned = lookup_var x t` by metis_tac[] >>
  irule exprBopSimPropsTheory.locals_kept_trans >>
  qexistsl_tac [`es1 with scopes := prev`,`sa`,`t`] >> simp[] >>
@@ -195,14 +195,14 @@ Resume intcall_return_caller_frame[locals]:
  `cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b` by
    (strip_tac >>
     `b <= b /\ b < b + sz` by simp[] >>
-    drule_all bodyFullIntCallReturnFrameTheory.intcall_local_immutable_prefix_disjoint >>
+    drule_all bodyFullIntCallReturnFrameTheory.intcall_local_immutable_prefix_disjoint_mods >>
     simp[]) >>
  `mem_bytes_at b sz cs.vs_memory = mem_bytes_at b sz t.vs_memory` by
    (qhdtm_assum `intcall_callee_exit_full` mp_tac >>
     pure_rewrite_tac[intcall_callee_exit_full_def,intcall_callee_exit_def] >>
     simp[exprSimDefsTheory.expr_exit_def] >> strip_tac >>
     first_x_assum irule >> simp[] >> rpt strip_tac >>
-    fs[intcall_entry_full_def] >> metis_tac[]) >>
+    fs[intcall_entry_full_mods_def] >> metis_tac[]) >>
  simp[]
 QED
 *)
@@ -240,8 +240,8 @@ Proof
     b + sz <= off \/ off + rbuf.buf_size <= b` by
    (map_every qx_gen_tac [`nm`,`b`,`sz`] >> strip_tac >>
     `local_region cenv prev t nm b sz` by metis_tac[] >>
-    qhdtm_assum `intcall_entry_full` mp_tac >>
-    pure_rewrite_tac[intcall_entry_full_def] >> strip_tac >>
+    qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+    pure_rewrite_tac[intcall_entry_full_mods_def] >> strip_tac >>
     qpat_x_assum `!n lo sz aid off asz. _` drule >>
     disch_then (drule_at Any) >>
     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
@@ -288,7 +288,7 @@ Theorem intcall_return_register_frame_certificate:
  local_ptrs_reserved cenv sa /\ dead_lo_ok H (DF H) lo cenv cx /\
  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
- intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
+ intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv
    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
  cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\ 0 < rc /\
  intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc NONE
@@ -364,8 +364,8 @@ Resume intcall_return_register_frame_certificate[state]:
     simp[]) >>
  `?ai. MEM ai (fn_insts func) /\ ai.inst_opcode = ALLOCA /\
        ai.inst_id = sa.cs_next_id` by
-   (qhdtm_assum `intcall_entry_full` mp_tac >>
-    pure_rewrite_tac[intcall_entry_full_def] >>
+   (qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+    pure_rewrite_tac[intcall_entry_full_mods_def] >>
     strip_tac >>
     qpat_x_assum `0 < _ \/ 0 < _ ==> _` mp_tac >>
     (impl_tac >- metis_tac[pairTheory.PAIR_EQ]) >>
@@ -489,8 +489,8 @@ Resume intcall_return_register_frame_certificate[bytes]:
  rpt strip_tac >>
  `FLOOKUP t.vs_allocas aid = SOME (b,sz)` by metis_tac[] >>
  `alloca_inv t` by
-   (qhdtm_assum `intcall_entry_full` mp_tac >>
-    pure_rewrite_tac[intcall_entry_full_def] >>
+   (qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+    pure_rewrite_tac[intcall_entry_full_mods_def] >>
     disch_then (mp_tac o MATCH_MP stmt_state_rel_local_ptrs_alloca o cj 7) >>
     simp[]) >>
  `regions_disjoint b sz off rbuf.buf_size` by
@@ -639,7 +639,7 @@ Theorem intcall_return_register_post:
   local_ptrs_reserved cenv sa /\ dead_lo_ok H (DF H) lo cenv cx /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
+  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv
     s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
   cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\ 0 < rc /\
   intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc NONE
@@ -756,7 +756,7 @@ Resume intcall_return_register_post[history]:
   `alloca_history func (t with vs_inst_idx := SUC t.vs_inst_idx)` by
     (irule allocaHistoryTheory.history_nonalloca_advance >>
      conj_tac >- (qexistsl [`bb`, `inst`] >> simp[]) >>
-     fs[intcall_entry_full_def]) >>
+     fs[intcall_entry_full_mods_def]) >>
   `returned.vs_current_bb = t.vs_current_bb` by
     (drule_all intCallStepTheory.bind_outputs_lookup >> strip_tac >>
      qpat_x_assum `returned = _` SUBST_ALL_TAC >>
@@ -794,7 +794,7 @@ Resume intcall_return_register_post[frontier]:
   drule intCallFrameTheory.invoke_return_frame >> strip_tac >>
   qpat_x_assum `stored with <|vs_vars := _; vs_memory := _|> = _`
     (assume_tac o SRULE [] o Q.AP_TERM `\z. z.vs_alloca_next`) >>
-  fs[intcall_entry_full_def]
+  fs[intcall_entry_full_mods_def]
 QED
 *)
 (* SCRATCH MEASUREMENT: original continuation.
@@ -814,8 +814,8 @@ Resume intcall_return_register_post[buffer]:
     metis_tac[exprSimHypsTheory.expr_sim_inv_memory_size,
               exprSimHypsDefsTheory.expr_body_pre_def] >>
   `FLOOKUP G root = SOME (off,rbuf.buf_size)` by
-    (qhdtm_assum `intcall_entry_full` mp_tac >>
-     pure_rewrite_tac[intcall_entry_full_def] >> strip_tac >>
+    (qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+     pure_rewrite_tac[intcall_entry_full_mods_def] >> strip_tac >>
      qpat_x_assum `!ty p buf. _`
        (qspecl_then [`cenv.ce_func_return_type (nsid_to_string (NONE,name))`,
                      `base_ptr rbuf`,`rbuf`] mp_tac) >>
@@ -920,7 +920,7 @@ Theorem intcall_return_normal_owned:
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
-       intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+       intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es
          sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn) /\
     (?H. valid_horizon cx st0 H es1.storage_trace) /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
@@ -1061,7 +1061,7 @@ Resume intcall_return_normal_owned[intret]:
      strip_tac >> metis_tac[]) >>
   `gas_admissible (intcall_rest cx name mut nr ss prev rtv) expr_vv_res_ok es1` by
     (asm "entry" (qspec_then `H` mp_tac) >>
-     pure_rewrite_tac[intcall_entry_full_def] >>
+     pure_rewrite_tac[intcall_entry_full_mods_def] >>
      simp[] >> metis_tac[]) >>
   qpat_assum `!tail. intcall_callee_src _ _ _ _ _ _ = _`
     (qspec_then `[]` assume_tac) >>
@@ -1126,8 +1126,8 @@ Resume intcall_return_normal_owned[intret]:
      drule_all gas_origin_ptr_invoke_intret >>
      disch_then (qspec_then `PG` strip_assume_tac) >> gvs[]) >>
   drule_all intcall_entry_invoke_continuation >> strip_tac >>
-  qhdtm_assum `intcall_entry_full` (fn entry =>
-    let val th = PURE_REWRITE_RULE [intcall_entry_full_def] entry
+  qhdtm_assum `intcall_entry_full_mods` (fn entry =>
+    let val th = PURE_REWRITE_RULE [intcall_entry_full_mods_def] entry
     in map_every (assume_tac o (fn i => cj i th)) [17, 18, 20, 22] end) >>
   `!H'. valid_horizon cx st0 H' ee.storage_trace ==>
     ghost_kept_at lo cenv es0 sa G0 tn0 s0
@@ -1172,8 +1172,8 @@ Resume intcall_return_normal_owned[intret]:
      POP_ASSUM_LIST (K all_tac) >>
      simp[contextTheory.base_ptr_def] >> rpt strip_tac >> gvs[]) >>
   `off + rbuf.buf_size < dimword (:256)` by
-    (qhdtm_assum `intcall_entry_full` mp_tac >>
-     pure_rewrite_tac[intcall_entry_full_def] >>
+    (qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+     pure_rewrite_tac[intcall_entry_full_mods_def] >>
      disch_then (assume_tac o cj 7) >>
      drule exprSimPropsTheory.stmt_state_rel_region_lt >>
      disch_then (fn th =>
@@ -1550,9 +1550,9 @@ Resume intcall_return_normal_owned[void_no_buffer]:
    (qpat_assum `cenv.ce_func_info _ = _` mp_tac >>
     qpat_assum `cenv.ce_func_return_type _ = _` mp_tac >>
     qpat_assum `rbs = 0` mp_tac >>
-    qhdtm_assum `intcall_entry_full` mp_tac >>
+    qhdtm_assum `intcall_entry_full_mods` mp_tac >>
     rpt (pop_assum kall_tac) >>
-    pure_rewrite_tac[intcall_entry_full_def] >>
+    pure_rewrite_tac[intcall_entry_full_mods_def] >>
     rpt strip_tac >>
     qpat_x_assum `_ = 0 /\ _ = 0 ==> _` mp_tac >>
     qpat_x_assum `cenv.ce_func_info _ = (0,_,_)` mp_tac >>
@@ -1695,7 +1695,7 @@ Resume intcall_return_normal_owned[void_buffer]:
     FLOOKUP t.vs_allocas sa.cs_next_id = SOME (off,rbuf.buf_size) /\
     HD argv = n2w off /\ type_memory_size rtv <= rbuf.buf_size /\
     w2n (HD argv) + type_memory_size rtv <= t.vs_alloca_next` by
-   (qhdtm_assum `intcall_entry_full` mp_tac >>
+   (qhdtm_assum `intcall_entry_full_mods` mp_tac >>
     map_every (fn p => qpat_assum p mp_tac)
       [`cenv.ce_func_info _ = (0,rbs,pvs)`, `rbs <> 0`,
        `cenv.ce_func_return_type _ = ret`,
@@ -1704,8 +1704,8 @@ Resume intcall_return_normal_owned[void_buffer]:
        `decode_invoke inst = SOME (lbl,arg_ops)`,
        `eval_operands arg_ops t = SOME argv`] >>
     rpt (pop_assum kall_tac) >> rpt disch_tac >>
-    qhdtm_x_assum `intcall_entry_full` mp_tac >>
-    pure_rewrite_tac[intcall_entry_full_def] >> strip_tac >>
+    qhdtm_x_assum `intcall_entry_full_mods` mp_tac >>
+    pure_rewrite_tac[intcall_entry_full_mods_def] >> strip_tac >>
     map_every (fn p => qpat_assum p mp_tac)
       [`0 < _ \/ 0 < _ ==> _`,
        `cenv.ce_func_info _ = (rc',rbs',pvs')`,
@@ -1755,14 +1755,14 @@ Resume intcall_return_normal_owned[void_buffer]:
     b + sz <= off \/ off + rbuf.buf_size <= b` by
    (map_every qx_gen_tac [`nm`,`lb`,`sz`] >> strip_tac >>
     `local_region cenv prev t nm lb sz` by metis_tac[] >>
-    qhdtm_assum `intcall_entry_full` mp_tac >>
-    pure_rewrite_tac[intcall_entry_full_def] >> strip_tac >>
+    qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+    pure_rewrite_tac[intcall_entry_full_mods_def] >> strip_tac >>
     qpat_x_assum `!n lo sz aid off asz. _` drule >>
     disch_then (drule_at Any) >>
     simp[loweringStateRelDefsTheory.regions_disjoint_def] >> metis_tac[]) >>
  `off + rbuf.buf_size < dimword (:256)` by
-   (qhdtm_assum `intcall_entry_full` mp_tac >>
-    pure_rewrite_tac[intcall_entry_full_def] >>
+   (qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+    pure_rewrite_tac[intcall_entry_full_mods_def] >>
     disch_then (assume_tac o cj 7) >>
     drule exprSimPropsTheory.stmt_state_rel_region_lt >>
     disch_then (mp_tac o cj 1) >>

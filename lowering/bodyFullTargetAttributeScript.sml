@@ -2,6 +2,7 @@
    one ADD of the field's offset with no gas mark. *)
 Theory bodyFullTargetAttribute
 Ancestors
+  gasOutcomeFullBindMods gasExemptCertMods
   bodyFullTargetDefs bodyFullTargetRoots gasOutcomeFullCompose gasOutcomeFull
   fragGasOriginPtr bodyFullUnwrapRun targetPtrFacts
   exprSimAttributeFields exprSimFieldLayout exprSimSubscriptArrayLiveImmutableView exprSimProps
@@ -202,7 +203,7 @@ QED
 Finalise target_add_suffix_full
 
 Theorem target_attribute_sim_full:
-  target_pre cenv cx env (AttributeTarget bt fld) es /\
+  target_pre_mods mods cenv cx env (AttributeTarget bt fld) es /\
   target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env bt es ==>
   target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -248,14 +249,14 @@ Proof
                            `shadow_sm`, `rb`, `s0`, `G0`, `tn0`] mp_tac) >>
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   qmatch_asmsub_abbrev_tac
-    `gas_outcome_full _ _ _ _ (eval_base_place cx bt) _ childQ childR` >>
-  irule gas_outcome_full_bind_all >>
+    `gas_outcome_full_mods _ _ _ _ (eval_base_place cx bt) _ childQ childR` >>
+  irule gas_outcome_full_mods_bind_all >>
   rpt conj_tac
   >~ [`gas_marked_exec _ _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_bind_result >>
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_bind_result >>
       qexistsl_tac [`mid`, `t`, `v`] >> fs[])
-  >~ [`gas_exempt_cert _ _ _ _ _ _ _`]
-  >- (rpt strip_tac >> irule gas_exempt_cert_error_result >> simp[])
+  >~ [`gas_exempt_cert_mods _ _ _ _ _ _ _`]
+  >- (rpt strip_tac >> irule gas_exempt_cert_mods_error_result >> simp[])
   >~ [`storage_trace_frame (eval_base_place _ _)`]
   >- simp[evaluate_storage_trace_frame]
   >~ [`storage_trace_frame _`]
@@ -265,8 +266,8 @@ Proof
   conj_tac
   >~ [`storage_trace_domain _ _ _`]
   >- suspend "selected" >>
-  irule gas_outcome_full_post_source >>
-  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
+  irule gas_outcome_full_mods_post_source >>
+  qpat_assum `gas_outcome_full_mods _ _ _ _ _ _ _ _` (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `childR`] >> rpt strip_tac >>
   Cases_on `res` >> fs[exprSimDefsTheory.expr_exit_def]
@@ -290,13 +291,14 @@ Resume target_attribute_sim_full[selected]:
     by (qpat_assum `!tail. eval_base_place _ _ _ = _`
           (qspec_then `[]` mp_tac) >> REWRITE_TAC [APPEND_NIL] >>
         qpat_assum `mid with gas_obs := [] = mid` (fn th => REWRITE_TAC [th])) >>
-  `expr_sim_inv cenv cx env mid` by
-    (irule eval_base_place_sim_inv >>
-     qexistsl_tac [`bt`, `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-                   `INL pv`] >> fs[target_pre_def] >>
-     metis_tac[target_pre_sub, target_pre_def]) >>
+  `expr_sim_inv_mods mods cenv cx env mid` by
+    (qpat_assum `target_pre_mods _ _ _ _ (AttributeTarget _ _) _`
+       (strip_assume_tac o REWRITE_RULE [target_pre_mods_def,target_indices_pre_mods_def]) >>
+     irule targetLocalLiveTheory.eval_base_place_mods_inv >>
+     qexistsl [`INL pv`, `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+                `bt`] >> simp[]) >>
   `env.type_defs = get_tenv cx` by
-    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+    fs[expr_sim_inv_mods_def, env_consistent_def, env_context_consistent_def] >>
   `?sid. bty = StructT sid` by
     (Cases_on `bty` >> gvs[attribute_type_def]) >> gvs[] >>
   Cases_on `extend_place cx pv (AttrSubscript fld) mid` >>
@@ -317,6 +319,14 @@ Resume target_attribute_sim_full[selected]:
        (strip_assume_tac o SIMP_RULE std_ss [target_post_def,
                                              value_type_place_def]) >>
      qexists_tac `w` >> fs[]) >>
+  qpat_assum `expr_sim_inv_mods mods cenv cx env mid`
+    (strip_assume_tac o REWRITE_RULE [expr_sim_inv_mods_def]) >>
+  `!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+                               sz = type_memory_size tv) fields` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==> _`
+       (drule_then (ACCEPT_TAC o CONJUNCT2))) >>
   drule_all target_field_source_ptr >> strip_tac >> gvs[] >>
   suspend "tail"
 QED
@@ -335,7 +345,7 @@ Resume target_attribute_sim_full[tail]:
       qpat_x_assum `!H. valid_horizon _ _ H es2.storage_trace ==> _` drule >>
       strip_tac >> simp[]) >>
   strip_tac >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  irule gas_outcome_full_mods_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G'`, `es2`, `INL pv'`, `u`, `tn'`] >>
   conj_tac >- simp[] >>
   rpt strip_tac >>
@@ -561,7 +571,7 @@ Proof
 QED
 *)
 Theorem immutable_target_attribute_sim_full:
-  expr_sim_inv_mods mods cenv cx env es /\ target_indices_pre cenv cx env bt /\
+  expr_sim_inv_mods mods cenv cx env es /\ target_indices_pre_mods mods cenv cx env bt /\
   immutable_root cx bt /\
   imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
     cenv cx env bt es ==>

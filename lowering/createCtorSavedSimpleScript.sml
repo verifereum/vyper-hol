@@ -37,6 +37,7 @@ Proof
 QED
 
 Theorem ctor_saved_head_word[local]:
+  ce.ce_modules = [(NONE,cx_tops cx)] /\
   expr_body_pre ce cx env e es /\
   is_word_type (lowered_value_type ce e) /\
   compile_expr ce (expr_type e) e sa = (vv,sm) /\
@@ -72,6 +73,8 @@ Proof
   fs[expr_post_def] >>
   `return_buf_frame d ce sb t` by
     (irule return_buf_frame_frame >> qexistsl [`ce`,`s0`,`sa`] >> simp[]) >>
+  `expr_sim_inv_mods [(NONE,cx_tops cx)] ce cx env ee` by
+    fs[expr_sim_inv_split_def] >>
   simp[extcall_positional_post_def, vv_operand_def, vv_location_def] >>
   map_every qexists_tac [`sa`,`sm`,`sb`,`vv`,`Value v`,`exprs_can_mutate ce xs`] >>
   gvs[ci_mono_def, vv_holds_def, vv_at_def, ptr_vv_ok_def,
@@ -308,6 +311,9 @@ Theorem ctor_saved_head_simple:
 Proof
   Cases_on `is_word_type (lowered_value_type ce e)` >> simp[] >> strip_tac
   >- (drule_all ctor_snapshot_word_lower_value >> strip_tac >>
+      `ce.ce_modules = [(NONE,cx_tops cx)]` by
+        metis_tac[bodySimTheory.body_inv_contract, bodyInvCodePropsTheory.body_inv_main_code,
+                  bodyInvCodePropsTheory.contract_inv_cenv_modules] >>
       irule ctor_saved_head_word >> simp[] >> qexists_tac `gs` >> simp[]) >>
   `read_result cx raw ee = (INL v,ee)` by fs[bind_def] >>
   `~is_word_type (post_value_type ce e)` by

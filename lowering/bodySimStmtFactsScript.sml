@@ -59,6 +59,16 @@ Proof
   rpt strip_tac >> first_x_assum drule >> simp[]
 QED
 
+Theorem expr_body_pre_eval_result_mods:
+  expr_body_pre_mods mods cenv cx env e es /\
+  eval_expr cx e es = (res,es') ==>
+  expr_sim_inv_mods mods cenv cx env es'
+Proof
+  strip_tac >>
+  fs[expr_body_pre_mods_def] >>
+  metis_tac[expr_sim_inv_mods_eval_result]
+QED
+
 Theorem expr_body_pre_eval_mods:
   expr_body_pre_mods mods cenv cx env e es /\
   (do result <- eval_expr cx e; read_result cx result od) es = (res,es') ==>

@@ -423,6 +423,13 @@ Resume create_ctor_payload_length[encode]:
   qpat_assum `!K. _ ==> extcall_positional_post T DF lo d ctx func ce cx env [] args svs _ se _ _ _ _ K _ ee _ _ s`
      (qspec_then `H0` (drule_then (strip_assume_tac o SIMP_RULE bool_ss
         [extcall_positional_post_def,sumTheory.INL_11]))) >>
+  `expr_sim_inv ce cx env ee` by
+    (drule_then assume_tac bodySimTheory.body_inv_contract >>
+     drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_module_locations >>
+     drule_then assume_tac bodyInvCodePropsTheory.body_inv_unit_immutable_layout >>
+     drule_then assume_tac bodyInvCodePropsTheory.contract_inv_cenv_modules >>
+     drule_then assume_tac contractInvContextPropsTheory.contract_inv_singleton_source_modules >>
+     fs[bodyFullPostsModsTheory.expr_sim_inv_mods_singleton]) >>
   `storage_trace_domain cx st0 ee.storage_trace` by (irule extcall_packing_observed_domain >> qexists_tac `H0` >> first_assum ACCEPT_TAC) >>
   `!e. MEM e args ==> ?es'. expr_body_pre ce cx env e es'` by suspend "source_pre" >>
   `!i. i < LENGTH args ==> ?tv ann.

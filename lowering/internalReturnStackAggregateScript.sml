@@ -1,6 +1,7 @@
 (* Tuple and struct returns load their word members before RET. *)
 Theory internalReturnStackAggregate
 Ancestors
+  bodyFullPostsMods[qualified]
   stmtSimReturn stmtLowering exprLowering exprLoweringProps emitHelperProps
   compileEnv fragExec gasShadowCompileStmtOps gasShadowCompileStmtHelpers
   gasShadowCompilePure gasShadowState intCallReturnMem internalReturnMemoryFrame
@@ -706,7 +707,7 @@ Theorem internal_frame_ret_stack_aggregate_full_taint:
     ~is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
     ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
       ~cx.txn.is_static) ==>
-    frame_ret_ok_full
+    frame_ret_ok_full_mods mods
       (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
       (\H v ee gt r. intret_q H func cenv cx tv v ee r /\
         !ir u. r = IntRet ir u /\

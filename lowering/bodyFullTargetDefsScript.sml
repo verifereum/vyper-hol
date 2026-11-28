@@ -9,11 +9,57 @@
  *)
 Theory bodyFullTargetDefs
 Ancestors
+  gasOutcomeFullMods[qualified] gasOutcomeFullBindMods[qualified]
+  gasExemptCertMods[qualified] gasExemptOriginMods[qualified] sourceExemptMods[qualified]
   exprSimDefs unitMemInv contextRawReachable
   bodySimFull targetPlaceSimCases targetPlaceSimDefs
   gasShadow gasOutcomeFull loweringPosts exprLowering compileEnv
   ptrDiscipline venomState vyperInterpreter vyperState vyperAST
   allocLimits vyperFixedShapePath
+
+(* The current exemption classifier is independent of the module list. *)
+Theorem gas_exempt_cert_mods_change_modules[local]:
+  !memory mods p source start marks out endpoint.
+    gas_exempt_cert_mods memory mods p source start marks out endpoint ==>
+    !mods'. gas_exempt_cert_mods memory mods' p source start marks out endpoint
+Proof
+  ho_match_mp_tac gasExemptCertModsTheory.gas_exempt_cert_mods_ind >>
+  rpt conj_tac >> rpt strip_tac >|
+  [irule gasExemptCertModsTheory.gas_exempt_cert_mods_origin >>
+     qpat_assum `gas_exempt_origin_mods _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [gasExemptOriginModsTheory.gas_exempt_origin_mods_def,
+                       sourceExemptModsTheory.unspecified_behaviour_exempt_mods_def],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_unit],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_unit],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_bool],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_bool],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_result],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_result],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_value],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_value],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_place],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_place],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_values],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_values],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_results],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_results],
+   irule gasExemptCertModsTheory.gas_exempt_cert_mods_cleanup >> qexists_tac `mid` >> simp[],
+   irule gasExemptCertModsTheory.gas_exempt_cert_mods_handler >> qexists_tac `mid` >> simp[],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_get_scopes],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_invoke],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_unforce_result],
+   irule gasExemptCertModsTheory.gas_exempt_cert_mods_source_cong >>
+     qexists_tac `source` >> simp[]]
+QED
+
+Theorem gas_outcome_full_mods_change_modules:
+  gas_outcome_full_mods cfg mods cx st0 source start Q R ==>
+  !mods'. gas_outcome_full_mods cfg mods' cx st0 source start Q R
+Proof
+  PairCases_on `cfg` >> PairCases_on `start` >>
+  rewrite_tac[gasOutcomeFullModsTheory.gas_outcome_full_mods_def] >>
+  metis_tac[gas_exempt_cert_mods_change_modules]
+QED
 
 (* New definition: target_post H (with ghost_inv) says what the target's
    pointer holds, not where it may point, and a fresh pointer derived
@@ -97,9 +143,9 @@ Definition imm_target_place_sim_full_def:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_target_place cx bt) (es,s0,G0,tn0)
+        cenv.ce_modules cx st0 (eval_target_place cx bt) (es,s0,G0,tn0)
         (\H res ee G tn t. ?id path. res = INL (ImmutablePlace NONE id path) /\
           target_root bt = TopLevelNameTarget (NONE,id) /\
           imm_target_post H ctx func cenv cx es sa sb s0 ee id path ty r t /\
@@ -155,9 +201,9 @@ Definition target_sim_full_def:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_base_place cx bt) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_base_place cx bt) (es, s0, G0, tn0)
         (\H res ee G tn t. ?pv. res = INL pv /\
           target_post H ctx func cenv cx es sa sb s0 ee pv vt r t /\
           t.vs_current_bb = sb.cs_current_bb /\
@@ -208,9 +254,9 @@ Definition target_place_sim_full_def:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_target_place cx bt) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_target_place cx bt) (es, s0, G0, tn0)
         (\H res ee G tn t. ?p. res = INL p /\
           target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty)
             r t /\
@@ -273,9 +319,9 @@ Definition assign_target_place_sim_full_def:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_target_place cx bt) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_target_place cx bt) (es, s0, G0, tn0)
         (\H res ee G tn t. ?p. res = INL p /\
           assign_target_post (immutable_root cx bt) H ctx func cenv cx
             es sa sb s0 ee p ty r G t /\
@@ -309,7 +355,7 @@ Proof
   simp[assign_target_place_sim_full_def,imm_target_place_sim_full_def,
        target_place_sim_full_def] >> strip_tac >> rpt gen_tac >> strip_tac
   >- (first_x_assum drule_all >> strip_tac >>
-      irule gas_outcome_full_post_mono >> first_assum (irule_at Any) >>
+      irule gasOutcomeFullBindModsTheory.gas_outcome_full_mods_post_mono >> first_assum (irule_at Any) >>
       simp[assign_target_post_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
   first_x_assum drule_all >>
   simp[assign_target_post_def]

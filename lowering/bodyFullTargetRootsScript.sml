@@ -30,19 +30,19 @@ Proof
 QED
 
 Theorem target_name_sim_full:
-  target_pre cenv cx env (NameTarget id) es ==>
+  target_pre_mods mods cenv cx env (NameTarget id) es ==>
   target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env (NameTarget id) es
 Proof
-  rw[target_sim_full_def, target_pre_def] >>
+  rw[target_sim_full_def, target_pre_mods_def] >>
   qpat_x_assum `type_place_target _ _ = _` mp_tac >>
   simp[Once well_typed_expr_def, AllCaseEqs()] >> strip_tac >> gvs[] >>
-  drule_all expr_sim_inv_local >> strip_tac >>
-  `cenv.ce_var_type id = SOME ty` by fs[exprSimHypsDefsTheory.expr_sim_inv_def] >>
+  drule_all expr_sim_inv_local_mods >> strip_tac >>
+  `cenv.ce_var_type id = SOME ty` by fs[exprSimHypsDefsTheory.expr_sim_inv_mods_def] >>
   qpat_x_assum `compile_get_target_ptr _ _ (NameTarget _) sa = _` mp_tac >>
   simp[compile_get_target_ptr_def, comp_return_def] >> strip_tac >> gvs[] >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  irule gas_outcome_full_mods_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es`, `INL (PlaceR (MemoryPlace id []))`, `s0`, `tn0`] >>
   conj_tac
   >- simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
@@ -75,12 +75,12 @@ Proof
 QED
 
 Theorem target_toplevel_sim_full:
-  target_pre cenv cx env (TopLevelNameTarget (src,id)) es ==>
+  target_pre_mods mods cenv cx env (TopLevelNameTarget (src,id)) es ==>
   target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env (TopLevelNameTarget (src,id)) es
 Proof
-  rw[target_sim_full_def, target_pre_def] >>
-  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
+  rw[target_sim_full_def, target_pre_mods_def] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_mods_def] >>
   `!ts. get_module_code cx src = SOME ts ==>
         find_var_decl_by_name id ts <> NONE` by
     (fs[immutable_root_def, target_root_def] >> metis_tac[]) >>
@@ -92,10 +92,10 @@ QED
 Resume target_toplevel_sim_full[storage]:
   `cenv.ce_hashmap_info (src,id) = NONE /\
    cenv.ce_module_var_type (src,id) = SOME ty` by
-    metis_tac[toplevel_target_env] >>
+    metis_tac[toplevel_target_env_mods] >>
   qabbrev_tac `es1 = es with storage_trace :=
                  es.storage_trace ++ [StorageRoot tr slot tv]` >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  irule gas_outcome_full_mods_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es1`, `INL (PlaceR (StoragePlace tr (n2w slot) tv))`,
                 `s0`, `tn0`] >>
   conj_tac
@@ -132,8 +132,8 @@ QED
 
 Resume target_toplevel_sim_full[mapping]:
   `?tr'. cenv.ce_hashmap_info (src,id) = SOME (tr',kt,vt')` by
-    metis_tac[toplevel_target_env] >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+    metis_tac[toplevel_target_env_mods] >>
+  irule gas_outcome_full_mods_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es`, `INL (HashMapRef tr (n2w slot) kt vt')`,
                 `s0`, `tn0`] >>
   conj_tac
@@ -246,7 +246,7 @@ Proof
   Cases_on `FLOOKUP (get_source_immutables NONE imms) id` >>
   gvs[get_source_immutables_def] >>
   rename1 `_ = SOME entry` >> PairCases_on `entry` >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  irule gas_outcome_full_mods_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`,`es`,`INL (ImmutablePlace NONE id [])`,`s0`,`tn0`] >>
   conj_tac >-
     (simp[Once evaluate_def, bind_def] >>

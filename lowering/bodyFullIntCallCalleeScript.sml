@@ -2403,7 +2403,7 @@ Finalise intcall_callee_protected_ghost_run_rules
 Theorem intcall_callee_final_horizon_taint_frame:
   body_inv tops ctx cenv cx /\
   (!H. valid_horizon cx st0 H es1.storage_trace ==>
-    intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sb
+    intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sb
       vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn) /\
   gas_invoke_entry (ctx,func) t callee entered /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
@@ -2424,14 +2424,14 @@ Theorem intcall_callee_final_horizon_taint_frame:
 Proof
   strip_tac >>
   drule_all intcall_callee_entry_horizon >> strip_tac >>
-  qpat_x_assum `!H. _ ==> intcall_entry_full _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `!H. _ ==> intcall_entry_full_mods _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (drule_then assume_tac) >>
   drule_then assume_tac intcall_callee_pre_fmp_context >>
   gen_tac >> strip_tac >> CCONTR_TAC >>
   `!b sz. MEM (SOME (b,sz)) (MAP (op_prov G) arg_ops) ==>
     i < b \/ b + sz <= i` by
-    (qhdtm_assum `intcall_entry_full`
-       (mp_tac o last o CONJUNCTS o REWRITE_RULE [intcall_entry_full_def]) >>
+    (qhdtm_assum `intcall_entry_full_mods`
+       (mp_tac o last o CONJUNCTS o REWRITE_RULE [intcall_entry_full_mods_def]) >>
      disch_then (qspecl_then [`bb`,`inst`,`lbl`,`arg_ops`,`argv`] mp_tac) >>
      simp[] >> strip_tac >>
      qpat_x_assum `!b bsz. MEM (SOME (b,bsz)) (MAP (op_prov G) arg_ops) ==> _` mp_tac >>
@@ -2439,7 +2439,7 @@ Proof
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[arithmeticTheory.ADD_COMM]) >>
   drule_all intcall_callee_entry_decode >> strip_tac >>
   `MEM callee ctx.ctx_functions` by metis_tac[lookup_function_MEM] >>
-  `fmp_room ctx callee setup` by metis_tac[intcall_entry_full_fmp_room] >>
+  `fmp_room ctx callee setup` by metis_tac[intcall_entry_full_fmp_room_mods] >>
   `ptr_byte_frame_inv (ctx,i) FEMPTY setup` by
     (gvs[venomExecSemanticsTheory.setup_callee_def, ptr_byte_frame_inv_def] >>
      rpt strip_tac >> fs[fmp_room_def] >> decide_tac) >>

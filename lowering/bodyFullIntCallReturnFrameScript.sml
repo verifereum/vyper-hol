@@ -133,52 +133,6 @@ QED
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
-  strip_tac >>
-  drule_then assume_tac body_inv_contract >>
-  drule_then strip_assume_tac body_inv_main_code >>
-  drule_all_then assume_tac intcall_immutable_sep_singleton >>
-  `expr_sim_inv_mods [(NONE,tops)] cenv cx tenv es` by fs[expr_sim_inv_split_def] >>
-  drule_all_then mp_tac intcall_local_immutable_prefix_disjoint_mods >>
-  simp[imm_len_mods_singleton]
-QED
-*)
-Theorem intcall_local_immutable_prefix_disjoint:
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx tenv es /\
-  cenv.ce_is_ctor /\
-  immutable_decl_sep cenv cx scopes t.vs_vars t.vs_allocas t.vs_alloca_next /\
-  local_region cenv scopes t name b sz /\ b <= i /\ i < b + sz ==>
-  imm_len (cx_tops cx) <= i
-Proof
-  cheat
-QED
-
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  drule_then assume_tac body_inv_contract >>
-  drule_then strip_assume_tac body_inv_main_code >>
-  drule_all_then assume_tac intcall_immutable_sep_singleton >>
-  `expr_sim_inv_mods [(NONE,tops)] cenv cx tenv es` by fs[expr_sim_inv_split_def] >>
-  drule_all_then mp_tac intcall_alloca_immutable_prefix_disjoint_mods >>
-  simp[imm_len_mods_singleton]
-QED
-*)
-Theorem intcall_alloca_immutable_prefix_disjoint:
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx tenv es /\
-  cenv.ce_is_ctor /\
-  immutable_decl_sep cenv cx scopes t.vs_vars t.vs_allocas t.vs_alloca_next /\
-  FLOOKUP t.vs_allocas aid = SOME (b,sz) /\ b <= i /\ i < b + sz ==>
-  imm_len (cx_tops cx) <= i
-Proof
-  cheat
-QED
-
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
   rpt strip_tac >>
   drule intCallFrameTheory.invoke_return_frame >> strip_tac >>
   drule_then assume_tac body_inv_contract >>
@@ -191,7 +145,7 @@ Proof
   `imm_len_mods cenv.ce_modules = imm_len (cx_tops cx)` by
     simp[imm_len_mods_singleton] >>
   `ghost_inv_at (DF H) lo d cenv cx (es1 with scopes := prev) G tn t` by
-    fs[intcall_entry_full_def] >>
+    fs[intcall_entry_full_mods_def] >>
   simp[ghost_inv_at_def] >> rpt conj_tac
   >- suspend "locals"
   >- suspend "buffer"
@@ -209,7 +163,7 @@ Theorem intcall_return_ghost_inv:
   dead_lo_ok H (DF H) lo cenv cx /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
+  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv
     s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
   intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc rb
     sa.cs_next_id sm.cs_next_id t tn (INL v) ee (Gc,tc) (IntRet ir cs) /\
@@ -242,7 +196,7 @@ Resume intcall_return_ghost_inv[locals]:
     (simp[loweringStateRelDefsTheory.local_region_def] >> metis_tac[]) >>
   `stmt_state_rel H ctx func cenv cx (es1 with scopes := prev) t /\
    expr_sim_inv cenv cx tenv (es1 with scopes := prev)` by
-    fs[intcall_entry_full_def] >>
+    fs[intcall_entry_full_mods_def] >>
   `w2n w + sz <= t.vs_alloca_next /\ type_memory_size entry.type <= sz /\
    val_wf entry.type entry.value` by
     (drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
@@ -254,7 +208,7 @@ Resume intcall_return_ghost_inv[locals]:
   `!i. w2n w <= i /\ i < w2n w + sz ==> lo <= i` by
     (rpt strip_tac >> fs[dead_lo_ok_def, imm_len_mods_singleton] >>
      Cases_on `cenv.ce_is_ctor` >> gvs[] >>
-     drule_all (ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] intcall_local_immutable_prefix_disjoint) >> simp[]) >>
+     drule_all (ONCE_REWRITE_RULE [arithmeticTheory.ADD_COMM] intcall_local_immutable_prefix_disjoint_mods) >> simp[]) >>
   `mem_bytes_at (w2n w) sz cs.vs_memory = mem_bytes_at (w2n w) sz t.vs_memory` by
     (Cases_on `sz = 0` >- gvs[valueEncodingDefsTheory.mem_bytes_at_def] >>
      `cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= w2n w` by
@@ -265,14 +219,14 @@ Resume intcall_return_ghost_inv[locals]:
      fs[intcall_callee_exit_full_def, bodyIntCallSeamsTheory.intcall_callee_exit_def,
         exprSimDefsTheory.expr_exit_def] >>
      first_x_assum irule >> simp[] >> rpt strip_tac >>
-     fs[intcall_entry_full_def] >>
+     fs[intcall_entry_full_mods_def] >>
      metis_tac[]) >>
   `!i. w2n w <= i /\ i < w2n w + sz /\ i IN tc.t_mem ==> i IN tn.t_mem` by
     (rpt strip_tac >> fs[intcall_callee_exit_full_def] >>
      qpat_x_assum `!i. lo <= i /\ _ ==> _` irule >> simp[] >>
      rpt strip_tac >>
      `regions_disjoint (w2n w) sz off asz` by
-       (fs[intcall_entry_full_def] >>
+       (fs[intcall_entry_full_mods_def] >>
         metis_tac[]) >>
      fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   drule exprSimPropsTheory.val_footprint_le >> strip_tac >>
@@ -307,8 +261,8 @@ QED
 Resume intcall_return_ghost_inv[storage]:
   `stor_taint_ok_at (DF H) tc cs` by fs[intcall_callee_exit_full_def] >>
   `t.vs_call_ctx.cc_address = cx.txn.target` by
-    (qhdtm_assum `intcall_entry_full`
-       (strip_assume_tac o PURE_REWRITE_RULE [intcall_entry_full_def]) >>
+    (qhdtm_assum `intcall_entry_full_mods`
+       (strip_assume_tac o PURE_REWRITE_RULE [intcall_entry_full_mods_def]) >>
      drule stmt_state_rel_state_rel >>
      disch_then (mp_tac o MATCH_MP state_rel_call_ctx_rel) >>
      simp[loweringStateRelDefsTheory.call_ctx_rel_def]) >>
@@ -358,7 +312,7 @@ Proof
   `ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn /\
    stmt_state_rel H ctx func cenv cx (es1 with scopes := prev) t /\
    expr_sim_inv cenv cx tenv (es1 with scopes := prev)` by
-    fs[intcall_entry_full_def] >>
+    fs[intcall_entry_full_mods_def] >>
   `lo = (if cenv.ce_is_ctor then imm_len (cx_tops cx) else 0)` by
     (drule_then assume_tac body_inv_contract >>
      drule_then assume_tac contract_inv_cenv_modules >>
@@ -380,7 +334,7 @@ Theorem intcall_return_ghost_kept:
   dead_lo_ok H (DF H) lo cenv cx /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
+  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv
     s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
   intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc rb
     sa.cs_next_id sm.cs_next_id t tn (INL v) ee (Gc,tc) (IntRet ir cs) /\
@@ -398,14 +352,14 @@ QED
 Resume intcall_return_ghost_kept[allocas]:
   rpt strip_tac >>
   `FLOOKUP t.vs_allocas aid = SOME (off,sz)` by
-    (fs[intcall_entry_full_def] >> metis_tac[]) >>
+    (fs[intcall_entry_full_mods_def] >> metis_tac[]) >>
   `off + sz <= t.vs_alloca_next` by
     (drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
      fs[venomMemDefsTheory.alloca_inv_def, venomMemDefsTheory.alloca_next_valid_def] >>
      metis_tac[]) >>
   `lo <= i` by
     (Cases_on `cenv.ce_is_ctor` >> gvs[] >>
-     drule_all intcall_alloca_immutable_prefix_disjoint >> simp[]) >>
+     drule_all intcall_alloca_immutable_prefix_disjoint_mods >> simp[]) >>
   `i IN tn.t_mem` by
     (fs[intcall_callee_exit_full_def] >>
      qpat_x_assum `!j. _ /\ _ ==> j IN tn.t_mem` irule >> gvs[] >>
@@ -425,7 +379,7 @@ Resume intcall_return_ghost_kept[locals]:
   `local_region cenv prev t n b sz` by
     (irule exprSimPropsTheory.local_region_frame_fwd >>
      qexistsl [`s0`, `sa`, `es0.scopes`] >>
-     fs[intcall_entry_full_def,
+     fs[intcall_entry_full_mods_def,
         loweringPostsTheory.locals_kept_def]) >>
   `b + sz <= t.vs_alloca_next` by
     (drule stmt_state_rel_local_ptrs_alloca >> strip_tac >>
@@ -434,13 +388,13 @@ Resume intcall_return_ghost_kept[locals]:
      qpat_x_assum `!n e p sz. _ ==> ?w. _` drule_all >> strip_tac >> gvs[]) >>
   `lo <= i` by
     (Cases_on `cenv.ce_is_ctor` >> gvs[] >>
-     drule_all intcall_local_immutable_prefix_disjoint >> simp[]) >>
+     drule_all intcall_local_immutable_prefix_disjoint_mods >> simp[]) >>
   `i IN tn.t_mem` by
     (fs[intcall_callee_exit_full_def] >>
      qpat_x_assum `!j. _ /\ _ ==> j IN tn.t_mem` irule >> gvs[] >>
      rpt strip_tac >>
      `regions_disjoint b sz off asz` by
-       (fs[intcall_entry_full_def] >> metis_tac[]) >>
+       (fs[intcall_entry_full_mods_def] >> metis_tac[]) >>
      fs[loweringStateRelDefsTheory.regions_disjoint_def] >> decide_tac) >>
   fs[ghost_kept_at_def] >> metis_tac[]
 QED
@@ -457,9 +411,9 @@ Proof
   drule_then (assume_tac o MATCH_MP contract_inv_cenv_modules) body_inv_contract >>
   drule_then strip_assume_tac body_inv_module_locations >>
   `stmt_state_rel H ctx func cenv cx (es1 with scopes := prev) t` by
-    fs[intcall_entry_full_def] >>
+    fs[intcall_entry_full_mods_def] >>
   `expr_sim_inv cenv cx tenv (es1 with scopes := prev)` by
-    fs[intcall_entry_full_def] >>
+    fs[intcall_entry_full_mods_def] >>
   `state_rel H func cenv cx (out with scopes := []) cs /\
    ir.iret_adopt_fmp = NONE` by
     (fs[intcall_callee_exit_full_def, bodyIntCallSeamsTheory.intcall_callee_exit_def,
@@ -499,7 +453,7 @@ Theorem intcall_return_stmt_state_rel:
   dead_lo_ok H (DF H) lo cenv cx /\ local_ptrs_reserved cenv sa /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
+  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv
     s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
   intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc rb
     sa.cs_next_id sm.cs_next_id t tn (INL v) ee (Gc,tc) (IntRet ir cs) /\
@@ -621,14 +575,14 @@ Resume intcall_return_stmt_state_rel[locals]:
     (strip_tac >>
      `immutable_decl_sep cenv cx prev t.vs_vars t.vs_allocas t.vs_alloca_next` by
        (drule return_stmt_immutable_sep >> simp[immutable_alloca_sep_def]) >>
-     irule intcall_local_immutable_prefix_disjoint >>
+     irule intcall_local_immutable_prefix_disjoint_mods >>
      rpt (goal_assum (drule_at Any)) >> simp[] >> decide_tac) >>
   qhdtm_assum `intcall_callee_exit_full`
     (strip_assume_tac o SIMP_RULE (srw_ss())
       [intcall_callee_exit_full_def, bodyIntCallSeamsTheory.intcall_callee_exit_def,
        exprSimDefsTheory.expr_exit_def]) >>
   sym_tac >> first_x_assum irule >> simp[] >> rpt strip_tac >>
-  fs[intcall_entry_full_def] >> metis_tac[]
+  fs[intcall_entry_full_mods_def] >> metis_tac[]
 QED
 *)
 

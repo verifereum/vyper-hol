@@ -1,7 +1,7 @@
 (* Adapt the interpreter's internal-call induction hypotheses to the
  * supplied-argument, omitted-default, and callee-body stages. *)
 Theory bodyFullIntCall
-Ancestors bodyFullShadowBodyInv
+Ancestors constSubstMods bodyFullShadowBodyInv
   bodyFullIntCallDefs bodyFullPreds bodyIntCallSeams bodySim constSubst
   vyperInterpreter vyperState vyperAST finite_map list
   bodyFullIntCallArgs bodyFullIntCallReturn compileVyper moduleLowering fragGasFocus
@@ -125,7 +125,7 @@ Theorem intcall_entry_after_arguments:
   lookup_callable_function cx.in_deploy name tops =
     SOME (mut,nr,args,dflts,ret,ss) /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es
     sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
   (!s1 vs t1 sd dvs td p rt.
      ~MEM (NONE,name) cx.stk /\
@@ -142,10 +142,10 @@ Proof
   strip_tac >>
   `nr ==> IS_SOME cx.nonreentrant_slot` by
     (strip_tac >> drule_all body_inv_nonreentrant_slot >> simp[]) >>
-  qhdtm_x_assum `intcall_entry_full`
+  qhdtm_x_assum `intcall_entry_full_mods`
     (fn entry =>
        map_every strip_assume_tac
-         (List.take (CONJUNCTS (PURE_REWRITE_RULE [intcall_entry_full_def] entry), 3))) >>
+         (List.take (CONJUNCTS (PURE_REWRITE_RULE [intcall_entry_full_mods_def] entry), 3))) >>
   strip_tac >>
   first_x_assum irule >>
   fs[] >> metis_tac[]
@@ -154,7 +154,7 @@ QED
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >> strip_tac >> irule intcall_entry_after_arguments >>
-  qhdtm_assum `intcall_entry_full` (irule_at Any) >>
+  qhdtm_assum `intcall_entry_full_mods` (irule_at Any) >>
   qpat_assum `lookup_callable_function _ _ _ = SOME _` (irule_at Any) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
@@ -165,7 +165,7 @@ Theorem intcall_entry_body_ih[local]:
   lookup_callable_function cx.in_deploy name tops =
     SOME (mut,nr,args,dflts,ret,ss) /\
   MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es
     sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
   (!s1 vs t1 sd dvs td penv rtv.
      ~MEM (NONE,name) cx.stk /\
@@ -178,10 +178,10 @@ Theorem intcall_entry_body_ih[local]:
      (nr ==> IS_SOME cx.nonreentrant_slot) /\
      (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
      body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
-         (subst_consts_stmts (module_consts_env tops []) ss)) ==>
+         (subst_consts_stmts_mods (consts_env_mods mods) ss)) ==>
   ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
    body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
-         (subst_consts_stmts (module_consts_env tops []) ss))
+         (subst_consts_stmts_mods (consts_env_mods mods) ss))
 Proof
   cheat
 QED
@@ -208,7 +208,7 @@ val args_input = Term `
        eval_exprs cx es s1 = (INL vs,t1) ==>
        body_exprs_full_ok (cx with stk updated_by CONS (NONE,name))
          (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
-           (subst_consts_exprs (module_consts_env tops []) dflts))) ==>
+           (subst_consts_exprs_mods (consts_env_mods mods) dflts))) ==>
     !st0 sa sb shadow_sa shadow_sb s0 G0 tn0 kc out f P Q R.
       (!v. storage_trace_frame (f v)) /\
       (!v. cs_appends (kc v)) /\
@@ -254,7 +254,7 @@ val args_input = Term `
            (vv, sm) /\
          kc vv sm = (out, sb) /\
          (!H. valid_horizon cx st0 H es1.storage_trace ==>
-            intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name
+            intcall_entry_full_mods (DF, lo, d) H mods NONE tops ctx func cenv cx tenv name
               es sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv
               es1 t G tn) /\
          body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
@@ -286,7 +286,7 @@ val callee_input = Term `
     LENGTH es <= LENGTH args /\
     ((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
        body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
-         (subst_consts_stmts (module_consts_env tops []) ss)) /\
+         (subst_consts_stmts_mods (consts_env_mods mods) ss)) /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     MEM func ctx.ctx_functions /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
@@ -294,7 +294,7 @@ val callee_input = Term `
     (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
-       intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
+       intcall_entry_full_mods (DF, lo, d) H mods NONE tops ctx func cenv cx tenv name es
          sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
          G tn) /\
     body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
@@ -380,14 +380,14 @@ QED
 Proof
   strip_tac >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+  `intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es
       sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
     (qpat_assum `!H. valid_horizon cx st0 H es1.storage_trace ==> _`
        (qspec_then `H` mp_tac) >> simp[]) >>
   qpat_assum `body_inv _ _ _ _` (fn inv =>
     qpat_assum `lookup_callable_function _ _ _ = SOME _` (fn lookup =>
       qpat_assum `MEM (FunctionDecl Internal _ _ _ _ _ _ _ _) _` (fn decl =>
-        qhdtm_assum `intcall_entry_full` (fn entry =>
+        qhdtm_assum `intcall_entry_full_mods` (fn entry =>
           qpat_assum `!s1 vs t1 sd dvs td penv rtv. _ ==> body_stmts_full_ok _ _`
             (fn ih =>
               assume_tac (MATCH_MP intcall_entry_body_ih
@@ -428,7 +428,7 @@ Theorem intcall_callee_premise[local]:
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
        body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
-         (subst_consts_stmts (module_consts_env tops []) ss)) /\
+         (subst_consts_stmts_mods (consts_env_mods mods) ss)) /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     MEM func ctx.ctx_functions /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
@@ -436,7 +436,7 @@ Theorem intcall_callee_premise[local]:
     (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
-       intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
+       intcall_entry_full_mods (DF, lo, d) H mods NONE tops ctx func cenv cx tenv name es
          sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
          G tn) /\
     body_const_cells_agree mods cx tenv es1 /\
@@ -537,7 +537,7 @@ Theorem intcall_sim_full:
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
        body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
          (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
-           (subst_consts_exprs (module_consts_env tops []) dflts))) /\
+           (subst_consts_exprs_mods (consts_env_mods mods) dflts))) /\
     (!s1 vs t1 sd dvs td penv rtv.
        ~MEM (NONE,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) /\
@@ -549,7 +549,7 @@ Theorem intcall_sim_full:
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
        body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
-         (subst_consts_stmts (module_consts_env tops []) ss)) ==>
+         (subst_consts_stmts_mods (consts_env_mods mods) ss)) ==>
     expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0
 Proof
@@ -614,7 +614,7 @@ Theorem intcall_vv_full:
        ~MEM (NONE,name) cx.stk /\ eval_exprs cx es s1 = (INL vs,t1) ==>
        body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
          (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
-           (subst_consts_exprs (module_consts_env tops []) dflts))) /\
+           (subst_consts_exprs_mods (consts_env_mods mods) dflts))) /\
     (!s1 vs t1 sd dvs td penv rtv.
        ~MEM (NONE,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) /\
@@ -626,7 +626,7 @@ Theorem intcall_vv_full:
        (nr ==> IS_SOME cx.nonreentrant_slot) /\
        (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
        body_stmts_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
-         (subst_consts_stmts (module_consts_env tops []) ss)) ==>
+         (subst_consts_stmts_mods (consts_env_mods mods) ss)) ==>
     expr_vv_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx ty (Call ann (IntCall (NONE,name)) es dflt) es0
 Proof

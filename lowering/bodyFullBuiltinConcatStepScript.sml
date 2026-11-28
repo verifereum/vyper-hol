@@ -75,7 +75,7 @@ QED
 *)
 Theorem concat_loop_head_entry:
   concat_loop_ready (e::args) P k DF lo d ctx shadow_ctx PG
-    tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
+    mods exps tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
     s0 G0 tn0 dv ov ow binst B bsz oinst ==>
   expr_body_pre_mods mods cenv cx env e es /\
   expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -150,7 +150,7 @@ QED
 *)
 Theorem concat_loop_copy_entry:
   concat_loop_ready (e::args) P k DF lo d ctx shadow_ctx PG
-    tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
+    mods exps tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
     s0 G0 tn0 dv ov ow binst B bsz oinst /\
   expr_body_pre_mods mods cenv cx env e es /\
   expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -168,7 +168,7 @@ Theorem concat_loop_copy_entry:
   ?s2 shadow_s2 u G2 tn2.
     concat_loop_ready args (P+concat_payload_capacity (expr_type e))
       (k+LENGTH (case v of BytesV bs => bs | StringV str => MAP (n2w o ORD) str | _ => []))
-      DF lo d ctx shadow_ctx PG tops func shadow_func cenv cx env st0 ee s2 sb
+      DF lo d ctx shadow_ctx PG mods exps tops func shadow_func cenv cx env st0 ee s2 sb
       shadow_s2 shadow_sb u G2 tn2 dv ov ow binst B bsz oinst /\
     (!H. valid_horizon cx st0 H ee.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)

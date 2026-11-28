@@ -55,6 +55,18 @@ Proof
   `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
       sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
     (first_assum MATCH_MP_TAC >> first_assum ACCEPT_TAC) >>
+  qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+    let
+      val contract = MATCH_MP bodySimTheory.body_inv_contract inv
+      val pins = LIST_CONJ
+        [MATCH_MP contractInvContextPropsTheory.contract_inv_singleton_source_modules contract,
+         CONJUNCT1 (MATCH_MP bodyInvCodePropsTheory.body_inv_module_locations inv),
+         MATCH_MP bodyInvSplitTheory.contract_inv_immutable_section_layout contract]
+      val singleton = MATCH_MP bodyFullIntCallDefsTheory.intcall_entry_full_mods_singleton pins
+    in
+      qhdtm_assum `intcall_entry_full`
+        (assume_tac o PURE_REWRITE_RULE [GSYM singleton])
+    end) >>
   `((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
      body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
        (subst_consts_stmts (module_consts_env tops []) ss)) /\

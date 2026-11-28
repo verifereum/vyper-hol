@@ -58,7 +58,7 @@ Theorem for_captured_storage_continue_prefix:
     (em,u,Gu,tu)
 Proof
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  mp_tac (BETA_RULE (Q.INST [`Extra` |->
+  mp_tac (BETA_RULE (Q.INST [`exps` |-> `[]`, `Extra` |->
     `\a rs ei s G tn. body_stmts_prefix_ok cx loop_body ==>
       gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cx st0
         (do v <- read_result cx a; push_scope_with_var id tyv v;

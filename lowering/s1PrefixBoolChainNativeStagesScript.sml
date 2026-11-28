@@ -437,7 +437,7 @@ Theorem bool_chain_ops_prefix_from_reached:
      reached rest st shadow_st mid (jump_to st.cs_current_bb u) G1 tn1) ==>
   !k x sa shadow_sa es s G tn.
   reached (bool_chain_operands p k x) sa shadow_sa es s G tn /\
-  bool_chain_full_ok cx (bool_chain_operands p k x) /\ expr_type x = BaseT BoolT /\
+  bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (bool_chain_operands p k x) /\ expr_type x = BaseT BoolT /\
   body_const_cells_agree [(NONE,tops)] cx env es /\ expr_body_pre cenv cx env x es /\
   compile_bool_chain_ops compile_expr cenv p rv xl (bool_chain_operands p k x) sa = ((),sb) /\
   compile_bool_chain_ops compile_expr (gas_shadow_env T cenv) p rv xl
@@ -466,21 +466,29 @@ Proof
   qpat_assum `fn_has_code shadow_sa shadow_sb shadow_func` (irule_at Any) >>
   qpat_assum `body_const_cells_agree [(NONE,tops)] cx env es` (irule_at Any) >>
   qpat_assum `return_buf_frame d cenv sa s` (irule_at Any) >>
-  qexists_tac `\xs ca sha ee u J tau. reached xs ca sha ee u J tau /\ bool_chain_full_ok cx xs` >>
+  qexists_tac `\xs ca sha ee u J tau. reached xs ca sha ee u J tau /\ bool_chain_full_ok [(NONE,cx_tops cx)] [] cx xs` >>
   BETA_TAC >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- (rpt gen_tac >> strip_tac >> conj_tac
       >- (qpat_assum `!c rest sa sc shadow_sa shadow_sc es s G tn op sj sn lt lf
                         st shadow_st marks mid G1 tn1 u. _ ==> reached _ _ _ _ _ _ _`
             (drule_all_then ACCEPT_TAC)) >>
-      qpat_x_assum `bool_chain_full_ok cx (_::_)`
+      qpat_x_assum `bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (_::_)`
         (strip_assume_tac o REWRITE_RULE [bool_chain_full_ok_def]) >>
-      qpat_assum `_ ==> bool_chain_full_ok cx _` irule >>
+      qpat_assum `_ ==> bool_chain_full_ok [(NONE,cx_tops cx)] [] cx _` irule >>
       qpat_assum `bind (eval_expr cx _) _ _ = (INL _,_)`
         (mp_then Any strip_assume_tac (CONV_RULE (DEPTH_CONV ETA_CONV) eval_expr_read_INL)) >>
       goal_assum (drule_at Any)) >>
   rpt gen_tac >> strip_tac >>
-  qpat_x_assum `bool_chain_full_ok cx (_::_)`
+  qpat_x_assum `bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (_::_)`
     (strip_assume_tac o REWRITE_RULE [bool_chain_full_ok_def]) >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,cx_tops cx)]` by
+    (drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
+     drule_then
+       (assume_tac o MATCH_MP contractInvContextPropsTheory.contract_inv_singleton_source_modules)
+       bodySimTheory.body_inv_contract >>
+     simp[]) >>
+  drule_then (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]))
+    bodyFullPredsModsTheory.body_expr_full_ok_mods_singleton >>
   conj_tac
   >- (qpat_assum `!e rest sa sc shadow_sa shadow_sc es s G tn op. _ ==> gas_prefix_full _ _ _ _ _`
         (drule_all_then ACCEPT_TAC)) >>

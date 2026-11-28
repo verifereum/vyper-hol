@@ -1,6 +1,7 @@
 (* Compose the guard prefix with the selected RaiseReason fragment. *)
 Theory s1PrefixAssertReasonFromRaise
 Ancestors
+  bodySingletonStmtGuards[qualified] stmtExprAllocationPreProps[qualified]
   s1PrefixPreds bodyFullAssertReason s1PrefixDefs s1PrefixCompose
   bodyFullAssertReasonSource bodyFullAssertReasonControl bodyFullPreds bodySimFull
   gasShadow reasonSourceProps loweringPosts vyperStorageTrace s1PrefixProps exprSimDefs
@@ -15,8 +16,19 @@ Ancestors
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (mk_asm "raise_prefix") >> rpt gen_tac >> strip_tac >>
+  drule_all_then strip_assume_tac bodySingletonStmtGuardsTheory.singleton_stmt_expr_guards >>
   `expr_body_pre cenv cx env e es` by
-    (irule assert_reason_condition_source_pre >> metis_tac[]) >>
+    (mp_tac (Q.INST [`s` |-> `(Assert e (AssertReason se))`,
+                     `tops` |-> `tops`, `ctx` |-> `ctx`]
+        stmtExprAllocationPrePropsTheory.body_inv_stmt_expr_pre_singleton) >>
+     simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def] >>
+     disch_then irule >> strip_tac >>
+     irule assert_reason_condition_source_pre >>
+     fs[bodySimTheory.body_inv_split_def,
+        bodyInvSplitTheory.module_body_inv_def, alistTheory.ALOOKUP_def] >>
+     metis_tac[]) >>
+  `expr_body_pre_mods [(NONE,tops)] cenv cx env e es` by
+    metis_tac[exprBodyPrePropsTheory.body_inv_expr_body_pre_mods] >>
   `expr_type e = BaseT BoolT` by fs[type_stmt_assert_reason] >>
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (BaseT BoolT) e es` by

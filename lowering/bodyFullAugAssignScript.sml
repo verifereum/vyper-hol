@@ -369,7 +369,7 @@ Theorem body_augassign_nested_immutable_full:
     ~(?nsid fld. t = AttributeTarget (TopLevelNameTarget nsid) fld /\
                  supported_storage_field_write tops nsid fld) /\
     immutable_root cx t /\ ~(?nsid. t = TopLevelNameTarget nsid) /\
-    ~supported_stmt_expr_exists (const_name_root cx) (AugAssign aty t bop e) ==>
+    ~supported_stmt_expr_exists (const_name_root_mods mods) (AugAssign aty t bop e) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (AugAssign aty t bop e))

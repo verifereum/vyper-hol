@@ -7,6 +7,7 @@
        mapping *)
 Theory bodyFullTargetMapping
 Ancestors
+  bodyInvSplit[qualified]
   bodyFullTargetSubscript bodyFullTargetDefs bodySimFull targetPlaceSim
   bodyFullTargetMappingFacts bodyFullTargetMappingKey bodyFullTargetMappingScratch
   bodyFullTargetMappingRep bodyFullTargetMappingRun bodyFullTargetMappingOutcome
@@ -41,8 +42,9 @@ Proof
 QED
 *)
 Theorem target_mapping_tail_full:
-  body_inv tops ctx cenv cx /\
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  contract_inv mods exps ctx cenv cx /\
+  module_body_inv mods cenv.ce_module tops cenv cx /\
+  target_pre_mods mods cenv cx env (SubscriptTarget bt e) es /\
   type_place_target env bt = SOME (HashMapT kt vt) ==>
   subscript_tail_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env bt e es

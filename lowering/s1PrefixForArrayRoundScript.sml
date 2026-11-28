@@ -14,6 +14,7 @@ val _ = Parse.hide "cond";
 Proof
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`cond : string` |-> `cond_label`,
+    `mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
     `B` |-> `\eb t Gf tnf.
       gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cx st0
         (finally (try (do eval_stmts cx loop_body; return F od)
@@ -43,7 +44,7 @@ Theorem for_nonslot_array_round_prefix_contracts_at:
   supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
   type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
   stmt_exprs_ok c (For id fty (Array e) n loop_body) /\
-  for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em u /\
+  for_nonslot_code_frame [(NONE,tops)] c cx env ctx func id e loop_body loc rv vv av em u /\
   stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) n loop_body) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id fty (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
@@ -232,8 +233,18 @@ Finalise for_nonslot_array_round_prefix_contracts_at
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  `!src name. e = TopLevelName (expr_type e) (src,name) ==>
+     ?ts. ALOOKUP [(NONE,tops)] src = SOME ts /\
+       IS_SOME (supported_immutable_type ts (NONE,name))` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!nid. e = TopLevelName _ nid ==> _`
+       (qspec_then `(src,name)` (drule_then assume_tac)) >>
+     Cases_on `src` >>
+     gvs[alistTheory.ALOOKUP_def, supportedDeclsTheory.supported_immutable_type_def,
+         supportedDeclsTheory.supported_lookup_other_module]) >>
   drule_all_then (map_every assume_tac o CONJUNCTS o Q.SPEC `av`)
-    for_nonslot_array_round_source_pre >>
+    (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
+      for_nonslot_array_round_source_pre) >>
   qpat_assum `for_nonslot_layout _ _ _ _ _ _ _`
     (mp_then (Pos hd) (mp_tac o SPEC_ALL) for_nonslot_array_round_prefix_contracts_at) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>

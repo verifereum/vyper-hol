@@ -3,7 +3,7 @@ Ancestors
   s1PrefixFrame bodyFullTargetArraySuffix targetSubscriptSplit vyperStorageTrace
 
 Theorem target_array_suffix_prefix:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet [(NONE,tops)] [] tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
   gas_prefix_full

@@ -20,9 +20,10 @@
 
 Theory targetLocalLive
 Ancestors
+  bodySimStmtFacts
   vyperFixedShapePath allocLimits stmtSimAssignAttr targetOverlapAccess
   targetPlaceSim
-  targetPlaceSimCasesBase
+  targetPlaceSimCasesBase compileEnv loweringStateRelDefs
   targetSubscriptMemory exprSimSource exprSimHypsDefs
   vyperSubscriptOverlap vyperLocalAccessFrame
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperTypeStatePreservation
@@ -46,30 +47,53 @@ Proof
 QED
 
 (* A local-rooted target's typing agrees with the lowering's place type. *)
-Theorem local_target_place_type:
-  !bt cenv cx env s id bvt.
-    expr_sim_inv cenv cx env s /\ target_root bt = NameTarget id /\
-    type_place_target env bt = SOME bvt ==>
+Theorem alookup_field_layout[local]:
+  !fields args fld fty.
+    MAP FST fields = MAP FST args /\ MAP (FST o SND) fields = MAP SND args /\
+    ALOOKUP args fld = SOME fty ==>
+    ?fsz. ALOOKUP fields fld = SOME (fty,fsz)
+Proof
+  Induct >> rpt gen_tac >> Cases_on `args` >> simp[] >>
+  PairCases_on `h` >> PairCases_on `h'` >> rw[] >> gvs[] >> metis_tac[]
+QED
+
+Theorem local_target_place_type_layout[local]:
+  !bt cenv env id bvt.
+    (!name ty. FLOOKUP env.var_types name = SOME ty ==>
+               cenv.ce_var_type name = SOME ty) /\
+    sfields_tenv_consistent cenv.ce_struct_fields env.type_defs /\
+    target_root bt = NameTarget id /\ type_place_target env bt = SOME bvt ==>
     ?ty. bvt = Type ty /\ target_place_type cenv bt = SOME (ValPT ty)
 Proof
   recInduct base_assignment_target_induct >> rpt conj_tac
   >- (rpt gen_tac >>
       simp[target_root_def, Once well_typed_expr_def, target_place_type_def,
            AllCaseEqs()] >>
-      rpt strip_tac >> gvs[expr_sim_inv_def] >> metis_tac[])
+      rpt strip_tac >> gvs[] >> metis_tac[])
   >- simp[target_root_def] >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[target_root_def, Once well_typed_expr_def, AllCaseEqs()] >>
   first_x_assum drule_all >> strip_tac >> gvs[]
   >- (Cases_on `ty` >> gvs[subscript_vtype_def] >>
       simp[target_place_type_def]) >>
-  `env.type_defs = get_tenv cx` by
-    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-  Cases_on `tgt_ty` >> gvs[attribute_type_def] >>
-  `attribute_type (get_tenv cx) (StructT p) s = SOME ty` by
-    simp[attribute_type_def] >>
-  drule_all stmtSimAssignAttrTheory.attribute_type_struct_field >>
-  strip_tac >> simp[target_place_type_def]
+  Cases_on `tgt_ty` >> gvs[attribute_type_def, AllCaseEqs()] >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  simp[sfields_tenv_consistent_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  qspecl_then [`fields'`, `fields`, `s`, `ty`] mp_tac alookup_field_layout >>
+  rw[target_place_type_def, get_struct_fields_def] >> simp[]
+QED
+
+Theorem local_target_place_type:
+  !bt cenv cx env s id bvt.
+    expr_sim_inv cenv cx env s /\ target_root bt = NameTarget id /\
+    type_place_target env bt = SOME bvt ==>
+    ?ty. bvt = Type ty /\ target_place_type cenv bt = SOME (ValPT ty)
+Proof
+  rpt strip_tac >> irule local_target_place_type_layout >>
+  conj_tac >- (qexists_tac `id` >> simp[]) >>
+  qexists_tac `env` >>
+  fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]
 QED
 
 (* The local keeps its type across states meeting expr_sim_inv. *)
@@ -383,4 +407,320 @@ Proof
   `target_pre cenv cx env bt s` by metis_tac[target_pre_sub] >>
   drule_all local_base_place_live >> strip_tac >> gvs[] >>
   drule_all index_keeps_live >> strip_tac >> metis_tac[]
+QED
+
+(* Liveness for linked index evaluation. *)
+
+Theorem eval_base_place_mods_inv:
+  !t mods cenv cx env s r s'.
+    expr_sim_inv_mods mods cenv cx env s /\ target_indices_pre_mods mods cenv cx env t /\
+    eval_base_place cx t s = (r,s') ==> expr_sim_inv_mods mods cenv cx env s'
+Proof
+  recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
+  >- (simp[Once evaluate_def, get_scopes_def, bind_def, ignore_bind_def,
+           type_check_def, assert_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[])
+  >- (PairCases_on `nsid` >> simp[Once evaluate_def] >>
+      rpt strip_tac >> imp_res_tac vyperStatePreservationTheory.lookup_global_state >>
+      rpt (qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC) >> simp[])
+  >- suspend "subscript"
+  >> suspend "attribute"
+QED
+Resume eval_base_place_mods_inv[subscript]:
+  rpt strip_tac >>
+  qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  strip_tac >> gvs[target_indices_pre_mods_def] >>
+  imp_res_tac read_result_state >> imp_res_tac extend_place_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC) >> gvs[] >>
+  qpat_x_assum `!mods cenv cx env s r s'. _` drule_all >> strip_tac >>
+  first_x_assum (drule_then assume_tac) >>
+  drule_all expr_body_pre_eval_result_mods >> simp[]
+QED
+Resume eval_base_place_mods_inv[attribute]:
+  rpt strip_tac >>
+  qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def, AllCaseEqs(), return_def, raise_def] >>
+  strip_tac >> gvs[target_indices_pre_mods_def] >>
+  imp_res_tac extend_place_state >>
+  rpt (qpat_x_assum `_ = _ with storage_trace := _` SUBST1_TAC) >> gvs[] >> metis_tac[]
+QED
+Finalise eval_base_place_mods_inv
+
+Theorem local_target_place_type_mods:
+  !bt mods cenv cx env s id bvt.
+    expr_sim_inv_mods mods cenv cx env s /\ target_root bt = NameTarget id /\
+    type_place_target env bt = SOME bvt ==>
+    ?ty. bvt = Type ty /\ target_place_type cenv bt = SOME (ValPT ty)
+Proof
+  rpt strip_tac >> irule local_target_place_type_layout >>
+  conj_tac >- (qexists_tac `id` >> simp[]) >>
+  qexists_tac `env` >>
+  fs[expr_sim_inv_mods_def, env_consistent_def, env_context_consistent_def]
+QED
+
+Theorem local_entry_type_kept_mods[local]:
+  expr_sim_inv_mods mods cenv cx env a /\ expr_sim_inv_mods mods cenv cx env b /\
+  lookup_scopes id a.scopes = SOME ea ==>
+  ?eb. lookup_scopes id b.scopes = SOME eb /\ eb.type = ea.type
+Proof
+  rpt strip_tac >>
+  `env_scopes_consistent env cx a /\ env_scopes_consistent env cx b` by
+    fs[expr_sim_inv_mods_def, env_consistent_def] >>
+  qpat_x_assum `expr_sim_inv_mods _ _ _ _ a` kall_tac >>
+  qpat_x_assum `expr_sim_inv_mods _ _ _ _ b` kall_tac >>
+  fs[env_scopes_consistent_def] >>
+  `IS_SOME (FLOOKUP env.var_types id)` by metis_tac[] >>
+  Cases_on `FLOOKUP env.var_types id` >> gvs[] >>
+  `IS_SOME (lookup_scopes id b.scopes)` by metis_tac[] >>
+  Cases_on `lookup_scopes id b.scopes` >> gvs[] >>
+  qpat_x_assum `!i ty en. _ /\ lookup_scopes i a.scopes = SOME en ==> _`
+    (qspecl_then [`id`, `x`, `ea`] mp_tac) >>
+  qpat_x_assum `!i ty en. _ /\ lookup_scopes i b.scopes = SOME en ==> _`
+    (qspecl_then [`id`, `x`, `x'`] mp_tac) >> simp[]
+QED
+
+Theorem local_base_fixed_shape_mods[local]:
+  !bt mods cenv cx env s ty id path s' entry.
+  target_pre_mods mods cenv cx env bt s /\
+  type_place_target env bt = SOME (Type ty) /\
+  target_root bt = NameTarget id /\
+  eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),s') /\
+  lookup_scopes id s'.scopes = SOME entry /\
+  ~target_through_dynarray cenv bt ==>
+  fixed_shape_path entry.type path /\
+  ?tv. evaluate_type env.type_defs ty = SOME tv /\
+       subscripts_type entry.type path = SOME tv
+Proof
+  recInduct base_assignment_target_induct >> rpt conj_tac
+  >- (rpt gen_tac >>
+      simp[target_root_def, Once well_typed_expr_def, Once evaluate_def,
+           bind_def, ignore_bind_def, get_scopes_def, type_check_def,
+           assert_def, check_def, return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      fs[target_pre_mods_def, expr_sim_inv_mods_def, env_consistent_def,
+         env_context_consistent_def, env_scopes_consistent_def,
+         subscripts_type_def, fixed_shape_path_def] >>
+      qpat_x_assum `!i ty en. _ /\ lookup_scopes i s.scopes = SOME en ==> _`
+        drule_all >> simp[])
+  >- simp[target_root_def]
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      `target_pre_mods mods cenv cx env bt s` by metis_tac[target_pre_mods_sub] >>
+      qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def] >>
+      Cases_on `eval_base_place cx bt s` >> rename1 `(br,bs)` >>
+      `expr_sim_inv_mods mods cenv cx env bs` by
+        metis_tac[eval_base_place_mods_inv,target_pre_mods_def] >>
+      Cases_on `br` >> simp[] >>
+      rename1 `eval_base_place cx bt s = (INL pv0,bs)` >>
+      `expr_body_pre_mods mods cenv cx env e bs` by
+        fs[target_pre_mods_def, target_indices_pre_mods_def] >>
+      Cases_on `eval_expr cx e bs` >> rename1 `(er,ms)` >>
+      `expr_sim_inv_mods mods cenv cx env ms` by
+        metis_tac[expr_body_pre_eval_result_mods] >>
+      Cases_on `er` >> simp[] >>
+      rename1 `eval_expr cx e bs = (INL index,ms)` >>
+      Cases_on `read_result cx index ms` >> rename1 `(rr,rs)` >>
+      imp_res_tac read_result_state >> gvs[] >>
+      Cases_on `rr` >> simp[] >> strip_tac >>
+      drule extend_place_memory_origin >> strip_tac >>
+      gvs[] >> imp_res_tac extend_place_state >> gvs[] >>
+      `target_root bt = NameTarget id /\ ~target_through_dynarray cenv bt` by
+        fs[target_root_def, target_through_dynarray_def] >>
+      `?bvt. type_place_target env bt = SOME bvt` by
+        fs[Once well_typed_expr_def, AllCaseEqs()] >>
+      `expr_sim_inv_mods mods cenv cx env s` by fs[target_pre_mods_def] >>
+      drule_all local_target_place_type_mods >> strip_tac >> gvs[] >>
+      rename1 `type_place_target env bt = SOME (Type bty)` >>
+      `expr_sim_inv_mods mods cenv cx env s'` by
+        (qpat_x_assum `s' = _` SUBST1_TAC >>
+         simp[exprSimHypsDefsTheory.expr_sim_inv_mods_storage_trace] >>
+         first_assum ACCEPT_TAC) >>
+      `?oldentry. lookup_scopes id bs.scopes = SOME oldentry /\
+                  oldentry.type = entry.type` by
+        (mp_tac (Q.INST [`a` |-> `s'`, `b` |-> `bs`, `ea` |-> `entry`]
+                   local_entry_type_kept_mods) >>
+         simp[]) >>
+      first_x_assum drule_all >> strip_tac >> gvs[] >>
+      `state_well_typed ms` by
+        (qpat_assum `expr_sim_inv_mods mods cenv cx env ms`
+           (strip_assume_tac o PURE_REWRITE_RULE [expr_sim_inv_mods_def]) >>
+         first_assum ACCEPT_TAC) >>
+      `s'.scopes = ms.scopes` by
+        (qpat_x_assum `s' = _` (fn th => simp[Once th])) >>
+      `lookup_scopes id ms.scopes = SOME entry` by gvs[] >>
+      drule_all fixed_extension_step >> strip_tac >> gvs[] >>
+      gvs[Once well_typed_expr_def, subscript_vtype_def, AllCaseEqs()] >>
+      Cases_on `bty` >> gvs[subscript_vtype_def] >>
+      gvs[target_through_dynarray_def] >>
+      Cases_on `b` >> gvs[] >>
+      gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+      drule subscript_type_value_int_shape >> strip_tac >> gvs[] >>
+      gvs[subscript_type_def] >>
+      simp[fixed_shape_path_append,
+           vyperPlaceStatePreservationTheory.subscripts_type_append,
+           fixed_shape_path_def, subscripts_type_def, subscript_type_def,
+           vyperASTTheory.bound_length_def]) >>
+  qx_gen_tac `bt` >> qx_gen_tac `attr` >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `target_pre_mods mods cenv cx env bt s` by metis_tac[target_pre_mods_sub] >>
+  qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_base_place cx bt s` >> rename1 `(br,bs)` >>
+  `expr_sim_inv_mods mods cenv cx env bs` by
+        metis_tac[eval_base_place_mods_inv,target_pre_mods_def] >>
+  Cases_on `br` >> simp[] >> strip_tac >>
+  drule extend_place_memory_origin >> strip_tac >>
+  gvs[] >> imp_res_tac extend_place_state >> gvs[] >>
+  `target_root bt = NameTarget id /\ ~target_through_dynarray cenv bt` by
+    fs[target_root_def, target_through_dynarray_def] >>
+  `?bvt. type_place_target env bt = SOME bvt` by
+    fs[Once well_typed_expr_def, AllCaseEqs()] >>
+  drule_all local_target_type_only >> strip_tac >> gvs[] >>
+  `s'.scopes = bs.scopes` by
+    (qpat_x_assum `s' = _` (fn th => simp[Once th])) >>
+  `lookup_scopes id bs.scopes = SOME entry` by gvs[] >>
+  first_x_assum drule_all >> strip_tac >>
+  `state_well_typed bs` by fs[expr_sim_inv_mods_def] >>
+  drule_all fixed_extension_step >> strip_tac >> gvs[] >>
+  gvs[Once well_typed_expr_def, AllCaseEqs()] >>
+  drule_all attribute_type_runtime_step >> strip_tac >>
+  Cases_on `ty'` >> gvs[attribute_type_def] >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  simp[fixed_shape_path_append,
+       vyperPlaceStatePreservationTheory.subscripts_type_append,
+       fixed_shape_path_def, subscripts_type_def]
+QED
+
+Theorem dynarray_index_keeps_local_mods[local]:
+  target_pre_mods mods cenv cx env (SubscriptTarget bt e) s /\
+  target_root bt = NameTarget id /\ target_through_dynarray cenv bt /\
+  bind (eval_expr cx e) (read_result cx) a = (INL key,b) ==>
+  lookup_scopes id b.scopes = lookup_scopes id a.scopes
+Proof
+  rpt strip_tac >>
+  `~target_subscript_overlap cenv bt e` by
+    fs[target_pre_mods_def, target_indices_pre_mods_def] >>
+  `~MEM (WriteAcc (LocalRef id)) (expr_accesses cenv.ce_modules e)` by
+    metis_tac[target_subscript_overlap_unwritten,
+              target_root_local_nonconstant_read] >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp[bind_def, AllCaseEqs()] >> rpt strip_tac >>
+  imp_res_tac read_result_state >> gvs[] >>
+  irule eval_expr_unwritten_local >>
+  gvs[expr_accesses_def] >> metis_tac[]
+QED
+
+Theorem index_keeps_live_mods[local]:
+  target_pre_mods mods cenv cx env (SubscriptTarget bt e) s /\
+  type_place_target env bt = SOME bvt /\ target_root bt = NameTarget id /\
+  eval_base_place cx bt s = (INL (PlaceR (MemoryPlace id path)),mid) /\
+  lookup_scopes id mid.scopes = SOME entry /\
+  evaluate_subscripts entry.type entry.value path = INL v /\
+  bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) =
+    (INL key,fin) ==>
+  ?entry' v'. lookup_scopes id fin.scopes = SOME entry' /\
+    evaluate_subscripts entry'.type entry'.value path = INL v'
+Proof
+  rpt strip_tac >>
+  `target_pre_mods mods cenv cx env bt s` by metis_tac[target_pre_mods_sub] >>
+  `expr_sim_inv_mods mods cenv cx env mid` by
+        metis_tac[eval_base_place_mods_inv,target_pre_mods_def] >>
+  Cases_on `target_through_dynarray cenv bt`
+  >- (`lookup_scopes id fin.scopes = SOME entry` by
+        (drule_all dynarray_index_keeps_local_mods >> simp[]) >>
+      metis_tac[]) >>
+  drule_all local_target_type_only >> strip_tac >> gvs[] >>
+  drule_all local_base_fixed_shape_mods >> strip_tac >>
+  `expr_body_pre_mods mods cenv cx env e (mid with gas_obs := gs)` by
+    fs[target_pre_mods_def, target_indices_pre_mods_def] >>
+  qpat_x_assum `bind _ _ _ = _` mp_tac >>
+  simp[bind_def] >>
+  Cases_on `eval_expr cx e (mid with gas_obs := gs)` >> rename1 `(er,st)` >>
+  `expr_sim_inv_mods mods cenv cx env st` by
+    metis_tac[expr_body_pre_eval_result_mods] >>
+  Cases_on `er` >> simp[] >> strip_tac >>
+  imp_res_tac read_result_state >> gvs[] >>
+  drule_all local_entry_type_kept_mods >> strip_tac >>
+  `value_has_type eb.type eb.value /\ well_formed_type_value eb.type` by
+    (irule scope_well_typed_lookup_scopes >>
+     qexistsl [`id`, `fin.scopes`] >>
+     fs[expr_sim_inv_mods_def, state_well_typed_def]) >>
+  metis_tac[fixed_shape_path_live]
+QED
+
+Theorem local_base_place_live_mods:
+  !bt mods cenv cx env s id vt pv t.
+    target_pre_mods mods cenv cx env bt s /\ type_place_target env bt = SOME vt /\
+    target_root bt = NameTarget id /\ eval_base_place cx bt s = (INL pv,t) ==>
+    ?path entry v. pv = PlaceR (MemoryPlace id path) /\
+      lookup_scopes id t.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL v
+Proof
+  recInduct base_assignment_target_induct >> rpt conj_tac
+  >- (rpt gen_tac >>
+      simp[target_root_def, Once evaluate_def, bind_def, ignore_bind_def,
+           get_scopes_def, type_check_def, assert_def, check_def,
+           return_def, raise_def, AllCaseEqs()] >>
+      rpt strip_tac >> gvs[] >>
+      Cases_on `lookup_scopes id t.scopes` >>
+      gvs[evaluate_subscripts_def, optionTheory.IS_SOME_EXISTS])
+  >- simp[target_root_def]
+  >- (rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+      `target_pre_mods mods cenv cx env bt s` by metis_tac[target_pre_mods_sub] >>
+      `target_root bt = NameTarget id` by fs[target_root_def] >>
+      `?basevt. type_place_target env bt = SOME basevt` by
+        fs[Once well_typed_expr_def, AllCaseEqs()] >>
+      qpat_x_assum `eval_base_place _ (SubscriptTarget _ _) _ = _` mp_tac >>
+      simp[Once evaluate_def, bind_def] >>
+      Cases_on `eval_base_place cx bt s` >> rename1 `(br,bs)` >>
+      Cases_on `br` >> simp[] >>
+      rename1 `eval_base_place cx bt s = (INL basepv,bs)` >>
+      `?path entry v. basepv = PlaceR (MemoryPlace id path) /\
+        lookup_scopes id bs.scopes = SOME entry /\
+        evaluate_subscripts entry.type entry.value path = INL v` by
+        (first_x_assum drule_all >> simp[]) >> gvs[] >>
+      Cases_on `eval_expr cx e bs` >> rename1 `(er,ms)` >>
+      Cases_on `er` >> simp[] >>
+      Cases_on `read_result cx x ms` >> rename1 `(rr,rs)` >>
+      imp_res_tac read_result_state >> gvs[] >>
+      Cases_on `rr` >> simp[] >> strip_tac >>
+      `bind (eval_expr cx e) (read_result cx) (bs with gas_obs := bs.gas_obs) =
+        (INL x',ms)` by simp[bind_def] >>
+      drule_all index_keeps_live_mods >> strip_tac >>
+      drule_all extend_place_memory_live >> strip_tac >> gvs[] >>
+      metis_tac[]) >>
+  qx_gen_tac `bt` >> qx_gen_tac `attr` >> strip_tac >>
+  rpt gen_tac >> strip_tac >>
+  `target_pre_mods mods cenv cx env bt s` by metis_tac[target_pre_mods_sub] >>
+  `target_root bt = NameTarget id` by fs[target_root_def] >>
+  `?basevt. type_place_target env bt = SOME basevt` by
+    fs[Once well_typed_expr_def, AllCaseEqs()] >>
+  qpat_x_assum `eval_base_place _ (AttributeTarget _ _) _ = _` mp_tac >>
+  simp[Once evaluate_def, bind_def] >>
+  Cases_on `eval_base_place cx bt s` >> rename1 `(br,bs)` >>
+  Cases_on `br` >> simp[] >> strip_tac >>
+  `?path entry v. x = PlaceR (MemoryPlace id path) /\
+    lookup_scopes id bs.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL v` by
+    (first_x_assum drule_all >> simp[]) >> gvs[] >>
+  drule_all extend_place_memory_live >> strip_tac >> gvs[] >>
+  metis_tac[]
+QED
+
+Theorem local_subscript_index_live_mods:
+  !mods cenv cx env s bt e bvt id pv mid gs key fin.
+    target_pre_mods mods cenv cx env (SubscriptTarget bt e) s /\
+    type_place_target env bt = SOME bvt /\ target_root bt = NameTarget id /\
+    eval_base_place cx bt s = (INL pv,mid) /\
+    bind (eval_expr cx e) (read_result cx) (mid with gas_obs := gs) =
+      (INL key,fin) ==>
+    ?path entry v. pv = PlaceR (MemoryPlace id path) /\
+      lookup_scopes id fin.scopes = SOME entry /\
+      evaluate_subscripts entry.type entry.value path = INL v
+Proof
+  rpt strip_tac >>
+  `target_pre_mods mods cenv cx env bt s` by metis_tac[target_pre_mods_sub] >>
+  drule_all local_base_place_live_mods >> strip_tac >> gvs[] >>
+  drule_all index_keeps_live_mods >> strip_tac >> metis_tac[]
 QED

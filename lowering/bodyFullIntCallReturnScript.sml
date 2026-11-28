@@ -49,11 +49,11 @@ val intcall_return_premises =
 Proof
   rpt gen_tac >> strip_tac >>
   rename1 `cenv.ce_func_info _ = (result_count,buf_size,param_vars)` >>
-  `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+  `intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es
     sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
     metis_tac[] >>
   `?callee entered. gas_invoke_entry (ctx,func) t callee entered` by
-    (fs[intcall_entry_full_def] >> metis_tac[]) >>
+    (fs[intcall_entry_full_mods_def] >> metis_tac[]) >>
   `?bb inst lbl arg_ops argv.
      lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
      get_instruction bb t.vs_inst_idx = SOME inst /\
@@ -150,7 +150,7 @@ Theorem intcall_return_full_owned:
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
             not_fresh_at sa x) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
-       intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
+       intcall_entry_full_mods (DF, lo, d) H mods NONE tops ctx func cenv cx tenv name es
          sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
          G tn) /\
     (?H. valid_horizon cx st0 H es1.storage_trace) /\
@@ -307,7 +307,7 @@ Theorem intcall_return_full:
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
             not_fresh_at sa x) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
-       intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es
+       intcall_entry_full_mods (DF, lo, d) H mods NONE tops ctx func cenv cx tenv name es
          sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t
          G tn) /\
     (?H. valid_horizon cx st0 H es1.storage_trace) /\
