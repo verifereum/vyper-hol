@@ -45,7 +45,7 @@ instruction/block/counterexample theorems and affected clients; no HOL ran here.
 Related **memory/name offsets** and frozen GETFMP witness remain in [F21](F21-fixed-memory-and-names.md),
 not renamed F23 defects. STOP clearing is not a proof of source-memory safety.
 
-## Dynamic ABI decode remains a separate exemption, NOT fixed
+## Dynamic ABI decode remains a historical finding
 
 Official PLAN **F17**, not F23, explains the dynamic decode exemption used by
 this milestone. For target String[1], bytes are:
@@ -56,12 +56,12 @@ No relaxing of source strict decoder occurred. The old wrap-around Venom-only
 example is historical; current pointer checks must be inspected rather than
 blindly copied as still live.
 
-Current [source exemption](../../lowering/e2eDefsScript.sml),
-`unspecified_behaviour_exempt` / `source_exempt`, exempts decoding only for
-**exactly** that error message and a syntactically occurring dynamic ABI decode
-target. This decoding exemption is program-wide; static-only invalid decoding
-and `"abi_decode conversion"` are not exempt. An exempt run lacks result/effect correspondence, although the
-top still supplies an actual EVM run. See
+The old dynamic-decoding exemption has been removed from the current
+[source exemption](../../lowering/e2eDefsScript.sml). `unspecified_behaviour_exempt`
+now names only `RuntimeError "transfer_value recipient overflow"`, which the
+call and deployment balance corollaries rule out under their state hypotheses.
+Dynamic decoding therefore carries the ordinary result/effect correspondence
+obligations. See
 [source strict decoder](../../semantics/vyperABIScript.sml),
 [lowered decoder](../../lowering/defs/abiEncoderScript.sml),
 [dynamic fixture](../../bytecode/eval/evalCompilerSubsetAbiBuiltinsScript.sml)

@@ -131,5 +131,7 @@ simulation and environmental/callee producers and satisfiability. This result
 provides no universal compile-success, whole-transaction, fallback/static-entry,
 runtime-immutable, `msg.gas`, sufficient-gas or general revert-data guarantee.
 Success alone compares requests; terminal leftover outcomes are not observables.
-The dynamic-decoding exemption remains the exact documented
-`RuntimeError "abi_decode invalid"` case, not arbitrary decoding failure.
+The source exemption is now limited to the exact documented
+`RuntimeError "transfer_value recipient overflow"` case, which the call and
+deployment balance corollaries rule out under their state hypotheses. Dynamic
+decoding failures are not exempt.
