@@ -4503,543 +4503,7 @@ Finalise range_full_init
 
 (* The entry cut selects compiler geometry before every runtime anchor. *)
 val range_full_round_statement = ``
-  (!(cx :evaluation_context) (id :string) (typ :type) (e1 :expr) (e2 :expr)
-       (bound :num) (body :stmt list)
-       (DF :(bool # 256 word # type_value) list # num list -> dead) (lo :num)
-       (d :(256 word # num) option) (PG :(num # num) option list)
-       (tops :toplevel list) (bindings :(string # type) list)
-       (ctx :venom_context) (shadow_ctx :venom_context) (func :ir_function)
-       (shadow_func :ir_function) (cenv :compile_env) (env :typing_env)
-       (env' :typing_env) (ret_ty :type) (lctx :loop_ctx)
-       (RetQ :(bool # 256 word # type_value) list # num list ->
-              value ->
-              evaluation_state ->
-              (string |-> num # num) # taint -> exec_result -> bool)
-       (tyv :type_value) (sa :compile_state) (sb :compile_state)
-       (shadow_sa :compile_state) (shadow_sb :compile_state).
-     body_inv tops ctx cenv cx /\
-     supported_stmt tops bindings (For id typ (Range e1 e2) bound body) /\
-     (!(target :type).
-        supported_stmt_expr_exists (expr_abi_decode_target_root target)
-          (For id typ (Range e1 e2) bound body) ==>
-        occurs_abi_decode_target target tops) /\ ce_locals_declared cenv env /\
-     locals_alloc_ok cenv env /\
-     type_stmt env ret_ty (For id typ (Range e1 e2) bound body) = SOME env' /\
-     stmt_exprs_ok cenv (For id typ (Range e1 e2) bound body) /\
-     call_evaluation_safe cx
-       (int_calls_stmt (For id typ (Range e1 e2) bound body)) /\
-     frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ
-       cenv ret_ty /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
-     stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) bound body) sa =
-     (cenv,sb) /\
-     stmt_env (gas_shadow_env T cenv) lctx ret_ty
-       (gas_shadow_stmt (For id typ (Range e1 e2) bound body)) shadow_sa =
-     (gas_shadow_env T cenv,shadow_sb) /\ gas_shadow_state sa shadow_sa /\
-     gas_shadow_state sb shadow_sb /\ gas_shadow_context ctx shadow_ctx /\
-     ctx_inst_ids_distinct ctx /\ gas_shadow_function func shadow_func /\
-     MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-     fn_has_code sa sb func /\ fn_has_code shadow_sa shadow_sb shadow_func /\
-     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
-     (!(H :(bool # 256 word # type_value) list # num list).
-        dead_lo_ok H (DF H) lo cenv cx) /\
-     (!(x :string) (z :num).
-        cenv.ce_return_buf = SOME (PtrVar (Var x) z) ==> not_fresh_at sa x) /\
-     (!(x :string) (z :num).
-        cenv.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at sa x) /\
-     ~block_is_terminated sa ==>
-     ?(st :compile_state) (bc :compile_env) (body_cenv :compile_env)
-         (body_env' :typing_env) (sb0 :compile_state) (sb1 :compile_state)
-         (shadow_sb0 :compile_state) (shadow_sb1 :compile_state) (p :string)
-         (sz :num) (ainst :instruction) (cv :string) (ev :string) (dv :string)
-         (nv :string) (entry_lbl :string) (cond_lbl :string) (exit_lbl :string)
-         (body_lbl :string) (incr_lbl :string) (j1 :num) (j2 :num) (j3 :num)
-         (bbb :basic_block) (i1 :num) (i2 :num) (i3 :num) (sj :compile_state)
-         (op1 :operand) (s1 :compile_state) (op2 :operand) (rv :string)
-         (g1 :string) (z1 :string) (g2 :string) (z2 :string).
-       sz = type_memory_bytes cenv typ /\
-       ainst =
-       mk_inst st.cs_next_id ALLOCA
-         [Lit (n2w (type_memory_bytes cenv typ) :256 word)] [p] /\
-       p = STRING #"%" (toString st.cs_next_var) /\
-       cv = STRING #"%" (toString (st.cs_next_var + (1 :num))) /\
-       entry_lbl = fresh_label_output "for_entry" st.cs_next_label /\
-       cond_lbl = fresh_label_output "for_cond" (st.cs_next_label + (1 :num)) /\
-       body_lbl = fresh_label_output "for_body" (st.cs_next_label + (2 :num)) /\
-       incr_lbl = fresh_label_output "for_incr" (st.cs_next_label + (3 :num)) /\
-       exit_lbl = fresh_label_output "for_exit" (st.cs_next_label + (4 :num)) /\
-       declare_local cenv id typ st =
-       (bc,st with cs_next_var := st.cs_next_var + (1 :num)) /\
-       cs_extends sa st /\ cs_extends st sb0 /\ cs_extends st sb /\
-       sa.cs_next_var <= st.cs_next_var /\ sa.cs_next_id <= st.cs_next_id /\
-       st.cs_next_id <= sb0.cs_next_id /\
-       lookup_block st.cs_current_bb func.fn_blocks =
-       SOME
-         <|bb_label := st.cs_current_bb;
-           bb_instructions :=
-             st.cs_current_insts ++
-             [mk_inst st.cs_next_id ALLOCA
-                [Lit (n2w (type_memory_bytes cenv typ) :256 word)] [p];
-              mk_inst (st.cs_next_id + (1 :num)) JMP [Label entry_lbl]
-                ([] :string list)]|> /\
-       compile_stmt (gas_shadow_env T cenv) lctx ret_ty
-         (For id typ (Range (gas_shadow_expr e1) (gas_shadow_expr e2)) bound
-            (MAP gas_shadow_stmt body)) shadow_sa = ((),shadow_sb) /\
-       (!(a1 :type) (m1 :int) (a2 :type) (m2 :int).
-          e1 = Literal a1 (IntL m1) /\ e2 = Literal a2 (IntL m2) ==>
-          st = sa /\ ev = STRING #"%" (toString (sa.cs_next_var + (2 :num))) /\
-          dv = STRING #"%" (toString (sa.cs_next_var + (3 :num))) /\
-          j1 = sa.cs_next_id + (5 :num) /\ j2 = sa.cs_next_id + (6 :num) /\
-          j3 = sa.cs_next_id + (7 :num) /\
-          sb0.cs_next_var = sa.cs_next_var + (4 :num) /\
-          lookup_block entry_lbl func.fn_blocks =
-          SOME
-            <|bb_label := entry_lbl;
-              bb_instructions :=
-                [mk_inst (sa.cs_next_id + (2 :num)) ASSIGN
-                   [Lit (i2w m1 :256 word)] [cv];
-                 mk_inst (sa.cs_next_id + (3 :num)) ADD
-                   [Lit (i2w m1 :256 word);
-                    Lit ((i2w m2 :256 word) - (i2w m1 :256 word))] [ev];
-                 mk_inst (sa.cs_next_id + (4 :num)) JMP [Label cond_lbl]
-                   ([] :string list)]|>) /\
-       (~(?(a1 :type) (m1 :int) (a2 :type) (m2 :int).
-           e1 = Literal a1 (IntL m1) /\ e2 = Literal a2 (IntL m2)) ==>
-        lower_value compile_expr cenv typ e1 sa = (op1,s1) /\
-        lower_value compile_expr cenv typ e2 s1 = (op2,st) /\
-        rv = STRING #"%" (toString (st.cs_next_var + (2 :num))) /\
-        g1 = STRING #"%" (toString (st.cs_next_var + (3 :num))) /\
-        z1 = STRING #"%" (toString (st.cs_next_var + (4 :num))) /\
-        g2 = STRING #"%" (toString (st.cs_next_var + (5 :num))) /\
-        z2 = STRING #"%" (toString (st.cs_next_var + (6 :num))) /\
-        ev = STRING #"%" (toString (st.cs_next_var + (7 :num))) /\
-        dv = STRING #"%" (toString (st.cs_next_var + (8 :num))) /\
-        j1 = st.cs_next_id + (12 :num) /\ j2 = st.cs_next_id + (13 :num) /\
-        j3 = st.cs_next_id + (14 :num) /\
-        sb0.cs_next_var = st.cs_next_var + (9 :num) /\
-        lookup_block entry_lbl func.fn_blocks =
-        SOME
-          <|bb_label := entry_lbl;
-            bb_instructions :=
-              [mk_inst (st.cs_next_id + (2 :num)) ASSIGN [op1] [cv];
-               mk_inst (st.cs_next_id + (3 :num)) SUB [op2; op1] [rv];
-               mk_inst (st.cs_next_id + (4 :num))
-                 (if is_signed_type typ then SGT else GT) [op1; op2] [g1];
-               mk_inst (st.cs_next_id + (5 :num)) ISZERO [Var g1] [z1];
-               mk_inst (st.cs_next_id + (6 :num)) ASSERT [Var z1]
-                 ([] :string list);
-               mk_inst (st.cs_next_id + (7 :num)) GT
-                 [Var rv; Lit (n2w bound :256 word)] [g2];
-               mk_inst (st.cs_next_id + (8 :num)) ISZERO [Var g2] [z2];
-               mk_inst (st.cs_next_id + (9 :num)) ASSERT [Var z2]
-                 ([] :string list);
-               mk_inst (st.cs_next_id + (10 :num)) ADD [op1; Var rv] [ev];
-               mk_inst (st.cs_next_id + (11 :num)) JMP [Label cond_lbl]
-                 ([] :string list)]|>) /\
-       for_code func cenv bc ret_ty body id tyv p sz ainst cv ev dv nv cond_lbl
-         exit_lbl body_lbl incr_lbl j1 j2 j3 bbb i1 i2 i3 sb0 sb1 sj /\
-       lookup_block cond_lbl func.fn_blocks =
-       SOME
-         <|bb_label := cond_lbl;
-           bb_instructions :=
-             [mk_inst j1 EQ [Var cv; Var ev] [dv];
-              mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl]
-                ([] :string list)]|> /\
-       lookup_block body_lbl func.fn_blocks = SOME bbb /\
-       get_instruction bbb (0 :num) =
-       SOME (mk_inst j3 MSTORE [Var p; Var cv] ([] :string list)) /\
-       sb0.cs_current_bb = body_lbl /\
-       sb0.cs_current_insts =
-       [mk_inst j3 MSTORE [Var p; Var cv] ([] :string list)] /\
-       compile_stmts bc (InLoop exit_lbl incr_lbl) ret_ty body sb0 = ((),sb1) /\
-       (~block_is_terminated sb1 ==>
-        sj.cs_blocks = sb1.cs_blocks /\ sj.cs_current_bb = sb1.cs_current_bb /\
-        sj.cs_current_insts =
-        sb1.cs_current_insts ++
-        [mk_inst sb1.cs_next_id JMP [Label incr_lbl] ([] :string list)] /\
-        fn_has_code sb1 sj func) /\ sj.cs_next_var = sb1.cs_next_var /\
-       nv = STRING #"%" (toString sj.cs_next_var) /\ i1 = sj.cs_next_id /\
-       i2 = sj.cs_next_id + (1 :num) /\ i3 = sj.cs_next_id + (2 :num) /\
-       lookup_block incr_lbl func.fn_blocks =
-       SOME
-         <|bb_label := incr_lbl;
-           bb_instructions :=
-             [mk_inst i1 ADD [Var cv; Lit (1w :256 word)] [nv];
-              mk_inst i2 ASSIGN [Var nv] [cv];
-              mk_inst i3 JMP [Label cond_lbl] ([] :string list)]|> /\
-       sb.cs_current_bb = exit_lbl /\
-       sb.cs_current_insts = ([] :instruction list) /\
-       sb0.cs_next_var <= sb.cs_next_var /\ ~not_fresh_at sa dv /\
-       not_fresh_at sb0 p /\ not_fresh_at sb0 cv /\ not_fresh_at sb0 ev /\
-       (!(x :string). not_fresh_at sa x ==> not_fresh_at sb0 x) /\
-       sa.cs_next_id <= ainst.inst_id /\ sa.cs_next_id <= sb0.cs_next_id /\
-       sa.cs_next_var <= sb0.cs_next_var /\ cs_extends sa sb0 /\
-       cs_extends shadow_sa shadow_sb0 /\ cs_extends shadow_sb1 shadow_sb /\
-       stmts_env bc (InLoop exit_lbl incr_lbl) ret_ty body sb0 =
-       (body_cenv,sb1) /\
-       stmts_env (gas_shadow_env T bc) (InLoop exit_lbl incr_lbl) ret_ty
-         (MAP gas_shadow_stmt body) shadow_sb0 = (gas_shadow_env T body_cenv,shadow_sb1) /\
-       gas_shadow_state sb0 shadow_sb0 /\ gas_shadow_state sb1 shadow_sb1 /\
-       fn_has_code sb0 sb1 func /\
-       fn_has_code shadow_sb0 shadow_sb1 shadow_func /\
-       type_stmts (extend_local env id typ F) ret_ty body = SOME body_env' /\
-       body_inv tops ctx bc cx /\ supported_stmts tops bindings body /\
-       (!(target :type).
-          supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
-          occurs_abi_decode_target target tops) /\ stmts_exprs_ok bc body /\
-       call_evaluation_safe cx (int_calls_stmts body) /\
-       frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ
-         bc ret_ty /\ local_ptrs_reserved bc sb0 /\ ~block_is_terminated sb0 /\
-       (!(H :(bool # 256 word # type_value) list # num list).
-          dead_lo_ok H (DF H) lo bc cx) /\
-       (!(x :string) (z :num).
-          bc.ce_return_buf = SOME (PtrVar (Var x) z) ==> not_fresh_at sb0 x) /\
-       (!(x :string) (z :num).
-          bc.ce_return_pc = SOME (PtrVar (Var x) z) ==> not_fresh_at sb0 x) /\
-       !(st0 :evaluation_state) (es0 :evaluation_state) (s0 :venom_state)
-           (G0 :string |-> num # num) (tn0 :taint) (n1 :int) (n2 :int) (N :num)
-           (k :num) (a :eval_result) (rs :eval_result list)
-           (es :evaluation_state) (s :venom_state) (G :string |-> num # num)
-           (tn :taint) (w :256 word).
-         n1 <= n2 /\ N = Num (n2 - n1) /\ N < dimword (:256) /\
-         value_has_type tyv (IntV n1 :value) /\
-         value_has_type tyv (IntV n2 :value) /\
-         body_for_full_ok cx tyv id body
-           (GENLIST (\(j :num). Value (IntV (n1 + ((&j) :int)) :value)) N) /\
-         k + LENGTH (a::rs) = N /\
-         a::rs =
-         GENLIST (\(j :num). Value (IntV (n1 + ((&(k + j)) :int)) :value))
-           (LENGTH (a::rs)) /\ body_const_cells_agree [(NONE,tops)] cx env es /\
-         expr_sim_inv cenv cx env es /\
-         lookup_scopes id es.scopes = (NONE :scope_entry option) /\
-         storage_trace_domain cx st0 es.storage_trace /\
-         s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = (0 :num) /\
-         ~s.vs_halted /\ ret_pc_ok cenv sa s /\
-         return_buf_frame d cenv sb0 s /\
-         lookup_var cv s = SOME (i2w (n1 + ((&k) :int)) :256 word) /\
-         lookup_var ev s = SOME (i2w n2 :256 word) /\
-         lookup_var p s = SOME w /\
-         FLOOKUP s.vs_allocas ainst.inst_id = SOME (w2n w,sz) /\
-         ptr_covers G tn p s sz /\ op_taint tn (Var cv) = ({} :num -> bool) /\
-         op_prov G (Var cv) = (NONE :(num # num) option) /\
-         op_taint tn (Var ev) = ({} :num -> bool) /\
-         op_prov G (Var ev) = (NONE :(num # num) option) /\
-         alloca_history func s /\
-         (!fn inst v. frag_reachable ctx func s fn inst v ==> dalloca_fmp_headroom inst v) /\
-         (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-         s0.vs_alloca_next <= s.vs_alloca_next /\
-         (!(x :string) (v :256 word).
-            not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
-            lookup_var x s = SOME v) /\
-         (!(aid :num) (b :num # num).
-            FLOOKUP s0.vs_allocas aid = SOME b ==>
-            FLOOKUP s.vs_allocas aid = SOME b) /\
-         (!(x :string).
-            not_fresh_at sa x ==>
-            FLOOKUP G x = FLOOKUP G0 x /\
-            op_taint tn (Var x) = op_taint tn0 (Var x)) /\
-         alloca_frame cenv es0 sa s0 cenv es s /\
-         (!(aid :num) (off :num) (z :num) (i :num).
-            FLOOKUP s0.vs_allocas aid = SOME (off,z) /\ aid < sa.cs_next_id /\
-            (!(nm :string) (b :num) (z' :num).
-               local_region cenv es0.scopes s0 nm b z' ==>
-               off + z <= b \/ b + z' <= off) /\ off <= i /\ i < off + z /\
-            i IN tn.t_mem ==>
-            i IN tn0.t_mem) /\
-         (!(H :(bool # 256 word # type_value) list # num list).
-            valid_horizon cx st0 H es.storage_trace ==>
-            stmt_state_rel H ctx func cenv cx es s /\
-            storage_well_formed_on cx es (FST H) /\
-            ghost_inv_at (DF H) lo d cenv cx es G tn s) /\
-         gas_admissible (eval_for cx tyv id body (a::rs)) (stmt_res_ok lctx) es ==>
-         a = Value (IntV (n1 + ((&k) :int)) :value) /\ k < N /\
-         body_stmts_full_ok cx body /\
-         bind (read_result cx a) (\(v :value). push_scope_with_var id tyv v)
-           (es with gas_obs := ([] :256 word list)) =
-         ((INL () :unit + vyperState$exception),
-          es with
-          <|scopes :=
-              fmupdate id
-                <|assignable := F; type := tyv;
-                  value := (IntV (n1 + ((&k) :int)) :value);
-                  popped := ([] :(subscript list # value) list)|>
-                (FEMPTY :string |-> scope_entry)::es.scopes;
-            gas_obs := ([] :256 word list)|>) /\
-         expr_sim_inv bc cx (extend_local env id typ F)
-           (es with
-            <|scopes :=
-                fmupdate id
-                  <|assignable := F; type := tyv;
-                    value := (IntV (n1 + ((&k) :int)) :value);
-                    popped := ([] :(subscript list # value) list)|>
-                  (FEMPTY :string |-> scope_entry)::es.scopes;
-              gas_obs := ([] :256 word list)|>) /\
-         ce_locals_declared bc (extend_local env id typ F) /\
-         locals_alloc_ok bc (extend_local env id typ F) /\
-         gas_admissible (eval_stmts cx body)
-           (stmt_res_ok (InLoop exit_lbl incr_lbl))
-           (es with
-            <|scopes :=
-                fmupdate id
-                  <|assignable := F; type := tyv;
-                    value := (IntV (n1 + ((&k) :int)) :value);
-                    popped := ([] :(subscript list # value) list)|>
-                  (FEMPTY :string |-> scope_entry)::es.scopes;
-              gas_obs := ([] :256 word list)|>) /\
-         cenv_top_ext cenv bc
-           (es with
-            <|scopes :=
-                fmupdate id
-                  <|assignable := F; type := tyv;
-                    value := (IntV (n1 + ((&k) :int)) :value);
-                    popped := ([] :(subscript list # value) list)|>
-                  (FEMPTY :string |-> scope_entry)::es.scopes;
-              gas_obs := ([] :256 word list)|>).scopes /\
-         (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-            (jump_to body_lbl
-               (update_var dv (bool_to_word F) s with vs_inst_idx := (1 :num))) with
-          vs_inst_idx := (1 :num)).vs_current_bb = sb0.cs_current_bb /\
-         (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-            (jump_to body_lbl
-               (update_var dv (bool_to_word F) s with vs_inst_idx := (1 :num))) with
-          vs_inst_idx := (1 :num)).vs_inst_idx = LENGTH sb0.cs_current_insts /\
-         ~(mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-            (jump_to body_lbl
-               (update_var dv (bool_to_word F) s with vs_inst_idx := (1 :num))) with
-          vs_inst_idx := (1 :num)).vs_halted /\
-         ret_pc_ok bc sb0
-           (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-              (jump_to body_lbl
-                 (update_var dv (bool_to_word F) s with vs_inst_idx := (1 :num))) with
-            vs_inst_idx := (1 :num)) /\
-         return_buf_frame d bc sb0
-           (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-              (jump_to body_lbl
-                 (update_var dv (bool_to_word F) s with vs_inst_idx := (1 :num))) with
-            vs_inst_idx := (1 :num)) /\
-         alloca_history func
-           (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-              (jump_to body_lbl
-                 (update_var dv (bool_to_word F) s with vs_inst_idx := (1 :num))) with
-            vs_inst_idx := (1 :num)) /\
-         (ctx_has_dalloca ctx ==>
-          allocas_below_fmp
-            (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-               (jump_to body_lbl
-                  (update_var dv (bool_to_word F) s with
-                   vs_inst_idx := (1 :num))) with vs_inst_idx := (1 :num))) /\
-         (!(fn :ir_function) (inst :instruction) (v :venom_state).
-            frag_reachable ctx func
-              (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                 (jump_to body_lbl
-                    (update_var dv (bool_to_word F) s with
-                     vs_inst_idx := (1 :num))) with vs_inst_idx := (1 :num)) fn
-              inst v ==>
-            dalloca_fmp_headroom inst v) /\
-         s0.vs_alloca_next <=
-         (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-            (jump_to body_lbl
-               (update_var dv (bool_to_word F) s with vs_inst_idx := (1 :num))) with
-          vs_inst_idx := (1 :num)).vs_alloca_next /\
-         (!(x :string) (v :256 word).
-            not_fresh_at sa x /\ lookup_var x s0 = SOME v ==>
-            lookup_var x
-              (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                 (jump_to body_lbl
-                    (update_var dv (bool_to_word F) s with
-                     vs_inst_idx := (1 :num))) with vs_inst_idx := (1 :num)) =
-            SOME v) /\
-         (!(aid :num) (ab :num # num).
-            FLOOKUP s0.vs_allocas aid = SOME ab ==>
-            FLOOKUP
-              (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                 (jump_to body_lbl
-                    (update_var dv (bool_to_word F) s with
-                     vs_inst_idx := (1 :num))) with vs_inst_idx := (1 :num)).
-              vs_allocas aid = SOME ab) /\
-         (!(x :string).
-            not_fresh_at sa x ==>
-            FLOOKUP
-              (step_prov PG
-                 (step_prov PG
-                    (step_prov PG G (mk_inst j1 EQ [Var cv; Var ev] [dv])
-                       (update_var dv (bool_to_word F) s))
-                    (mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl]
-                       ([] :string list))
-                    (jump_to body_lbl
-                       (update_var dv (bool_to_word F) s with
-                        vs_inst_idx := (1 :num))))
-                 (mk_inst j3 MSTORE [Var p; Var cv] ([] :string list))
-                 (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                    (jump_to body_lbl
-                       (update_var dv (bool_to_word F) s with
-                        vs_inst_idx := (1 :num))))) x = FLOOKUP G0 x /\
-            op_taint
-              (step_taint (mk_inst j3 MSTORE [Var p; Var cv] ([] :string list))
-                 (jump_to body_lbl
-                    (update_var dv (bool_to_word F) s with
-                     vs_inst_idx := (1 :num)))
-                 (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                    (jump_to body_lbl
-                       (update_var dv (bool_to_word F) s with
-                        vs_inst_idx := (1 :num))))
-                 (step_taint
-                    (mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl]
-                       ([] :string list))
-                    (update_var dv (bool_to_word F) s with
-                     vs_inst_idx := (1 :num))
-                    (jump_to body_lbl
-                       (update_var dv (bool_to_word F) s with
-                        vs_inst_idx := (1 :num)))
-                    (step_taint (mk_inst j1 EQ [Var cv; Var ev] [dv]) s
-                       (update_var dv (bool_to_word F) s) tn))) (Var x) =
-            op_taint tn0 (Var x)) /\
-         alloca_frame cenv es0 sa s0 bc
-           (es with
-            <|scopes :=
-                fmupdate id
-                  <|assignable := F; type := tyv;
-                    value := (IntV (n1 + ((&k) :int)) :value);
-                    popped := ([] :(subscript list # value) list)|>
-                  (FEMPTY :string |-> scope_entry)::es.scopes;
-              gas_obs := ([] :256 word list)|>)
-           (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-              (jump_to body_lbl
-                 (update_var dv (bool_to_word F) s with vs_inst_idx := (1 :num))) with
-            vs_inst_idx := (1 :num)) /\
-         (!(aid :num) (off :num) (az :num) (i :num).
-            FLOOKUP s0.vs_allocas aid = SOME (off,az) /\ aid < sa.cs_next_id /\
-            (!(nm :string) (ab :num) (z' :num).
-               local_region cenv es0.scopes s0 nm ab z' ==>
-               off + az <= ab \/ ab + z' <= off) /\ off <= i /\ i < off + az /\
-            i IN
-            (step_taint (mk_inst j3 MSTORE [Var p; Var cv] ([] :string list))
-               (jump_to body_lbl
-                  (update_var dv (bool_to_word F) s with
-                   vs_inst_idx := (1 :num)))
-               (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                  (jump_to body_lbl
-                     (update_var dv (bool_to_word F) s with
-                      vs_inst_idx := (1 :num))))
-               (step_taint
-                  (mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl]
-                     ([] :string list))
-                  (update_var dv (bool_to_word F) s with
-                   vs_inst_idx := (1 :num))
-                  (jump_to body_lbl
-                     (update_var dv (bool_to_word F) s with
-                      vs_inst_idx := (1 :num)))
-                  (step_taint (mk_inst j1 EQ [Var cv; Var ev] [dv]) s
-                     (update_var dv (bool_to_word F) s) tn))).t_mem ==>
-            i IN tn0.t_mem) /\
-         !(H :(bool # 256 word # type_value) list # num list).
-           valid_horizon cx st0 H es.storage_trace ==>
-           gas_origin_ptr_path
-             (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (s,G,tn)
-             ([] :bool list)
-             (OK
-                (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                   (jump_to body_lbl
-                      (update_var dv (bool_to_word F) s with
-                       vs_inst_idx := (1 :num))) with vs_inst_idx := (1 :num)),
-              step_prov PG
-                (step_prov PG
-                   (step_prov PG G (mk_inst j1 EQ [Var cv; Var ev] [dv])
-                      (update_var dv (bool_to_word F) s))
-                   (mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl]
-                      ([] :string list))
-                   (jump_to body_lbl
-                      (update_var dv (bool_to_word F) s with
-                       vs_inst_idx := (1 :num))))
-                (mk_inst j3 MSTORE [Var p; Var cv] ([] :string list))
-                (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                   (jump_to body_lbl
-                      (update_var dv (bool_to_word F) s with
-                       vs_inst_idx := (1 :num)))),
-              step_taint (mk_inst j3 MSTORE [Var p; Var cv] ([] :string list))
-                (jump_to body_lbl
-                   (update_var dv (bool_to_word F) s with
-                    vs_inst_idx := (1 :num)))
-                (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                   (jump_to body_lbl
-                      (update_var dv (bool_to_word F) s with
-                       vs_inst_idx := (1 :num))))
-                (step_taint
-                   (mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl]
-                      ([] :string list))
-                   (update_var dv (bool_to_word F) s with
-                    vs_inst_idx := (1 :num))
-                   (jump_to body_lbl
-                      (update_var dv (bool_to_word F) s with
-                       vs_inst_idx := (1 :num)))
-                   (step_taint (mk_inst j1 EQ [Var cv; Var ev] [dv]) s
-                      (update_var dv (bool_to_word F) s) tn))) /\
-           stmt_state_rel H ctx func bc cx
-             (es with
-              <|scopes :=
-                  fmupdate id
-                    <|assignable := F; type := tyv;
-                      value := (IntV (n1 + ((&k) :int)) :value);
-                      popped := ([] :(subscript list # value) list)|>
-                    (FEMPTY :string |-> scope_entry)::es.scopes;
-                gas_obs := ([] :256 word list)|>)
-             (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                (jump_to body_lbl
-                   (update_var dv (bool_to_word F) s with
-                    vs_inst_idx := (1 :num))) with vs_inst_idx := (1 :num)) /\
-           storage_well_formed_on cx
-             (es with
-              <|scopes :=
-                  fmupdate id
-                    <|assignable := F; type := tyv;
-                      value := (IntV (n1 + ((&k) :int)) :value);
-                      popped := ([] :(subscript list # value) list)|>
-                    (FEMPTY :string |-> scope_entry)::es.scopes;
-                gas_obs := ([] :256 word list)|>) (FST H) /\
-           ghost_inv_at (DF H) lo d bc cx
-             (es with
-              <|scopes :=
-                  fmupdate id
-                    <|assignable := F; type := tyv;
-                      value := (IntV (n1 + ((&k) :int)) :value);
-                      popped := ([] :(subscript list # value) list)|>
-                    (FEMPTY :string |-> scope_entry)::es.scopes;
-                gas_obs := ([] :256 word list)|>)
-             (step_prov PG
-                (step_prov PG
-                   (step_prov PG G (mk_inst j1 EQ [Var cv; Var ev] [dv])
-                      (update_var dv (bool_to_word F) s))
-                   (mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl]
-                      ([] :string list))
-                   (jump_to body_lbl
-                      (update_var dv (bool_to_word F) s with
-                       vs_inst_idx := (1 :num))))
-                (mk_inst j3 MSTORE [Var p; Var cv] ([] :string list))
-                (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                   (jump_to body_lbl
-                      (update_var dv (bool_to_word F) s with
-                       vs_inst_idx := (1 :num)))))
-             (step_taint (mk_inst j3 MSTORE [Var p; Var cv] ([] :string list))
-                (jump_to body_lbl
-                   (update_var dv (bool_to_word F) s with
-                    vs_inst_idx := (1 :num)))
-                (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                   (jump_to body_lbl
-                      (update_var dv (bool_to_word F) s with
-                       vs_inst_idx := (1 :num))))
-                (step_taint
-                   (mk_inst j2 JNZ [Var dv; Label exit_lbl; Label body_lbl]
-                      ([] :string list))
-                   (update_var dv (bool_to_word F) s with
-                    vs_inst_idx := (1 :num))
-                   (jump_to body_lbl
-                      (update_var dv (bool_to_word F) s with
-                       vs_inst_idx := (1 :num)))
-                   (step_taint (mk_inst j1 EQ [Var cv; Var ev] [dv]) s
-                      (update_var dv (bool_to_word F) s) tn)))
-             (mstore (w2n w) (i2w (n1 + ((&k) :int)) :256 word)
-                (jump_to body_lbl
-                   (update_var dv (bool_to_word F) s with
-                    vs_inst_idx := (1 :num))) with vs_inst_idx := (1 :num))) /\
+  ^(concl range_full_body_entry) /\
   (!(func0 :ir_function) (ctx0 :venom_context) (c0 :compile_env)
        (e0 :evaluation_state) (sa0 :compile_state) (s0 :venom_state)
        (G0 :string |-> 'a) (tn0 :taint) (c1 :compile_env)
@@ -5163,7 +4627,7 @@ val range_full_round_statement = ``
        i IN tn0.t_mem) /\
   (!(DF0 :(bool # 256 word # type_value) list # num list -> dead) (lo0 :num)
        (d0 :string # num -> bool) (ctx0 :venom_context) (func0 :ir_function)
-       (PG0 :(num # num) option list) (tops0 :toplevel list)
+       (PG0 :(num # num) option list)
        (cx0 :evaluation_context) (st0 :evaluation_state) (body0 :stmt list)
        (es0 :evaluation_state) (s :venom_state) (G :string |-> num # num)
        (tn :taint)
@@ -5176,9 +4640,9 @@ val range_full_round_statement = ``
            evaluation_state ->
            (string |-> num # num) # taint -> exec_result -> bool).
      es0.scopes <> ([] :(string |-> scope_entry) list) /\
-     gas_outcome_full (DF0,lo0,d0,ctx0,func0,PG0) tops0 cx0 st0
+     gas_outcome_full_mods (DF0,lo0,d0,ctx0,func0,PG0) mods cx0 st0
        (eval_stmts cx0 body0) (es0,s,G,tn) Q R ==>
-     gas_outcome_full (DF0,lo0,d0,ctx0,func0,PG0) tops0 cx0 st0
+     gas_outcome_full_mods (DF0,lo0,d0,ctx0,func0,PG0) mods cx0 st0
        (finally
           (try
              (ignore_bind (eval_stmts cx0 body0)
@@ -5240,8 +4704,9 @@ val range_full_round_statement = ``
              (string |-> num # num) # taint -> exec_result -> bool)
       (tyv :type_value) (sa :compile_state) (sb :compile_state)
       (shadow_sa :compile_state) (shadow_sb :compile_state).
-    shadow_body_inv tops ctx shadow_ctx /\
-    body_inv tops ctx cenv cx /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
+    (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\
     supported_stmt tops bindings (For id typ (Range e1 e2) bound body) /\
     (!(target :type).
        supported_stmt_expr_exists (expr_abi_decode_target_root target)
@@ -5252,7 +4717,7 @@ val range_full_round_statement = ``
     stmt_exprs_ok cenv (For id typ (Range e1 e2) bound body) /\
     call_evaluation_safe cx
       (int_calls_stmt (For id typ (Range e1 e2) bound body)) /\
-    frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv
+    frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv
       ret_ty /\ evaluate_type (get_tenv cx) typ = SOME tyv /\
     stmt_env cenv lctx ret_ty (For id typ (Range e1 e2) bound body) sa =
     (cenv,sb) /\
@@ -5405,12 +4870,13 @@ val range_full_round_statement = ``
       fn_has_code sb0 sb1 func /\
       fn_has_code shadow_sb0 shadow_sb1 shadow_func /\
       type_stmts (extend_local env id typ F) ret_ty body = SOME body_env' /\
-      body_inv tops ctx bc cx /\ supported_stmts tops bindings body /\
+      (contract_inv mods exps ctx bc cx /\
+       module_body_inv mods bc.ce_module tops bc cx) /\ supported_stmts tops bindings body /\
       (!(target :type).
          supported_stmts_expr_exists (expr_abi_decode_target_root target) body ==>
          occurs_abi_decode_target target tops) /\ stmts_exprs_ok bc body /\
       call_evaluation_safe cx (int_calls_stmts body) /\
-      frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc
+      frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc
         ret_ty /\ local_ptrs_reserved bc sb0 /\ ~block_is_terminated sb0 /\
       (!(H :(bool # 256 word # type_value) list # num list).
          dead_lo_ok H (DF H) lo bc cx) /\
@@ -5424,7 +4890,7 @@ val range_full_round_statement = ``
         n1 <= n2 /\ N = Num (n2 - n1) /\ N < dimword (:256) /\
         value_has_type tyv (IntV n1 :value) /\
         value_has_type tyv (IntV n2 :value) /\
-        body_for_full_ok cx tyv id body
+        body_for_full_ok_mods mods exps cx tyv id body
           (GENLIST (\(j :num). Value (IntV (n1 + ((&j) :int)) :value)) N) ==>
         !(cenv' :compile_env)
             (Inv :(bool # 256 word # type_value) list # num list ->
@@ -5448,8 +4914,8 @@ val range_full_round_statement = ``
                rs =
                GENLIST
                  (\(j :num). Value (IntV (n1 + ((&(k + j)) :int)) :value))
-                 (LENGTH rs) /\ body_const_cells_agree [(NONE,tops)] cx env ee /\
-               expr_sim_inv cenv cx env ee /\
+                 (LENGTH rs) /\ body_const_cells_agree mods cx env ee /\
+               expr_sim_inv_mods mods cenv cx env ee /\
                lookup_scopes id ee.scopes = (NONE :scope_entry option) /\
                s.vs_current_bb = cond_lbl /\ s.vs_inst_idx = (0 :num) /\
                ~s.vs_halted /\ stmt_state_rel H ctx func cenv cx ee s /\
@@ -5542,9 +5008,9 @@ val range_full_round_statement = ``
                Inv H (a::rs) es G tn s) /\
             gas_admissible (eval_for cx tyv id body (a::rs)) (stmt_res_ok lctx)
               es ==>
-            gas_outcome_full
+            gas_outcome_full_mods
               (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-              (cx_tops cx) cx st0
+              cenv.ce_modules cx st0
               (bind (read_result cx a)
                  (\(v :value).
                     ignore_bind (push_scope_with_var id tyv v)

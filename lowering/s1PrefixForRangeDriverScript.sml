@@ -8,6 +8,7 @@ Ancestors
   vyperInterpreter vyperAST gasOutcomeFull gasShadow gasCount gasEvents
   fragGasOriginPtr fragGasPathPtr vyperStorageFootprint venomState
   loweringStateRelDefs stmtSimForParts list
+  bodyFullPredsMods[qualified]
 Libs rangeForDriverLib[qualified] rangeRoundEntryLib[qualified]
 
 val _ = Parse.hide "body";
@@ -27,10 +28,10 @@ local
       val (ante, result) = dest_imp conditional
       val (pred, xs) = strip_comb result
       val prefix =
-        if same_const pred ``body_for_full_ok`` then ``body_for_prefix_ok``
-        else if same_const pred ``body_iterator_full_ok`` then ``body_iterator_prefix_ok``
+        if same_const pred ``body_for_full_ok_mods`` then ``body_for_prefix_ok``
+        else if same_const pred ``body_iterator_full_ok_mods`` then ``body_iterator_prefix_ok``
         else raise Fail "Expected a guarded Range IH"
-    in list_mk_forall (vars, mk_imp (ante, list_mk_comb (prefix, xs))) end
+    in list_mk_forall (vars, mk_imp (ante, list_mk_comb (prefix, List.drop (xs, 2)))) end
   val clauses = strip_conj pre
   val guards = List.take (List.drop (clauses, 4), 2)
   val invocation = rhs (concl (PURE_REWRITE_CONV [stmt_frag_prefix_def]
