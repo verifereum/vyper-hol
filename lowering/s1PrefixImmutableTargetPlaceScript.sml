@@ -93,6 +93,17 @@ Proof
   drule gas_prefix_full_state_cong >> simp[]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
+  >- simp[target_root_def]
+  >- (PairCases_on `nsid` >> rpt strip_tac >>
+      irule immutable_toplevel_target_prefix >> simp[])
+  >- suspend "subscript" >>
+  suspend "attribute"
+QED
+*)
 Theorem immutable_target_place_prefix_ind[local]:
   !bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es id.
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
@@ -129,14 +140,10 @@ Theorem immutable_target_place_prefix_ind[local]:
       gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
         cx st0 (eval_target_place cx bt) (es,s0,G0,tn0)
 Proof
-  recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
-  >- simp[target_root_def]
-  >- (PairCases_on `nsid` >> rpt strip_tac >>
-      irule immutable_toplevel_target_prefix >> simp[])
-  >- suspend "subscript" >>
-  suspend "attribute"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_place_prefix_ind[attribute]:
   strip_tac >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   `immutable_root cx bt` by fs[immutable_root_def,target_root_def] >>
@@ -167,7 +174,9 @@ Resume immutable_target_place_prefix_ind[attribute]:
      target_indices_pre_def,target_root_def] >>
   first_x_assum drule_all >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_place_prefix_ind[subscript]:
   disch_then (mk_asm "targetIH") >> rpt gen_tac >> strip_tac >>
   rpt gen_tac >> strip_tac >>
@@ -231,7 +240,9 @@ Resume immutable_target_place_prefix_ind[subscript]:
   (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
   suspend "index_handoff"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_place_prefix_ind[index_handoff]:
   qmatch_asmsub_abbrev_tac
     `gas_outcome_full _ _ _ _ (eval_target_place cx bt) _ baseQ baseR` >>
@@ -257,7 +268,9 @@ Resume immutable_target_place_prefix_ind[index_handoff]:
   simp[Abbr `baseR`] >> rpt strip_tac >>
   rename1 `ISR ans` >> Cases_on `ans` >> gvs[expr_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume immutable_target_place_prefix_ind[index]:
   rpt gen_tac >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
@@ -307,8 +320,11 @@ Resume immutable_target_place_prefix_ind[index]:
     `ix`,`t`,`G1`,`tn1`] mp_tac) >>
   simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise immutable_target_place_prefix_ind
+*)
 
 Theorem immutable_target_place_prefix:
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\

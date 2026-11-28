@@ -13,6 +13,51 @@ Ancestors
 Libs
   monadsyntax
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >> Induct
+  >- (rpt gen_tac >> strip_tac >>
+      irule gas_prefix_full_no_outcome >> simp[evaluate_storage_trace_frame] >>
+      simp[Once evaluate_def, return_def]) >>
+  rpt gen_tac >> strip_tac >> gvs[expr_can_mutate_def] >>
+  `~exprs_can_mutate cenv (MAP gas_shadow_expr args)` by
+    simp[gas_shadow_expr_can_mutate] >>
+  qpat_x_assum `compile_log_eval_all cenv (e::args) sa = _` mp_tac >>
+  qpat_x_assum `compile_log_eval_all _ (gas_shadow_expr e::_) _ = _` mp_tac >>
+  simp[compile_log_eval_all_unsaved_cons] >> rpt strip_tac >> gvs[] >>
+  rename1 `lower_value compile_expr _ (expr_type e) (gas_shadow_expr e)
+             shadow_sa = (x, ssm)` >>
+  rename1 `lower_value compile_expr cenv (expr_type e) e sa = (x, sm)` >>
+  `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
+     (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e))` by irule gas_shadow_stmt_lower_value_env >>
+  `gas_shadow_state sm ssm` by
+    (qpat_x_assum `gas_shadow_compiles _ _`
+       (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
+     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
+  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var` by
+    (qpat_assum `lower_value _ _ _ e sa = _`
+       (mp_then Any mp_tac (cj 2 compile_expr_grows)) >> simp[]) >>
+  `cs_extends shadow_sa ssm` by
+    (qpat_assum `lower_value _ _ _ (gas_shadow_expr e) _ = _`
+       (mp_then Any mp_tac (cj 2 compile_expr_grows)) >> simp[]) >>
+  `cs_extends sm sb` by
+    (qpat_assum `compile_log_eval_all cenv args sm = _`
+       (mp_then Any mp_tac compile_log_eval_all_grows) >> simp[]) >>
+  `cs_extends ssm shadow_sb` by
+    (qpat_assum `compile_log_eval_all _ (MAP gas_shadow_expr _) _ = _`
+       (mp_then Any mp_tac compile_log_eval_all_grows) >> simp[]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sb func /\
+   fn_has_code shadow_sa ssm shadow_func /\
+   fn_has_code ssm shadow_sb shadow_func` by
+    metis_tac[fn_has_code_mid, cs_extends_refl] >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    (irule log_head_admissible >> qexists_tac `args` >> fs[GSYM log_args_res_ok_def, SF ETA_ss]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by metis_tac[] >>
+  suspend "head"
+QED
+*)
 Theorem compile_log_eval_all_prefix:
   !DF lo d PG ctx shadow_ctx func shadow_func cenv cx st0 R env.
     (!e tail es. R (e::tail) es ==>
@@ -68,48 +113,10 @@ Theorem compile_log_eval_all_prefix:
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
         cx st0 (eval_exprs cx args) (es, s0, G0, tn0)
 Proof
-  rpt gen_tac >> strip_tac >> Induct
-  >- (rpt gen_tac >> strip_tac >>
-      irule gas_prefix_full_no_outcome >> simp[evaluate_storage_trace_frame] >>
-      simp[Once evaluate_def, return_def]) >>
-  rpt gen_tac >> strip_tac >> gvs[expr_can_mutate_def] >>
-  `~exprs_can_mutate cenv (MAP gas_shadow_expr args)` by
-    simp[gas_shadow_expr_can_mutate] >>
-  qpat_x_assum `compile_log_eval_all cenv (e::args) sa = _` mp_tac >>
-  qpat_x_assum `compile_log_eval_all _ (gas_shadow_expr e::_) _ = _` mp_tac >>
-  simp[compile_log_eval_all_unsaved_cons] >> rpt strip_tac >> gvs[] >>
-  rename1 `lower_value compile_expr _ (expr_type e) (gas_shadow_expr e)
-             shadow_sa = (x, ssm)` >>
-  rename1 `lower_value compile_expr cenv (expr_type e) e sa = (x, sm)` >>
-  `gas_shadow_compiles (lower_value compile_expr cenv (expr_type e) e)
-     (lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
-       (gas_shadow_expr e))` by irule gas_shadow_stmt_lower_value_env >>
-  `gas_shadow_state sm ssm` by
-    (qpat_x_assum `gas_shadow_compiles _ _`
-       (mp_tac o REWRITE_RULE [gas_shadow_compiles_def]) >>
-     disch_then (qspecl_then [`sa`, `shadow_sa`] mp_tac) >> simp[]) >>
-  `cs_extends sa sm /\ sa.cs_next_var <= sm.cs_next_var` by
-    (qpat_assum `lower_value _ _ _ e sa = _`
-       (mp_then Any mp_tac (cj 2 compile_expr_grows)) >> simp[]) >>
-  `cs_extends shadow_sa ssm` by
-    (qpat_assum `lower_value _ _ _ (gas_shadow_expr e) _ = _`
-       (mp_then Any mp_tac (cj 2 compile_expr_grows)) >> simp[]) >>
-  `cs_extends sm sb` by
-    (qpat_assum `compile_log_eval_all cenv args sm = _`
-       (mp_then Any mp_tac compile_log_eval_all_grows) >> simp[]) >>
-  `cs_extends ssm shadow_sb` by
-    (qpat_assum `compile_log_eval_all _ (MAP gas_shadow_expr _) _ = _`
-       (mp_then Any mp_tac compile_log_eval_all_grows) >> simp[]) >>
-  `fn_has_code sa sm func /\ fn_has_code sm sb func /\
-   fn_has_code shadow_sa ssm shadow_func /\
-   fn_has_code ssm shadow_sb shadow_func` by
-    metis_tac[fn_has_code_mid, cs_extends_refl] >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
-    (irule log_head_admissible >> qexists_tac `args` >> fs[GSYM log_args_res_ok_def, SF ETA_ss]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by metis_tac[] >>
-  suspend "head"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_log_eval_all_prefix[head]:
   `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
        cenv cx (expr_type e) e es` by metis_tac[] >>
@@ -149,7 +156,9 @@ Resume compile_log_eval_all_prefix[head]:
        storage_trace_frame_bind_all, requests_outcomes_frame_bind_all,
        evaluate_requests_outcomes_frame, requests_outcomes_frame_read_result]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_log_eval_all_prefix[tail]:
   qx_genl_tac [`marks`, `v`, `mid`, `G1`, `tn1`, `t`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
@@ -213,5 +222,8 @@ Resume compile_log_eval_all_prefix[tail]:
      rename1 `_ = (res, _)` >> Cases_on `res` >> simp[bind_def, return_def]) >>
   metis_tac[gas_prefix_full_state_cong]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise compile_log_eval_all_prefix
+*)

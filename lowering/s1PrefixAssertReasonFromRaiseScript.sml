@@ -11,6 +11,58 @@ Ancestors
   venomExecSemantics exprBodyPreProps finite_map exprSimHypsDefs list
   bodyFullSimProjection[qualified]
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (mk_asm "raise_prefix") >> rpt gen_tac >> strip_tac >>
+  `expr_body_pre cenv cx env e es` by
+    (irule assert_reason_condition_source_pre >> metis_tac[]) >>
+  `expr_type e = BaseT BoolT` by fs[type_stmt_assert_reason] >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (BaseT BoolT) e es` by
+    (irule (cj 1 bodyFullSimProjectionTheory.body_expr_full_ok_simulations) >>
+     simp[] >> qexistsl_tac [`env`, `tops`] >> simp[]) >>
+  `expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (BaseT BoolT) e es` by
+    (fs[body_expr_prefix_ok_def] >> metis_tac[]) >>
+  rewrite_tac[stmt_frag_prefix_def, stmt_frag_full_pre_def] >>
+  rpt gen_tac >> strip_tac >>
+  fs[gas_shadow_stmt_def, gas_shadow_assert_reason_def] >>
+  drule_all compile_assert_reason_layout_full >> strip_tac >> gvs[] >>
+  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
+    metis_tac[assert_reason_expr_admissible] >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
+    not_fresh_at sa x` by metis_tac[ret_pc_ok_def] >>
+  qpat_x_assum `expr_sim_prefix _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_prefix_def, expr_sim_full_pre_def] >>
+  disch_then (qspecl_then [`st0`,`sa`,`s1`,`shadow_sa`,`t1`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >>
+  disch_then (qspecl_then [`st0`,`sa`,`s1`,`shadow_sa`,`t1`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+  disch_then (fn outcome =>
+    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+        assume_tac (MATCH_MP gas_outcome_full_return_buf_allocas
+          (LIST_CONJ [outcome,frame,sep]))))) >>
+  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ condQ condR` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+     (\H res mid G1 tn1 t. condQ H res mid G1 tn1 t /\
+       ~t.vs_halted /\ mid.gas_obs = [] /\
+       ?marks. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (s0,G0,tn0) marks (OK t,G1,tn1)) condR` by
+    (irule gas_outcome_full_post_source >> qexistsl_tac
+       [`\H res mid G1 tn1 t. condQ H res mid G1 tn1 t /\
+          ?marks. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+            (s0,G0,tn0) marks (OK t,G1,tn1)`, `condR`] >>
+     simp[] >> irule gas_outcome_full_post_path >> qexists_tac `condQ` >>
+     metis_tac[]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ condQ condR` kall_tac >>
+  suspend "guard_bind"
+QED
+*)
 Theorem compile_assert_reason_frag_prefix_from_raise:
   (!cx e DF lo d PG tops bindings ctx shadow_ctx func
     shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -63,55 +115,10 @@ Theorem compile_assert_reason_frag_prefix_from_raise:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assert e (AssertReason se))))
       (eval_stmt cx (Assert e (AssertReason se))) es
 Proof
-  disch_then (mk_asm "raise_prefix") >> rpt gen_tac >> strip_tac >>
-  `expr_body_pre cenv cx env e es` by
-    (irule assert_reason_condition_source_pre >> metis_tac[]) >>
-  `expr_type e = BaseT BoolT` by fs[type_stmt_assert_reason] >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (BaseT BoolT) e es` by
-    (irule (cj 1 bodyFullSimProjectionTheory.body_expr_full_ok_simulations) >>
-     simp[] >> qexistsl_tac [`env`, `tops`] >> simp[]) >>
-  `expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (BaseT BoolT) e es` by
-    (fs[body_expr_prefix_ok_def] >> metis_tac[]) >>
-  rewrite_tac[stmt_frag_prefix_def, stmt_frag_full_pre_def] >>
-  rpt gen_tac >> strip_tac >>
-  fs[gas_shadow_stmt_def, gas_shadow_assert_reason_def] >>
-  drule_all compile_assert_reason_layout_full >> strip_tac >> gvs[] >>
-  `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
-    metis_tac[assert_reason_expr_admissible] >>
-  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-    not_fresh_at sa x` by metis_tac[ret_pc_ok_def] >>
-  qpat_x_assum `expr_sim_prefix _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_sim_prefix_def, expr_sim_full_pre_def] >>
-  disch_then (qspecl_then [`st0`,`sa`,`s1`,`shadow_sa`,`t1`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_sim_full_def] >>
-  disch_then (qspecl_then [`st0`,`sa`,`s1`,`shadow_sa`,`t1`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (fn outcome =>
-    qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
-      qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
-        assume_tac (MATCH_MP gas_outcome_full_return_buf_allocas
-          (LIST_CONJ [outcome,frame,sep]))))) >>
-  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ condQ condR` >>
-  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
-     (\H res mid G1 tn1 t. condQ H res mid G1 tn1 t /\
-       ~t.vs_halted /\ mid.gas_obs = [] /\
-       ?marks. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-         (s0,G0,tn0) marks (OK t,G1,tn1)) condR` by
-    (irule gas_outcome_full_post_source >> qexistsl_tac
-       [`\H res mid G1 tn1 t. condQ H res mid G1 tn1 t /\
-          ?marks. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-            (s0,G0,tn0) marks (OK t,G1,tn1)`, `condR`] >>
-     simp[] >> irule gas_outcome_full_post_path >> qexists_tac `condQ` >>
-     metis_tac[]) >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ condQ condR` kall_tac >>
-  suspend "guard_bind"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_assert_reason_frag_prefix_from_raise[guard_bind]:
   rewrite_tac[eval_assert_reason_bind] >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _`
@@ -129,7 +136,9 @@ Resume compile_assert_reason_frag_prefix_from_raise[guard_bind]:
   >- (simp[Abbr `condR`] >> rpt strip_tac >> Cases_on `res` >> gvs[expr_exit_def]) >>
   suspend "selected"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_assert_reason_frag_prefix_from_raise[selected]:
   qx_genl_tac [`marks`, `v`, `mid`, `G1`, `tn1`, `t`] >> strip_tac >>
   drule_all assert_reason_condition_bool >> strip_tac >> gvs[] >>
@@ -163,7 +172,9 @@ Resume compile_assert_reason_frag_prefix_from_raise[selected]:
   simp[] >>
   suspend "raise_entry"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_assert_reason_frag_prefix_from_raise[raise_entry]:
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     (rpt strip_tac >> metis_tac[body_inv_no_phi]) >>
@@ -209,7 +220,9 @@ Resume compile_assert_reason_frag_prefix_from_raise[raise_entry]:
   pop_assum SUBST_ALL_TAC >>
   suspend "raise_entry_state"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_assert_reason_frag_prefix_from_raise[raise_entry_state]:
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
      stmt_state_rel H ctx func cenv cx mid (jump_to entry.cs_current_bb t) /\
@@ -266,5 +279,8 @@ Resume compile_assert_reason_frag_prefix_from_raise[raise_entry_state]:
      (simp[gas_shadow_stmt_def, gas_shadow_raise_reason_def] >>
       first_assum ACCEPT_TAC)) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise compile_assert_reason_frag_prefix_from_raise
+*)

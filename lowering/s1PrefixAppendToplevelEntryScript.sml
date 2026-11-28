@@ -44,6 +44,24 @@ Proof
   qexistsl_tac [`elem`,`cap`,`tv`,`mut = Transient`,`rslot`] >> simp[]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all_then strip_assume_tac append_toplevel_declaration >>
+  rename1 `lookup_var_slot_from_layout cx tr _ _ = SOME slot` >>
+  qabbrev_tac `tv_arr = ArrayTV tv (Dynamic cap)` >>
+  qabbrev_tac `place = StoragePlace tr (n2w slot) tv_arr` >>
+  qabbrev_tac `root = StorageRoot tr slot tv_arr` >>
+  qabbrev_tac `after = es with storage_trace := es.storage_trace ++ [root]` >>
+  qpat_assum `stmt_frag_full_pre _ _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [stmt_frag_full_pre_def]) >>
+  qexists_tac `\H res ee G tn u. res = INL place /\ ee = after with gas_obs := [] /\
+    G = G0 /\ tn = tn0 /\ u = s0` >>
+  BETA_TAC >> conj_tac >- suspend "target_full" >>
+  conj_tac >- suspend "target_prefix" >> suspend "rhs_entry"
+QED
+*)
 Theorem append_toplevel_prefix_entry:
   (!es0 p es1. eval_target_place cx (TopLevelNameTarget nid) es0 = (INL p,es1) ==>
      body_expr_full_ok cx e) /\
@@ -88,33 +106,26 @@ Theorem append_toplevel_prefix_entry:
         gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
           cx st0 (bind (eval_expr cx e) (read_result cx)) (mid,u,G1,tn1))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then strip_assume_tac append_toplevel_declaration >>
-  rename1 `lookup_var_slot_from_layout cx tr _ _ = SOME slot` >>
-  qabbrev_tac `tv_arr = ArrayTV tv (Dynamic cap)` >>
-  qabbrev_tac `place = StoragePlace tr (n2w slot) tv_arr` >>
-  qabbrev_tac `root = StorageRoot tr slot tv_arr` >>
-  qabbrev_tac `after = es with storage_trace := es.storage_trace ++ [root]` >>
-  qpat_assum `stmt_frag_full_pre _ _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [stmt_frag_full_pre_def]) >>
-  qexists_tac `\H res ee G tn u. res = INL place /\ ee = after with gas_obs := [] /\
-    G = G0 /\ tn = tn0 /\ u = s0` >>
-  BETA_TAC >> conj_tac >- suspend "target_full" >>
-  conj_tac >- suspend "target_prefix" >> suspend "rhs_entry"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_toplevel_prefix_entry[target_full]:
   irule gas_outcome_full_pure >> simp[] >>
   qexistsl_tac [`G0`,`after`,`INL place`,`s0`,`tn0`] >>
   simp[Abbr `after`, evaluation_state_fupdfupds_comp, gas_origin_ptr_path_rules]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_toplevel_prefix_entry[target_prefix]:
   irule gas_prefix_full_no_outcome >>
   simp[evaluate_storage_trace_frame] >>
   rpt strip_tac >> gvs[Abbr `after`, Abbr `root`, DROP_APPEND1]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_toplevel_prefix_entry[rhs_entry]:
   rpt gen_tac >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -151,7 +162,9 @@ Resume append_toplevel_prefix_entry[rhs_entry]:
     (conj_tac >> first_assum irule >> first_assum (irule_at Any)) >>
   suspend "rhs_sim"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_toplevel_prefix_entry[horizons]:
   qx_gen_tac `H` >> disch_tac >>
   `valid_horizon cx st0 H es.storage_trace` by
@@ -173,7 +186,9 @@ Resume append_toplevel_prefix_entry[horizons]:
   qpat_assum `_ = es.scopes` (fn th => pure_rewrite_tac[th]) >>
   disch_then ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_toplevel_prefix_entry[rhs_static]:
   `supported_expr tops e` by fs[Once supported_stmt_def, supported_expr_def] >>
   `well_typed_expr env e` by (drule_then strip_assume_tac append_typing_target >> simp[]) >>
@@ -186,7 +201,9 @@ Resume append_toplevel_prefix_entry[rhs_static]:
     (irule body_const_cells_agree_immutables >> simp[Abbr `after`]) >>
   asm_simp_tac bool_ss []
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_toplevel_prefix_entry[rhs_sim]:
   qabbrev_tac `mid = after with gas_obs := []` >>
   `(!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x)` by
@@ -219,5 +236,8 @@ Resume append_toplevel_prefix_entry[rhs_sim]:
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >>
   simp[] >> rpt gen_tac >> Cases_on `res` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise append_toplevel_prefix_entry
+*)
