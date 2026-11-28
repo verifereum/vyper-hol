@@ -45,6 +45,8 @@ Theorem compile_raise_reason_frag_full:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Raise (RaiseReason e)) = SOME env' /\
     stmt_exprs_ok cenv (Raise (RaiseReason e)) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (Raise (RaiseReason e)) /\
     call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason e))) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>

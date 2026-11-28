@@ -6,7 +6,7 @@
  *   body_stmts_sim_full -- the statement-list judgment it gives
  *)
 Theory bodySimFullMain
-Ancestors bodyFullShadowBodyInv bodyFullRaiseCustomError bodyFullAssertCustomError
+Ancestors bodySingletonStmtGuards[qualified] bodyFullShadowBodyInv bodyFullRaiseCustomError bodyFullAssertCustomError
   bodyFullCases bodyFullCreateHeld bodyFullIf bodyFullExprStmt bodyFullExits bodyFullPreds bodySimFull gasShadow bodySim supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph typedCopyMetadata alist list
   vyperTypeContract[qualified,ignore_grammar] constSubst bodyLoopCalls
@@ -20,6 +20,7 @@ val _ = Parse.hide "body";
 Proof
   rpt gen_tac >> strip_tac >>
   rewrite_tac[body_stmt_full_ok_def] >> rpt gen_tac >> strip_tac >>
+  drule_all_then strip_assume_tac bodySingletonStmtGuardsTheory.singleton_stmt_expr_guards >>
   match_mp_tac (Q.SPECL [`cx`,`err`,`DF`,`lo`,`d`,`PG`,
     `tops`,`bindings`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,
     `env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] compile_raise_custom_frag_full) >>
@@ -44,6 +45,7 @@ QED
 Proof
   rpt gen_tac >> strip_tac >>
   rewrite_tac[body_stmt_full_ok_def] >> rpt gen_tac >> strip_tac >>
+  drule_all_then strip_assume_tac bodySingletonStmtGuardsTheory.singleton_stmt_expr_guards >>
   match_mp_tac (Q.SPECL [`cx`,`e`,`err`,`DF`,`lo`,`d`,`PG`,
     `tops`,`bindings`,`ctx`,`shadow_ctx`,`func`,`shadow_func`,`cenv`,
     `env`,`env'`,`ret_ty`,`lctx`,`RetQ`,`es`] compile_assert_custom_frag_full_from_raise) >>

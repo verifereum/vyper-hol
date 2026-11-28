@@ -73,6 +73,8 @@ Theorem compile_for_storage_subplace_array_frag_full:
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
     ~supported_expr_exists (const_name_root cx) e /\
     stmt_exprs_ok cenv (For id typ (Array e) n body) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (For id typ (Array e) n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
@@ -270,6 +272,8 @@ Theorem compile_for_immutable_subplace_array_frag_full:
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
     ~supported_expr_exists (const_name_root cx) e /\
     stmt_exprs_ok cenv (For id typ (Array e) n body) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (For id typ (Array e) n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n body)) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
