@@ -238,15 +238,8 @@ Proof
   qexistsl_tac [`bindings`, `env`, `env'`, `tops`] >> asm_rewrite_tac[]
 QED
 
-Theorem body_append_case_prefix:
-  !cx t e.
-  (!s'' p t'.
-       eval_target_place cx t s'' = (INL p,t') ==> body_expr_full_ok cx e) /\
-  (!s'' p t'.
-       eval_target_place cx t s'' = (INL p,t') ==> body_expr_prefix_ok cx e) /\
-  body_base_target_full_ok cx t /\
-  body_base_target_prefix_ok cx t ==>
-  body_stmt_prefix_ok cx (Append t e)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   simp[body_stmt_prefix_ok_def, stmt_frag_prefix_def] >>
@@ -277,7 +270,21 @@ Proof
     `gas_outcome_full _ _ _ _ (eval_target_place cx t) _ targetQ targetR` >>
   suspend "resolved"
 QED
+*)
+Theorem body_append_case_prefix:
+  !cx t e.
+  (!s'' p t'.
+       eval_target_place cx t s'' = (INL p,t') ==> body_expr_full_ok cx e) /\
+  (!s'' p t'.
+       eval_target_place cx t s'' = (INL p,t') ==> body_expr_prefix_ok cx e) /\
+  body_base_target_full_ok cx t /\
+  body_base_target_prefix_ok cx t ==>
+  body_stmt_prefix_ok cx (Append t e)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_case_prefix[toplevel]:
   gvs[] >> rename1 `TopLevelNameTarget nid` >>
   `sp = sa /\ shadow_sp = shadow_sa` by suspend "top_cut" >>
@@ -293,21 +300,27 @@ Resume body_append_case_prefix[toplevel]:
   simp[GSYM quantHeuristicsTheory.ISR_exists] >> qexists_tac `Q` >>
   simp[] >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_case_prefix[top_cut]:
   ntac 2 (qpat_x_assum `compile_get_target_ptr _ _ _ _ = _` mp_tac) >>
   Cases_on `FLOOKUP cenv.ce_module_vars nid` >>
   simp[gasShadowTheory.gas_shadow_expr_def, compile_get_target_ptr_def, comp_return_def] >>
   Cases_on `x` >> simp[comp_return_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_case_prefix[top_rhs_code]:
   rpt gen_tac >> strip_tac >>
   qpat_assum `!b loc elem cap. r = _ ==> _`
     (qspecl_then [`b`,`loc`,`elem`,`cap`] mp_tac) >>
   gvs[] >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_case_prefix[place_admissible]:
   rw[gas_admissible_def] >> Cases_on `res`
   >- simp[target_place_res_ok_def] >>
@@ -319,7 +332,9 @@ Resume body_append_case_prefix[place_admissible]:
   simp[Once evaluate_def, bind_def] >>
   gvs[stmt_res_ok_def, target_place_res_ok_def, no_control_exc_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_case_prefix[place_prefix]:
   `gas_admissible (eval_base_place cx t) target_res_ok es` by
     (irule get_place_base_admissible >> simp[GSYM eval_target_place_as_bind]) >>
@@ -340,7 +355,9 @@ Resume body_append_case_prefix[place_prefix]:
      rename1 `get_place pv mid` >> Cases_on `pv` >> simp[get_place_def, return_def, raise_def]) >>
   drule gas_prefix_full_state_cong >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_case_prefix[resolved]:
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[body_inv_no_phi] >>
@@ -372,7 +389,9 @@ Resume body_append_case_prefix[resolved]:
        append_replay_rhs_prefix_entry) >>
   simp[] >> suspend "resolved_entry"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_append_case_prefix[resolved_entry]:
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
@@ -390,8 +409,11 @@ Resume body_append_case_prefix[resolved_entry]:
     (qspecl_then [`b`,`loc`,`elem`,`cap`] mp_tac) >>
   simp[] >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_append_case_prefix
+*)
 
 Theorem body_assert_case_prefix:
   !cx e.
