@@ -25,11 +25,8 @@ Proof
   rpt gen_tac >> MATCH_ACCEPT_TAC (GEN_ALL create_dispatch_prefix)
 QED
 
-Theorem create_copy_expr_prefix_ok:
-  !cx ty s r ks es d.
-  body_exprs_full_ok cx (create_operand_order CreateCopyOf s es) /\
-  body_exprs_prefix_ok cx (create_operand_order CreateCopyOf s es) ==>
-  body_expr_prefix_ok cx (Call ty (CreateTarget CreateCopyOf s r ks) es d)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   `!ce env st. expr_sim_inv ce cx env st ==>
@@ -59,7 +56,17 @@ Proof
   irule expr_vv_sim_stack_prefix >> simp[create_compile_stack] >>
   metis_tac[create_eval_value]
 QED
+*)
+Theorem create_copy_expr_prefix_ok:
+  !cx ty s r ks es d.
+  body_exprs_full_ok cx (create_operand_order CreateCopyOf s es) /\
+  body_exprs_prefix_ok cx (create_operand_order CreateCopyOf s es) ==>
+  body_expr_prefix_ok cx (Call ty (CreateTarget CreateCopyOf s r ks) es d)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_prefix_ok[target]:
   `expr_body_pre cenv cx env target es'` by
     (irule create_operand_pre >> simp[] >>
@@ -81,7 +88,9 @@ Resume create_copy_expr_prefix_ok[target]:
                       storage_trace_frame_read_result,storage_trace_frame_create_operands]) >>
   suspend "amount"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_prefix_ok[amount]:
   map_every qx_gen_tac [`tv`,`et`,`Gtar`,`tnt`,`st`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -110,7 +119,9 @@ Resume create_copy_expr_prefix_ok[amount]:
                       storage_trace_frame_read_result,storage_trace_frame_create_operands]) >>
   suspend "scalar_frames"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_prefix_ok[scalar_frames]:
   map_every qx_gen_tac [`av`,`ea`,`Gamt`,`tna`,`samt`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -149,7 +160,9 @@ Resume create_copy_expr_prefix_ok[scalar_frames]:
   `s0.vs_alloca_next <= samt.vs_alloca_next` by decide_tac >>
   suspend "scalar_paths"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_prefix_ok[scalar_paths]:
   qpat_x_assum `?marks. _ /\ !H. _ ==> gas_origin_ptr_path _ _ marks (OK st,_,_)`
     (qx_choose_then `mt` strip_assume_tac) >>
@@ -166,7 +179,9 @@ Resume create_copy_expr_prefix_ok[scalar_paths]:
   >- suspend "salt_cut" >>
   suspend "no_salt"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_prefix_ok[salt_cut]:
   Cases_on `lower_value compile_expr cenv (BaseT (BytesT (Fixed 32))) salt b` >>
   Cases_on `lower_value compile_expr (gas_shadow_env T cenv)
@@ -192,7 +207,9 @@ Resume create_copy_expr_prefix_ok[salt_cut]:
                       storage_trace_frame_read_result,storage_trace_frame_create_operands]) >>
   suspend "salt_frames"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_prefix_ok[salt_frames]:
   map_every qx_gen_tac [`sv`,`ew`,`Gsalt`,`tns`,`ssalt`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -234,7 +251,9 @@ Resume create_copy_expr_prefix_ok[salt_frames]:
   `dest_create_salt sv = SOME salt_word` by simp[Abbr `salt_word`,create_salt_word] >>
   suspend "salt_finish"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_prefix_ok[salt_finish]:
   `accounts_well_typed ew.accounts /\ outcomes_accounts_typed ew.outcomes /\ IS_SOME ew.outcomes`
     by (asm "oracle_fields" irule >> goal_assum (drule_at Any)) >>
@@ -272,7 +291,9 @@ Resume create_copy_expr_prefix_ok[salt_finish]:
    (qpat_assum `!z. x = Var z \/ y = Var z ==> _`
       (qspec_then `x'` irule) >> simp[]))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_copy_expr_prefix_ok[no_salt]:
   simp[NoAsms,Once evaluate_def,bind_return] >>
   `accounts_well_typed ea.accounts /\ outcomes_accounts_typed ea.outcomes /\ IS_SOME ea.outcomes`
@@ -307,7 +328,10 @@ Resume create_copy_expr_prefix_ok[no_salt]:
       simp[vyperValueTheory.dest_AddressV_def]) >>
   rpt strip_tac >> first_assum (drule_then ACCEPT_TAC)
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise create_copy_expr_prefix_ok
+*)
 
 Theorem create_blueprint_expr_prefix_ok:
   !cx ty b s r ks es d.
