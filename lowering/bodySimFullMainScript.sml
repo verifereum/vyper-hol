@@ -497,7 +497,8 @@ Proof
     (qpat_assum `body_inv _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [body_inv_def]) >>
      rpt gen_tac >> strip_tac >>
-     `ts = tops` by metis_tac[] >>
+     `ts = tops` by
+       (qpat_x_assum `ALOOKUP _ _ = SOME [(NONE,ts)]` mp_tac >> simp[]) >>
      simp[] >> first_assum ACCEPT_TAC) >>
   metis_tac[body_sim_full_mutual, body_stmts_full_ok_def]
 QED
