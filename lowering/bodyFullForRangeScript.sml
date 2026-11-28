@@ -5823,9 +5823,10 @@ Finalise range_full_round_with_entry
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (mk_asm "joint_round" o MATCH_MP range_full_round_with_entry) >>
-  rpt gen_tac >> strip_tac >>
-  asm "joint_round" (drule_all_then
-    (qx_choosel_then rangeRoundEntryLib.layout_names strip_assume_tac)) >>
+  rpt gen_tac >>
+  disch_then (fn pre => asm "joint_round" (fn joint =>
+    qx_choosel_then rangeRoundEntryLib.layout_names strip_assume_tac
+      (MATCH_MP joint pre))) >>
   qexistsl_tac rangeRoundEntryLib.layout_names >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
