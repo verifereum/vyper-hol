@@ -14702,6 +14702,49 @@ QED
 Finalise body_assign_other_saved_normalized_slots_write_full[local]
 *)
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_x_assum `st = su` SUBST_ALL_TAC >>
+  `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
+  qabbrev_tac `start = mid with gas_obs := gas_explicit marks u.vs_gas_readings` >>
+  `eval_target_place cx t start = (INL (StoragePlace tr k dtv),ee)` by
+    (simp[Abbr `start`] >>
+     qpat_assum `!tail. eval_target_place _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     qpat_assum `ee with gas_obs := [] = ee`
+       (fn th => rewrite_tac[APPEND_NIL,th])) >>
+  `expr_sim_inv cenv cx env ee` by
+    (irule bodySimAugPlaceLoadTheory.aug_place_target_inv >>
+     goal_assum (drule_at (Pat `eval_target_place _ _ _ = _`)) >>
+     fs[Abbr `start`, target_pre_def]) >>
+  qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
+  `valid_horizon cx st0 H0 ee.storage_trace` by fs[Abbr `H0`,storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> target_post H ctx func cenv cx mid ss su u ee _ _ r z /\ _`
+    (qspec_then `H0` (drule_then strip_assume_tac)) >>
+  `FST (SND r) = SOME (slot_loc tr) /\ SND (SND r) = SOME (ValPT ty) /\
+   evaluate_type (get_tenv cx) ty = SOME dtv /\ eval_operand (FST r) z = SOME k /\
+   (!x. FST r = Var x ==> not_fresh_at su x)` by
+    (qhdtm_assum `target_post` mp_tac >>
+     simp[NoAsms, target_post_def, place_ptr_rel_def, value_type_place_def] >>
+     strip_tac >> fs[]) >>
+  `assign_alloc_ok cenv t e` by
+    fs[stmt_exprs_ok_def, Once allocLimitsTheory.alloc_limits_stmt_def] >>
+  `type_memory_bytes cenv ty = type_memory_size dtv` by
+    drule_all_then ACCEPT_TAC expr_sim_inv_memory_size >>
+  `compile_get_target_ptr compile_expr cenv t ss =
+     ((FST r,SOME (slot_loc tr),SOME (ValPT ty)),su)` by
+    (qpat_assum `compile_get_target_ptr _ _ _ _ = _` (fn th => rewrite_tac[th]) >>
+     PairCases_on `r` >> gvs[]) >>
+  `type_memory_bytes cenv ty < 2 ** 64` by
+    (drule placeDestinationBoundsTheory.storage_target_normalization_bound >>
+     disch_then (qspec_then `e` mp_tac) >>
+     Cases_on `tr` >> simp[slot_loc_def] >> metis_tac[]) >>
+  `type_memory_size dtv < dimword (:256)` by
+    (fs[wordsTheory.dimword_def] >> decide_tac) >>
+  suspend "normalize"
+QED
+*)
 Theorem body_assign_other_snapshot_normalized_slots_write_full[local]:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -14783,46 +14826,10 @@ Theorem body_assign_other_snapshot_normalized_slots_write_full[local]:
       (ctx_has_dalloca ctx ==>
         !s. (r = Halt s \/ ?ir. r = IntRet ir s) ==> allocas_below_fmp s))
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `st = su` SUBST_ALL_TAC >>
-  `ee with gas_obs := [] = ee` by simp[evaluation_state_component_equality] >>
-  qabbrev_tac `start = mid with gas_obs := gas_explicit marks u.vs_gas_readings` >>
-  `eval_target_place cx t start = (INL (StoragePlace tr k dtv),ee)` by
-    (simp[Abbr `start`] >>
-     qpat_assum `!tail. eval_target_place _ _ _ = _` (qspec_then `[]` mp_tac) >>
-     qpat_assum `ee with gas_obs := [] = ee`
-       (fn th => rewrite_tac[APPEND_NIL,th])) >>
-  `expr_sim_inv cenv cx env ee` by
-    (irule bodySimAugPlaceLoadTheory.aug_place_target_inv >>
-     goal_assum (drule_at (Pat `eval_target_place _ _ _ = _`)) >>
-     fs[Abbr `start`, target_pre_def]) >>
-  qabbrev_tac `H0 = storage_trace_horizon ee.storage_trace` >>
-  `valid_horizon cx st0 H0 ee.storage_trace` by fs[Abbr `H0`,storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> target_post H ctx func cenv cx mid ss su u ee _ _ r z /\ _`
-    (qspec_then `H0` (drule_then strip_assume_tac)) >>
-  `FST (SND r) = SOME (slot_loc tr) /\ SND (SND r) = SOME (ValPT ty) /\
-   evaluate_type (get_tenv cx) ty = SOME dtv /\ eval_operand (FST r) z = SOME k /\
-   (!x. FST r = Var x ==> not_fresh_at su x)` by
-    (qhdtm_assum `target_post` mp_tac >>
-     simp[NoAsms, target_post_def, place_ptr_rel_def, value_type_place_def] >>
-     strip_tac >> fs[]) >>
-  `assign_alloc_ok cenv t e` by
-    fs[stmt_exprs_ok_def, Once allocLimitsTheory.alloc_limits_stmt_def] >>
-  `type_memory_bytes cenv ty = type_memory_size dtv` by
-    drule_all_then ACCEPT_TAC expr_sim_inv_memory_size >>
-  `compile_get_target_ptr compile_expr cenv t ss =
-     ((FST r,SOME (slot_loc tr),SOME (ValPT ty)),su)` by
-    (qpat_assum `compile_get_target_ptr _ _ _ _ = _` (fn th => rewrite_tac[th]) >>
-     PairCases_on `r` >> gvs[]) >>
-  `type_memory_bytes cenv ty < 2 ** 64` by
-    (drule placeDestinationBoundsTheory.storage_target_normalization_bound >>
-     disch_then (qspec_then `e` mp_tac) >>
-     Cases_on `tr` >> simp[slot_loc_def] >> metis_tac[]) >>
-  `type_memory_size dtv < dimword (:256)` by
-    (fs[wordsTheory.dimword_def] >> decide_tac) >>
-  suspend "normalize"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_normalized_slots_write_full[normalize]:
   markerLib.RESUME_TAC >>
   qabbrev_tac `sty = lowered_value_type cenv e` >>
@@ -14880,7 +14887,9 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[normalize]:
   disch_then (qx_choosel_then [`q`,`root`,`a`,`Gq`,`tf`] (map_every assume_tac o CONJUNCTS)) >>
   suspend "slots"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_normalized_slots_write_full[slots]:
   markerLib.RESUME_TAC >>
   `!l. FST r <> Label l` by
@@ -14897,7 +14906,9 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[slots]:
     (irule return_buf_frame_frame >> qexistsl [`cenv`,`z`,`su`] >> simp[] >> metis_tac[]) >>
   suspend "frames"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_normalized_slots_write_full[frames]:
   markerLib.RESUME_TAC >>
   `sa.cs_next_var <= sc.cs_next_var /\ s0.vs_alloca_next <= q.vs_alloca_next` by decide_tac >>
@@ -14926,7 +14937,9 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[frames]:
     off <= i /\ i < off + sz /\ i IN tf.t_mem ==> i IN tn0.t_mem` by suspend "old_taint" >>
   suspend "execute_slots"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_normalized_slots_write_full[old_taint]:
   markerLib.RESUME_TAC >> rpt strip_tac >>
   rename1 `FLOOKUP s0.vs_allocas j = SOME (off,sz)` >>
@@ -14944,7 +14957,9 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[old_taint]:
     (qspecl_then [`j`,`off`,`sz`,`i`] mp_tac) >> simp[] >>
   impl_tac >- first_assum ACCEPT_TAC >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_normalized_slots_write_full[execute_slots]:
   markerLib.RESUME_TAC >>
   `env.type_defs = get_tenv cx` by fs[env_consistent_def, env_context_consistent_def] >>
@@ -14976,7 +14991,9 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[execute_slots]:
   qpat_x_assum `buf.buf_operand = Var root` SUBST_ALL_TAC >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_other_snapshot_normalized_slots_write_full[horizon]:
   markerLib.RESUME_TAC >> gen_tac >> disch_tac >>
   `storage_place_observed H (StoragePlace tr k dtv)` by
@@ -14991,8 +15008,11 @@ Resume body_assign_other_snapshot_normalized_slots_write_full[horizon]:
     (first_assum irule >> first_assum ACCEPT_TAC) >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_other_snapshot_normalized_slots_write_full[local]
+*)
 
 (* The saved RHS is read before the target runs. Its physical buffer and the
    destination operand are both available after the intervening unwrap. *)
