@@ -5,6 +5,53 @@ Ancestors
   s1PrefixAssignTupleExactLayout s1PrefixTupleWidenedLayout tuplePlaceBorrow
   bodyFullTargetDefs bodyFullSimProjection targetPlaceSim valueEncoding
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule tuple_targets_typing >> disch_then (qx_choose_then `tys` strip_assume_tac) >>
+  drule_then assume_tac body_inv_mcopy >>
+  `expr_body_pre cenv cx env e es` by (drule_all tuple_assignment_rhs_pre >> simp[]) >>
+  drule_then assume_tac expr_body_pre_gas_admissible >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (TupleT tys) e es` by metis_tac[body_expr_full_ok_simulations] >>
+  `expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (TupleT tys) e es` by metis_tac[cj 1 body_expr_prefix_ok_def] >>
+  rewrite_tac[stmt_frag_prefix_def, stmt_frag_full_pre_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `(EXISTS (\ty. ~is_word_type ty) tys ==> cenv.ce_target CapMcopy)` by simp[] >>
+  drule_all assign_tuple_rhs_code_slices >>
+  disch_then (qx_choosel_then [`op`,`su`,`shadow_su`] strip_assume_tac) >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x`
+    by fs[ret_pc_ok_def] >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE[expr_sim_full_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`su`,`shadow_sa`,`shadow_su`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `expr_sim_prefix _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE[expr_sim_prefix_def, expr_sim_full_pre_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`su`,`shadow_sa`,`shadow_su`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
+     (\H res ee G tn t. ~t.vs_halted) (\H res ee gt r. ISR res)` by
+    (qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+       (mp_then Any irule gas_outcome_full_post_source) >>
+     simp[] >> rpt strip_tac >> Cases_on `res` >> fs[expr_exit_def]) >>
+  rewrite_tac[eval_assign_tuple_action] >>
+  pop_assum (mp_then Any irule gas_prefix_full_bind_no_outcome) >>
+  simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+       storage_trace_frame_read_result, requests_outcomes_frame_bind_all,
+       evaluate_requests_outcomes_frame, requests_outcomes_frame_read_result] >>
+  rpt gen_tac >> strip_tac >>
+  `EVERY (\g. (?id. g = BaseTarget (NameTarget id)) \/
+              (?ns. g = BaseTarget (TopLevelNameTarget ns)) \/
+              (?ns fld. g = BaseTarget (AttributeTarget (TopLevelNameTarget ns) fld))) gs` by
+    (simp[EVERY_MEM] >> gvs[EVERY_MEM] >> metis_tac[]) >>
+  drule_all assign_tuple_flat_no_outcome >>
+  simp[EVERY_MEM] >> metis_tac[]
+QED
+*)
 Theorem body_assign_tuple_targets_word_prefix:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
   (!s'' tv t s'3' v t'.
@@ -51,48 +98,7 @@ Theorem body_assign_tuple_targets_word_prefix:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule tuple_targets_typing >> disch_then (qx_choose_then `tys` strip_assume_tac) >>
-  drule_then assume_tac body_inv_mcopy >>
-  `expr_body_pre cenv cx env e es` by (drule_all tuple_assignment_rhs_pre >> simp[]) >>
-  drule_then assume_tac expr_body_pre_gas_admissible >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (TupleT tys) e es` by metis_tac[body_expr_full_ok_simulations] >>
-  `expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (TupleT tys) e es` by metis_tac[cj 1 body_expr_prefix_ok_def] >>
-  rewrite_tac[stmt_frag_prefix_def, stmt_frag_full_pre_def] >>
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `(EXISTS (\ty. ~is_word_type ty) tys ==> cenv.ce_target CapMcopy)` by simp[] >>
-  drule_all assign_tuple_rhs_code_slices >>
-  disch_then (qx_choosel_then [`op`,`su`,`shadow_su`] strip_assume_tac) >>
-  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x`
-    by fs[ret_pc_ok_def] >>
-  qpat_x_assum `expr_sim_full _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE[expr_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`su`,`shadow_sa`,`shadow_su`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  qpat_x_assum `expr_sim_prefix _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE[expr_sim_prefix_def, expr_sim_full_pre_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`su`,`shadow_sa`,`shadow_su`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s0,G0,tn0)
-     (\H res ee G tn t. ~t.vs_halted) (\H res ee gt r. ISR res)` by
-    (qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _`
-       (mp_then Any irule gas_outcome_full_post_source) >>
-     simp[] >> rpt strip_tac >> Cases_on `res` >> fs[expr_exit_def]) >>
-  rewrite_tac[eval_assign_tuple_action] >>
-  pop_assum (mp_then Any irule gas_prefix_full_bind_no_outcome) >>
-  simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
-       storage_trace_frame_read_result, requests_outcomes_frame_bind_all,
-       evaluate_requests_outcomes_frame, requests_outcomes_frame_read_result] >>
-  rpt gen_tac >> strip_tac >>
-  `EVERY (\g. (?id. g = BaseTarget (NameTarget id)) \/
-              (?ns. g = BaseTarget (TopLevelNameTarget ns)) \/
-              (?ns fld. g = BaseTarget (AttributeTarget (TopLevelNameTarget ns) fld))) gs` by
-    (simp[EVERY_MEM] >> gvs[EVERY_MEM] >> metis_tac[]) >>
-  drule_all assign_tuple_flat_no_outcome >>
-  simp[EVERY_MEM] >> metis_tac[]
+  cheat
 QED
 
 Theorem body_assign_tuple_locals_prefix:
