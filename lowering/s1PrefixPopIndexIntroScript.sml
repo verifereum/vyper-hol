@@ -9,13 +9,10 @@ Theorem pop_prefix_from_smaller_indices:
     body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
     body_const_cells_agree [(NONE,tops)] cx env st /\
     expr_body_pre ce cx env (Pop ann bt) st ==> body_base_target_full_ok cx bt) /\
-  (!x. expr_size x < expr_size (Pop ann bt) ==> body_expr_prefix_ok cx x) ==>
+  (!x. MEM x (target_indices bt) ==> body_expr_prefix_ok cx x) ==>
   body_expr_prefix_ok cx (Pop ann bt)
 Proof
   strip_tac >>
-  `!x. MEM x (target_indices bt) ==> body_expr_prefix_ok cx x` by
-    (rpt strip_tac >> first_x_assum irule >>
-     drule target_indices_size >> simp[expr_size_def] >> decide_tac) >>
   `!t. (!x. MEM x (target_indices t) ==> body_expr_prefix_ok cx x) ==>
        body_base_target_prefix_ok cx t` by
     (ho_match_mp_tac base_assignment_target_induct >>

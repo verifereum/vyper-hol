@@ -31,6 +31,9 @@ val _ = Parse.hide "body";
 
 Theorem body_builtin_case_prefix:
   !cx ty bt es.
+  (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+    EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (vyperTypeCallGraph$int_calls_expr (Builtin ty bt es))) /\
   (!s'' x t v code_ty addr tail_s tail_vs t'.
        type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
        (INL x,t) /\ bt <> Len /\

@@ -4,16 +4,33 @@ Ancestors
   s1PrefixBoolChainGuardedRankInduction s1PrefixBoolChainRankedExprProperHead
 
 Theorem bool_chain_proper_head_from_steps:
-  (!cx h. ~(?ann nid args dr. h = Call ann (IntCall nid) args dr) /\
-     (!a. expr_size a < expr_size h ==> body_expr_prefix_ok cx a) ==>
+  (!cx h. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+            EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+              (vyperTypeCallGraph$int_calls_expr h)) /\
+          ~(?ann nid args dr. h = Call ann (IntCall nid) args dr) /\
+     (!a. expr_size a < expr_size h /\
+        (!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
+          EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+            (vyperTypeCallGraph$int_calls_expr a)) ==> body_expr_prefix_ok cx a) ==>
      body_expr_prefix_ok cx h) ==>
   (!rank cx ann src name es dr.
      LENGTH (remcode cx) <= rank /\
-     (!a. expr_size a < expr_size (Call ann (IntCall (src,name)) es dr) ==>
+     (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+       EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+         (vyperTypeCallGraph$int_calls_expr (Call ann (IntCall (src,name)) es dr))) /\
+     (!a. expr_size a < expr_size (Call ann (IntCall (src,name)) es dr) /\
+        (!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
+          EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+            (vyperTypeCallGraph$int_calls_expr a)) ==>
         body_expr_prefix_ok cx a) /\
-     (!c a. LENGTH (remcode c) < rank ==> body_expr_prefix_ok c a) /\
+     (!c a. LENGTH (remcode c) < rank /\
+       (!ts. ALOOKUP c.sources c.txn.target = SOME [(NONE,ts)] ==>
+          EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+            (vyperTypeCallGraph$int_calls_expr a)) ==> body_expr_prefix_ok c a) /\
      (!c ys. LENGTH (remcode c) < rank /\
         (!ts. ALOOKUP c.sources c.txn.target = SOME [(NONE,ts)] ==>
+           EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+             (vyperTypeCallGraph$int_calls_stmts ys) /\
            stmts_loop_calls_ok [(NONE,ts)] ys) ==>
         body_stmts_prefix_ok c ys) ==>
      body_expr_prefix_ok cx (Call ann (IntCall (src,name)) es dr)) ==>
@@ -22,6 +39,8 @@ Theorem bool_chain_proper_head_from_steps:
      sf shadow_sf.
     builtin_args_length_ok (BoolChain p n) (LENGTH [e]) /\
     body_expr_prefix_ok cx e /\
+    EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (vyperTypeCallGraph$int_calls_expr e) /\
     bool_chain_full_ok cx (bool_chain_operands p (n - 1) e) /\
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     body_const_cells_agree [(NONE,tops)] cx env es /\

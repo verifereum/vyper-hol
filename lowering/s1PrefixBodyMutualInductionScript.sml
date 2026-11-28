@@ -8,7 +8,8 @@ Ancestors
   s1PrefixSend s1PrefixCreateHeld s1PrefixPreds bodySimFullMain bodyFullPreds
   vyperInterpreter vyperState vyperContext vyperAST vyperTypeCallGraph
   vyperTypeContract[qualified,ignore_grammar] constSubst bodyLoopCalls alist list
-  gasContext supportedProgram
+  gasContext supportedProgram s1PrefixSyntaxCalls bodyCallLiveness rich_list
+  bodyStorageCases[qualified] vyperCreate[qualified]
 
 val _ = Parse.hide "body";
 
@@ -73,7 +74,10 @@ val outstanding_cases = ``
          stmt_loop_calls_ok [(NONE,tops)] (For id typ it n body)) ==>
     body_stmt_prefix_ok cx (For id typ it n body)) /\
   (!cx ty bt es.
-    (!s'' x t v code_ty addr tail_s tail_vs t'.
+    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+      EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+        (vyperTypeCallGraph$int_calls_expr (Builtin ty bt es))) /\
+        (!s'' x t v code_ty addr tail_s tail_vs t'.
          type_check (builtin_args_length_ok bt (LENGTH es)) "Builtin args" s'' =
          (INL x,t) /\ bt <> Len /\
          bt <> Env MsgGas /\ code_slice_source bt es = SOME v /\
@@ -171,7 +175,8 @@ val outstanding_cases = ``
     body_exprs_prefix_ok cx es ==>
     body_expr_prefix_ok cx (Call ty (RawCallCalldataTarget flags) es v19))``;
 
-val source_conditions = ``\tops.
+val source_conditions = ``\cx tops.
+  IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
   struct_args_unique tops /\
   (!vis mut nr raw fn args dflts ret ss.
      MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -182,43 +187,63 @@ val prefix_ind = evaluate_ind
   |> Q.SPECL [
      `\cx s. LENGTH (remcode cx) <= rank /\
               (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                ^source_conditions tops /\ stmt_loop_calls_ok [(NONE,tops)] s) ==>
+                ^source_conditions cx tops /\
+                EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                  (vyperTypeCallGraph$int_calls_stmt s) /\ stmt_loop_calls_ok [(NONE,tops)] s) ==>
               body_stmt_prefix_ok cx s`,
      `\cx ss. LENGTH (remcode cx) <= rank /\
                (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 ^source_conditions tops /\ stmts_loop_calls_ok [(NONE,tops)] ss) ==>
+                 ^source_conditions cx tops /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_stmts ss) /\ stmts_loop_calls_ok [(NONE,tops)] ss) ==>
                body_stmts_prefix_ok cx ss`,
      `\cx it. LENGTH (remcode cx) <= rank /\
                (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 ^source_conditions tops) ==>
+                 ^source_conditions cx tops /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_iterator it)) ==>
                body_iterator_prefix_ok cx it`,
      `\cx tyv nm body vs. LENGTH (remcode cx) <= rank /\
                (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 ^source_conditions tops /\ stmts_loop_calls_ok [(NONE,tops)] body) ==>
+                 ^source_conditions cx tops /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_stmts body) /\ stmts_loop_calls_ok [(NONE,tops)] body) ==>
                body_for_prefix_ok cx tyv nm body vs`,
      `\cx e. LENGTH (remcode cx) <= rank /\
               (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                ^source_conditions tops) ==>
+                ^source_conditions cx tops /\
+                EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                  (vyperTypeCallGraph$int_calls_expr e)) ==>
               body_expr_prefix_ok cx e`,
      `\cx es. LENGTH (remcode cx) <= rank /\
                (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                 ^source_conditions tops) ==>
+                 ^source_conditions cx tops /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_exprs es)) ==>
                body_exprs_prefix_ok cx es`,
      `\cx t. LENGTH (remcode cx) <= rank /\
               (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                ^source_conditions tops) ==>
+                ^source_conditions cx tops /\
+                EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                  (vyperTypeCallGraph$int_calls_target t)) ==>
               body_base_target_prefix_ok cx t`,
      `\cx t. LENGTH (remcode cx) <= rank /\
               (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                ^source_conditions tops) ==>
+                ^source_conditions cx tops /\
+                EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                  (vyperTypeCallGraph$int_calls_target t)) ==>
               body_base_target_prefix_ok cx t`,
      `\cx g v. LENGTH (remcode cx) <= rank /\
                 (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                  ^source_conditions tops) ==>
+                  ^source_conditions cx tops /\
+                  EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                    (vyperTypeCallGraph$int_calls_atarget g)) ==>
                 body_tuple_target_prefix_ok cx g v`,
      `\cx gs vs. LENGTH (remcode cx) <= rank /\
                   (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
-                    ^source_conditions tops) ==>
+                    ^source_conditions cx tops /\
+                    EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                      (vyperTypeCallGraph$int_calls_atargets gs)) ==>
                   body_tuple_targets_prefix_ok cx gs vs`]
   |> CONV_RULE (DEPTH_CONV BETA_CONV)
   |> REWRITE_RULE [GSYM CONJ_ASSOC];
@@ -231,10 +256,49 @@ val case_simps =
 
 val full_children = CONJUNCTS body_sim_full_mutual;
 
+val syntax_calls =
+  [int_calls_stmt_def, int_calls_expr_def, int_calls_iterator_def,
+   int_calls_atarget_def, int_calls_assert_reason_def, int_calls_raise_reason_def,
+   GSYM vyperTypeEvalProofsTheory.int_calls_exprs_MAP_SND, EVERY_APPEND];
+
+Theorem int_calls_window[local]:
+  EVERY P (int_calls_exprs xs) ==>
+  EVERY P (int_calls_exprs (TAKE n xs)) /\
+  EVERY P (int_calls_exprs (DROP n xs)) /\
+  EVERY P (int_calls_exprs (TAKE m (DROP n xs)))
+Proof
+  simp[int_calls_exprs_members] >> metis_tac[MEM_TAKE, MEM_DROP_IMP]
+QED
+
+Theorem int_calls_create_operands[local]:
+  EVERY P (int_calls_exprs es) ==>
+  EVERY P (int_calls_exprs (create_operand_order kind has_salt es))
+Proof
+  Cases_on `kind` >> Cases_on `es` >>
+  simp[vyperCreateTheory.create_operand_order_def,
+       bodyStorageCasesTheory.body_exprs_main_calls_every,
+       EVERY_APPEND, EVERY_TAKE, EVERY_DROP] >>
+  Cases_on `t` >> simp[vyperCreateTheory.create_operand_order_def,
+       EVERY_APPEND, EVERY_TAKE, EVERY_DROP]
+QED
+
+val operand_calls =
+  int_calls_create_operands ::
+  map (DISCH (lhand (concl int_calls_window))) (CONJUNCTS (UNDISCH int_calls_window));
+
+val inherited_operand_calls =
+  FIRST (map (fn th => match_mp_tac (GEN_ALL th) >> first_assum ACCEPT_TAC >> NO_TAC) operand_calls);
+
 val from_source =
   rpt gen_tac >> disch_tac >>
-  qpat_assum `!xs. ALOOKUP _ _ = SOME [(NONE,xs)] ==> _` drule >>
-  simp[loop_calls];
+  qpat_assum `!xs. ALOOKUP _ _ = SOME [(NONE,xs)] ==> _`
+    (drule_then strip_assume_tac) >>
+  fs (loop_calls :: syntax_calls) >> rpt conj_tac >>
+  TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  TRY inherited_operand_calls >>
+  TRY (drule_all_then (fn th => ACCEPT_TAC (CONJUNCT1 th) ORELSE
+      ACCEPT_TAC (CONJUNCT2 th)) code_slice_source_calls >> NO_TAC) >>
+  metis_tac[ordered_custom_error_calls];
 
 val full_child = FIRST (map irule full_children) >> from_source;
 
@@ -261,8 +325,8 @@ fun conditional i = without_smaller_rank
   (asm_x "case_rules" (prefix_case o el i o CONJUNCTS));
 fun structural tac = without_smaller_rank (asm_x "case_rules" kall_tac >> tac);
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem body_sim_prefix_mutual_ranked[local]:
+  ^outstanding_cases ==> !rank:num. ^(snd (dest_imp (concl prefix_ind)))
 Proof
   disch_then (mk_asm "case_rules") >> completeInduct_on `rank` >>
   mp_tac prefix_ind >> impl_tac
@@ -291,8 +355,9 @@ Proof
       >- direct body_expr_stmt_case_prefix
       >- direct body_stmts_nil_case_prefix
       >- direct body_stmts_cons_case_prefix
-      >- structural (simp[body_iterator_prefix_ok_def])
-      >- structural (rpt strip_tac >> fs[] >> rw[body_iterator_prefix_ok_def] >> metis_tac[])
+      >- structural (simp[body_iterator_prefix_ok_def, int_calls_iterator_def] >> metis_tac[])
+      >- structural (rpt strip_tac >> fs[] >> rw[body_iterator_prefix_ok_def] >>
+                     metis_tac[int_calls_iterator_def, EVERY_APPEND])
       >- structural (simp[body_for_prefix_ok_def])
       >- structural (rpt strip_tac >> fs[] >> rw[body_for_prefix_ok_def] >>
                      first_x_assum irule >> simp[push_scope_with_var_def, return_def] >>
@@ -305,62 +370,100 @@ Proof
       >- direct structlit_expr_prefix_ok
       >- direct s1PrefixSubscriptCaseTheory.body_subscript_case_prefix
       >- direct attribute_expr_prefix_ok
-      >- conditional 4
+      >- suspend "builtin"
       >- direct s1PrefixPopTheory.body_pop_case_prefix
       >- direct s1PrefixTypeBuiltinGuardedTheory.body_type_builtin_case_prefix
       >- direct body_send_case_prefix
-      >- direct body_extcall_case_prefix
+      >- suspend "extcall"
       >- suspend "intcall"
       >- direct body_raw_call_case_prefix
       >- conditional 6
       >- direct body_raw_log_case_prefix
       >- direct body_raw_revert_case_prefix
       >- direct body_selfdestruct_case_prefix
-      >- structural (rpt gen_tac >> Cases_on `kind` >>
-                     FIRST (map prefix_case
-                       [create_minimal_proxy_expr_prefix_ok, create_copy_expr_prefix_ok,
-                        create_blueprint_expr_prefix_ok, raw_create_expr_prefix_ok]))
+      >- suspend "create"
       >- structural (simp[body_exprs_prefix_ok_def])
-      >- structural (rpt strip_tac >> fs[] >> rw[body_exprs_prefix_ok_def] >> metis_tac[])
+      >- structural (simp[body_exprs_prefix_ok_def, int_calls_expr_def, EVERY_APPEND] >>
+                     rpt strip_tac >> metis_tac[])
       >- structural (simp[body_base_target_prefix_ok_def])
       >- structural (simp[body_base_target_prefix_ok_def])
-      >- structural (simp[body_base_target_prefix_ok_def])
-      >- structural (rpt strip_tac >> fs[] >> rw[body_base_target_prefix_ok_def] >> metis_tac[])
+      >- structural (simp[body_base_target_prefix_ok_def, int_calls_expr_def] >> metis_tac[])
+      >- structural (simp[body_base_target_prefix_ok_def, int_calls_expr_def, EVERY_APPEND] >>
+                     rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[])
+      >- structural (simp[body_tuple_target_prefix_ok_def, int_calls_atarget_def] >> metis_tac[])
+      >- structural (simp[body_tuple_target_prefix_ok_def, int_calls_atarget_def] >> metis_tac[])
       >- structural (simp[body_tuple_target_prefix_ok_def])
-      >- structural (simp[body_tuple_target_prefix_ok_def] >> rpt strip_tac >> metis_tac[])
-      >- structural (simp[body_tuple_target_prefix_ok_def])
-      >- structural (rpt strip_tac >> fs[] >> rw[body_tuple_target_prefix_ok_def] >> metis_tac[])
+      >- structural (simp[body_tuple_target_prefix_ok_def, int_calls_atarget_def, EVERY_APPEND] >>
+                     rpt strip_tac >> first_x_assum irule >> simp[] >> metis_tac[])
       >- structural (simp[body_tuple_target_prefix_ok_def])
       >- structural (simp[body_tuple_target_prefix_ok_def])
       >> structural (simp[body_tuple_target_prefix_ok_def])) >>
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
-*)
-Theorem body_sim_prefix_mutual_ranked[local]:
-  ^outstanding_cases ==> !rank:num. ^(snd (dest_imp (concl prefix_ind)))
-Proof
-  cheat
+
+Resume body_sim_prefix_mutual_ranked[builtin]:
+  without_smaller_rank (asm_x "case_rules"
+    (apply_prefix_rule o el 4 o CONJUNCTS)) >>
+  asm_rewrite_tac[] >>
+  rpt conj_tac >> rpt strip_tac >>
+  TRY (qpat_x_assum `(v : type # expr) = (code_ty,addr)` SUBST_ALL_TAC) >>
+  TRY (qpat_assum `code_slice_source bt es = SOME (_,_)`
+         (strip_assume_tac o REWRITE_RULE [code_slice_source_SOME]) >>
+       gvs[code_slice_source_def, int_calls_expr_def, EVERY_APPEND]) >>
+  TRY (qpat_x_assum `bt = Len` SUBST_ALL_TAC >>
+       `LENGTH es = 1` by fs[type_check_def, assert_def, builtin_args_length_ok_def] >>
+       gvs[LENGTH_EQ_1]) >>
+  FIRST [full_child >> NO_TAC, prefix_child,
+         from_source >> NO_TAC, metis_tac[]]
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
+Resume body_sim_prefix_mutual_ranked[extcall]:
+  without_smaller_rank (asm_x "case_rules" kall_tac) >>
+  apply_prefix_rule body_extcall_case_prefix >>
+  asm_rewrite_tac[] >>
+  rpt conj_tac >> rpt strip_tac >>
+  FIRST [full_child >> NO_TAC, prefix_child]
+QED
+
+Resume body_sim_prefix_mutual_ranked[create]:
+  without_smaller_rank (asm_x "case_rules" kall_tac) >>
+  rpt gen_tac >> Cases_on `kind` >>
+  FIRST (map apply_prefix_rule
+    [create_minimal_proxy_expr_prefix_ok, create_copy_expr_prefix_ok,
+     create_blueprint_expr_prefix_ok, raw_create_expr_prefix_ok]) >>
+  asm_rewrite_tac[] >>
+  rpt conj_tac >> rpt strip_tac >>
+  FIRST [full_child >> NO_TAC, prefix_child]
+QED
+
 Resume body_sim_prefix_mutual_ranked[intcall]:
   rpt strip_tac >> full_simp_tac bool_ss case_simps >>
   asm_x "case_rules" (match_mp_tac o SIMP_RULE bool_ss case_simps o el 5 o CONJUNCTS) >>
   conj_tac
-  >- (rpt gen_tac >> strip_tac >> conj_tac
-      >- (FIRST (map irule full_children) >> simp[evaluation_context_accfupds] >>
-          gen_tac >> strip_tac >>
-          `cx_tops cx = tops` by fs[cx_tops_def, get_module_code_def, ALOOKUP_def] >>
-          qpat_assum `!xs. ALOOKUP _ _ = SOME [(NONE,xs)] ==> _` drule >>
-          strip_tac >> simp[] >>
-          conj_tac >- first_assum ACCEPT_TAC >>
-          irule callable_body_loop_calls_ok >> metis_tac[]) >>
-      FIRST (map irule full_children) >> simp[evaluation_context_accfupds] >>
-      from_source) >>
-  conj_tac >- (rpt strip_tac >> full_child) >>
+  >- (qpat_x_assum `!m:num. m < rank ==> _` kall_tac >>
+       rpt gen_tac >> strip_tac >> conj_tac >>
+       FIRST (map irule full_children) >> simp[evaluation_context_accfupds] >>
+       gen_tac >> disch_tac >>
+       qpat_assum `!xs. ALOOKUP cx.sources _ = SOME [(NONE,xs)] ==> _`
+         (drule_then strip_assume_tac) >>
+       qpat_x_assum `EVERY _ (int_calls_expr (Call _ (IntCall _) _ _))`
+         (strip_assume_tac o SIMP_RULE bool_ss [int_calls_expr_def, EVERY_DEF]) >>
+       `cx_tops cx = tops` by fs[cx_tops_def, get_module_code_def, ALOOKUP_def] >>
+       asm_rewrite_tac[] >> rpt conj_tac >>
+       TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+       TRY (drule_all_then ACCEPT_TAC callable_body_loop_calls_ok >> NO_TAC) >>
+       Cases_on `src_id_opt` >>
+       gvs[get_module_code_def, ALOOKUP_def, optionTheory.IS_SOME_EXISTS] >>
+       drule_all_then strip_assume_tac callable_compiled_calls_live >>
+       TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+       qpat_assum `!n. EVERY _ (int_calls_exprs (DROP n _))` irule >>
+       simp[]) >>
+  conj_tac >- without_smaller_rank (rpt strip_tac >> full_child) >>
   conj_tac
   >- (match_mp_tac intcall_callee_prefix_ih >> asm_rewrite_tac[] >>
-      conj_tac >> gen_tac >> strip_tac >>
+      conj_tac >- from_source >>
+      conj_tac >- from_source >>
+      conj_tac >> gen_tac >> disch_tac >>
       qpat_assum `!m:num. m < rank ==> _` (drule_then strip_assume_tac) >>
       first_assum ACCEPT_TAC) >>
   rpt strip_tac >> gvs[] >> without_smaller_rank
@@ -378,15 +481,15 @@ Resume body_sim_prefix_mutual_ranked[intcall]:
   qpat_assum `type_check _ "IntCall args length" _ = _`
     (part_match_exists_tac I o concl) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_sim_prefix_mutual_ranked
-*)
 
 Theorem body_sim_prefix_mutual_from_cases:
   ^outstanding_cases ==>
   ((!cx s. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_stmt s) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -395,6 +498,9 @@ Theorem body_sim_prefix_mutual_from_cases:
                  stmt_loop_calls_ok [(NONE,tops)] s) ==>
     body_stmt_prefix_ok cx s) /\
   (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_stmts ss) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -403,6 +509,9 @@ Theorem body_sim_prefix_mutual_from_cases:
                  stmts_loop_calls_ok [(NONE,tops)] ss) ==>
     body_stmts_prefix_ok cx ss) /\
   (!cx it. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_iterator it) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -410,6 +519,9 @@ Theorem body_sim_prefix_mutual_from_cases:
                       (subst_consts_stmts (module_consts_env tops []) ss))) ==>
     body_iterator_prefix_ok cx it) /\
   (!cx tyv nm body vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_stmts body) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -418,6 +530,9 @@ Theorem body_sim_prefix_mutual_from_cases:
                  stmts_loop_calls_ok [(NONE,tops)] body) ==>
     body_for_prefix_ok cx tyv nm body vs) /\
   (!cx e. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_expr e) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -425,6 +540,9 @@ Theorem body_sim_prefix_mutual_from_cases:
                       (subst_consts_stmts (module_consts_env tops []) ss))) ==>
     body_expr_prefix_ok cx e) /\
   (!cx es. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_exprs es) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -432,6 +550,9 @@ Theorem body_sim_prefix_mutual_from_cases:
                       (subst_consts_stmts (module_consts_env tops []) ss))) ==>
     body_exprs_prefix_ok cx es) /\
   (!cx t. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_target t) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -439,6 +560,9 @@ Theorem body_sim_prefix_mutual_from_cases:
                       (subst_consts_stmts (module_consts_env tops []) ss))) ==>
     body_base_target_prefix_ok cx t) /\
   (!cx g v. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_atarget g) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -446,6 +570,9 @@ Theorem body_sim_prefix_mutual_from_cases:
                       (subst_consts_stmts (module_consts_env tops []) ss))) ==>
     body_tuple_target_prefix_ok cx g v) /\
   (!cx gs vs. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_atargets gs) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret ss.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret ss) tops ==>
@@ -456,5 +583,6 @@ Proof
   disch_then (mp_tac o MATCH_MP body_sim_prefix_mutual_ranked) >>
   disch_then (mk_asm "ranked") >> rpt conj_tac >> rpt gen_tac >> strip_tac >>
   asm_x "ranked" (qspec_then `LENGTH (remcode cx)` strip_assume_tac) >>
-  first_x_assum irule >> asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL]
+  first_x_assum irule >> asm_rewrite_tac[arithmeticTheory.LESS_EQ_REFL] >>
+  rpt strip_tac >> res_tac >> asm_rewrite_tac[]
 QED

@@ -10,6 +10,8 @@ Theorem bool_chain_actual_entry_certificate:
      sf shadow_sf.
     builtin_args_length_ok (BoolChain p n) (LENGTH [e]) /\
     body_expr_prefix_ok cx e /\
+    EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (vyperTypeCallGraph$int_calls_expr e) /\
     bool_chain_full_ok cx (bool_chain_operands p (n - 1) e) /\
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     body_const_cells_agree [(NONE,tops)] cx env es /\
@@ -62,9 +64,14 @@ Theorem bool_chain_actual_entry_certificate:
 Proof
   rpt gen_tac >>
   disch_then (fn th =>
-    mk_asm "alternative" (MATCH_MP bool_chain_actual_head_alternative th) >>
-    mk_asm "proper" (MATCH_MP bool_chain_proper_head_prefix th) >>
-    match_mp_tac (MATCH_MP bool_chain_certificate_from_actual_operand th)) >>
+    let
+      val other_prems =
+        LIST_CONJ (List.take (CONJUNCTS th, 2) @ List.drop (CONJUNCTS th, 3))
+    in
+      mk_asm "alternative" (MATCH_MP bool_chain_actual_head_alternative other_prems) >>
+      mk_asm "proper" (MATCH_MP bool_chain_proper_head_prefix th) >>
+      match_mp_tac (MATCH_MP bool_chain_certificate_from_actual_operand other_prems)
+    end) >>
   rpt gen_tac >> strip_tac >>
   asm_x "alternative" (drule_all_then strip_assume_tac)
   >- (rename1 `expr_size a < expr_size e` >>
