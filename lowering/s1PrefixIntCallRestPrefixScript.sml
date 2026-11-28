@@ -2,7 +2,8 @@
 Theory s1PrefixIntCallRestPrefix
 Ancestors
   s1PrefixIntCallCallee s1PrefixIntCallReturnPrefix bodyFullIntCall
-  bodyFullIntCallDefs bodyFullIntCallReturnSource fragGasFocus ptrSafeRun
+  bodyFullIntCallDefs bodyFullIntCallReturnSource bodyInvCodeProps
+  contractInvContextProps fragGasFocus ptrSafeRun
 
 Theorem intcall_entry_rest_prefix:
   body_inv tops ctx cenv cx /\
@@ -55,6 +56,14 @@ Proof
   `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
       sa sb vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
     (first_assum MATCH_MP_TAC >> first_assum ACCEPT_TAC) >>
+  drule_then assume_tac bodySimTheory.body_inv_contract >>
+  drule_then assume_tac contract_inv_singleton_source_modules >>
+  drule_then strip_assume_tac body_inv_module_locations >>
+  drule_then assume_tac bodyInvSplitTheory.contract_inv_immutable_section_layout >>
+  `intcall_entry_full_mods (DF,lo,d) H [(NONE,tops)] NONE tops
+      ctx func cenv cx tenv name es sa sb vv s0 es0 G0 tn0
+      (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
+    asm_simp_tac bool_ss [intcall_entry_full_mods_singleton] >>
   `((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
      body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
        (subst_consts_stmts (module_consts_env tops []) ss)) /\

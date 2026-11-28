@@ -8,6 +8,7 @@ Ancestors
   s1PrefixBoolChainSelectedLockedLift s1PrefixFrame
   s1PrefixDefs s1PrefixIntCallStageList vyperInterpreter vyperStorageTrace vyperState
   exprLowering compileEnv vyperStorageFootprint bodyFullIntCallArgs exprBodyPreProps list
+  contractInvContextProps compileUnit[qualified] bodyIntCallSeams[qualified] alist
 
 Theorem selected_entry_rest_prefix[local]:
   body_inv tops ctx cenv cx /\
@@ -56,6 +57,13 @@ Proof
   `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
      sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
     (first_assum irule >> first_assum ACCEPT_TAC) >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac contract_inv_singleton_source_modules >>
+  drule_then assume_tac contract_inv_immutable_section_layout >>
+  `cenv.ce_module = NONE` by (drule body_inv_module_locations >> simp[]) >>
+  `intcall_entry_full_mods (DF,lo,d) H [(NONE,tops)] NONE tops ctx func cenv cx tenv name es
+     sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
+    asm_simp_tac bool_ss [intcall_entry_full_mods_singleton] >>
   `((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
         (subst_consts_stmts (module_consts_env tops []) ss))` by
@@ -276,6 +284,10 @@ Resume bool_chain_defaults_to_invoke_projected_prefix[native_entry]:
          ACCEPT_TAC (CONJUNCT1 (REWRITE_RULE [expr_sim_inv_split_def,code] th))))) >>
   `cenv.ce_module = NONE` by
     fs[body_inv_split_def, cenv_module_pins_split_def, cenv_module_pins_mods_def] >>
+  `cenv with ce_module := NONE = cenv` by simp[compile_env_component_equality] >>
+  drule_then assume_tac body_inv_contract >>
+  drule_then assume_tac contract_inv_singleton_source_modules >>
+  drule_then assume_tac contract_inv_immutable_section_layout >>
   `?penv tv.
      ~u.vs_halted /\
      compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
@@ -296,10 +308,18 @@ Resume bool_chain_defaults_to_invoke_projected_prefix[native_entry]:
      (?H. valid_horizon cx st0 H ed.storage_trace) /\
      gas_admissible (bind (intcall_rest cx name mut nr ss ed.scopes tv) f)
        P (ed with scopes := [penv])` by
-    (irule (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
-       (PURE_REWRITE_RULE [APPEND] intcall_args_after_defaults_data)) >>
-     qpat_assum `body_inv tops ctx cenv cx`
-       (strip_assume_tac o REWRITE_RULE [body_inv_split_def]) >>
+    (drule_all_then
+       (fn entry =>
+         qpat_assum `cenv with ce_module := NONE = cenv` (fn repin =>
+           irule (intcall_args_after_defaults_data
+             |> Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
+                         `caller_src` |-> `NONE`, `caller_tops` |-> `tops`,
+                         `src` |-> `NONE`, `vis` |-> `Internal`]
+             |> PURE_REWRITE_RULE [APPEND, ALOOKUP_def,
+                  compileUnitTheory.make_struct_fields_map_mods_singleton,
+                  GSYM bodyIntCallSeamsTheory.intcall_rest_singleton_def, entry, repin])))
+       intcall_entry_full_mods_singleton >>
+     drule_then assume_tac body_inv_module >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
      TRY (qexists_tac `rtv` >> first_assum ACCEPT_TAC >> NO_TAC) >>
      TRY (map_every qexists_tac
@@ -307,7 +327,8 @@ Resume bool_chain_defaults_to_invoke_projected_prefix[native_entry]:
         `gas_explicit_sites ctx shadow_ctx`,`ilabel`,`marks`,`pin`,`pvs`,`rbs`,`result_count`,
         `st2`,`st2a`,`st3`,`sup_ops`,`t`,`tna`,`ws1`,`svs`]) >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-     simp[nsid_to_string_def] >> first_assum ACCEPT_TAC) >>
+     simp_tac bool_ss [nsid_to_string_def] >>
+     TRY (first_assum (ACCEPT_TAC o REWRITE_RULE [nsid_to_string_def]))) >>
   suspend "continuation"
 QED
 

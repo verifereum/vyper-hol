@@ -9,16 +9,16 @@ Ancestors context[qualified,ignore_grammar]
   valueEncodingProofs valueCopyBytes bodyFullIntCallReturnMetadata
   exprLoweringProps exprSimDefs exprSimAggregates
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
-  gasOutcomeFullMods[qualified]
+  gasOutcomeFullMods[qualified] bodyFullPostsMods[qualified]
 
 Libs
   monadsyntax
 
 Theorem intcall_return_source[local]:
-  !cx name mut nr ss st v ee out prev rtv.
-    intcall_callee_src cx name mut nr ss st = (INL v,ee) /\
+  !cx src name mut nr ss st v ee out prev rtv.
+    intcall_callee_src_at cx src name mut nr ss st = (INL v,ee) /\
     unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),out) ==>
-    intcall_rest cx name mut nr ss prev rtv st =
+    intcall_rest_at cx src name mut nr ss prev rtv st =
       case safe_cast rtv v of
         NONE => (INR (Error (TypeError "IntCall cast ret")),out with scopes := prev)
       | SOME cv => (INL (Value cv),out with scopes := prev)
@@ -26,9 +26,9 @@ Proof
   rpt gen_tac >>
   Cases_on `lock_if_nr cx nr (is_view_mut mut) st` >>
   Cases_on `q` >>
-  simp[intcall_callee_src_def, ignore_bind_def, bind_def] >>
+  simp[intcall_callee_src_at_def, ignore_bind_def, bind_def] >>
   strip_tac >>
-  gvs[intcall_rest_def, ignore_bind_def, bind_def,
+  gvs[intcall_rest_at_def, ignore_bind_def, bind_def,
       finally_def, finally_unless_halt_def,
       pop_function_def, set_scopes_def,
       lift_option_type_def, lift_option_def, return_def] >>
@@ -73,14 +73,16 @@ Proof
 QED
 *)
 Theorem intcall_return_caller_frame[local]:
- !tops ctx func cenv cx tenv name es sa sm vv s0 es0 DF lo d H G0 tn0
+ !mods exps caller_src caller_tops src callee_tops ctx func cenv cx tenv name es sa sm vv s0 es0 DF lo d H G0 tn0
   mut nr args ret ss rr prev penv rtv es1 t G tn rc rb v ee Gc tc ir cs
   out outs returned.
- body_inv tops ctx cenv cx /\
- intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
+ (contract_inv mods exps ctx cenv cx /\
+  module_body_inv mods caller_src caller_tops cenv cx) /\
+ ALOOKUP mods src = SOME callee_tops /\
+ intcall_entry_full_mods (DF,lo,d) H mods src callee_tops ctx func cenv cx tenv name es sa sm vv
    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
  local_ptrs_reserved cenv sa /\
- intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc rb
+ intcall_callee_exit_full_mods mods (DF,lo) H func cenv cx mut nr rtv rc rb
    sa.cs_next_id sm.cs_next_id t tn (INL v) ee (Gc,tc) (IntRet ir cs) /\
  unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),out) /\
  bind_outputs outs ir.iret_values
@@ -278,20 +280,21 @@ Proof
 QED
 *)
 Theorem intcall_return_register_frame_certificate:
- !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0
+ !mods exps caller_src caller_tops src callee_tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn
   rc rbs pvs v ee Gc tc ir cs returned out outs rbuf root off st4 stored Gs ts.
  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
- expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
- compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
+     module_body_inv mods caller_src caller_tops cenv cx) /\
+ ALOOKUP mods src = SOME callee_tops /\
+ expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
+ compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt) sa = (vv,sm) /\
  local_ptrs_reserved cenv sa /\ dead_lo_ok H (DF H) lo cenv cx /\
  (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
  (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
- intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
+ intcall_entry_full_mods (DF,lo,d) H mods src callee_tops ctx func cenv cx tenv name es sa sm vv
    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
- cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\ 0 < rc /\
- intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc NONE
+ cenv.ce_func_info (nsid_to_string (src,name)) = (rc,rbs,pvs) /\ 0 < rc /\
+ intcall_callee_exit_full_mods mods (DF,lo) H func cenv cx mut nr rtv rc NONE
    sa.cs_next_id sm.cs_next_id t tn (INL v) ee (Gc,tc) (IntRet ir cs) /\
  unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),out) /\ safe_cast rtv v = SOME v /\
  bind_outputs outs ir.iret_values
@@ -303,7 +306,7 @@ Theorem intcall_return_register_frame_certificate:
    (DRESTRICT G (COMPL (set outs)))
    (tc with t_var := DRESTRICT tn.t_var (COMPL (set outs))) returned /\
  rbuf.buf_operand = Var root /\ rbuf.buf_size = 32 * rc /\
- vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (NONE,name))) (base_ptr rbuf) /\
+ vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (src,name))) (base_ptr rbuf) /\
  eval_operand rbuf.buf_operand t = SOME (n2w off) /\
  FLOOKUP t.vs_allocas sa.cs_next_id = SOME (off,rbuf.buf_size) /\
  sa.cs_next_id < sm.cs_next_id /\ lo <= off /\
@@ -326,13 +329,13 @@ Theorem intcall_return_register_frame_certificate:
  stmt_state_rel H ctx func cenv cx (out with scopes := prev)
    (stored with vs_inst_idx := LENGTH sm.cs_current_insts) /\
  storage_well_formed_on cx (out with scopes := prev) (FST H) /\
- vv_at cenv cx (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
+ vv_at cenv cx (post_value_type cenv (Call ann (IntCall (src,name)) es dflt))
    sa sm (out with scopes := prev) (Value v) vv
    (stored with vs_inst_idx := LENGTH sm.cs_current_insts) /\
- vv_own cenv cx (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
+ vv_own cenv cx (post_value_type cenv (Call ann (IntCall (src,name)) es dflt))
    sa sm (out with scopes := prev) (Value v) vv
    (stored with vs_inst_idx := LENGTH sm.cs_current_insts) /\
- (~expr_has_effect (Call ann (IntCall (NONE,name)) es dflt) ==>
+ (~expr_has_effect (Call ann (IntCall (src,name)) es dflt) ==>
   vv_storage_live H cx vv (out with scopes := prev)
     (stored with vs_inst_idx := LENGTH sm.cs_current_insts)) /\
  (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==>
@@ -345,7 +348,7 @@ Theorem intcall_return_register_frame_certificate:
    mem_bytes_at b sz stored.vs_memory = mem_bytes_at b sz s0.vs_memory) /\
  locals_kept cenv es0 (out with scopes := prev) s0
    (stored with vs_inst_idx := LENGTH sm.cs_current_insts) /\
- (~expr_has_effect (Call ann (IntCall (NONE,name)) es dflt) ==>
+ (~expr_has_effect (Call ann (IntCall (src,name)) es dflt) ==>
   pure_frame cenv func es0 sa s0
     (stored with vs_inst_idx := LENGTH sm.cs_current_insts)) /\
  ghost_inv_at (DF H) lo d cenv cx (out with scopes := prev) Gs ts
@@ -627,22 +630,25 @@ Proof
 QED
 *)
 Theorem intcall_return_register_post:
-  !tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0
+  !mods exps caller_src caller_tops src callee_tops vis ctx func cenv cx
+   tenv ty ann name es dflt es0 sa sm vv s0
    DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn
    rc rbs pvs v ee Gc tc ir cs returned out outs rbuf root off st4 stored Gs ts bb inst dflts.
   (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-  compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
+     module_body_inv mods caller_src caller_tops cenv cx) /\
+  ALOOKUP mods src = SOME callee_tops /\
+  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
+  (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) callee_tops /\
+  compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt) sa = (vv,sm) /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ dead_lo_ok H (DF H) lo cenv cx /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
+  intcall_entry_full_mods (DF,lo,d) H mods src callee_tops ctx func cenv cx tenv name es sa sm vv
     s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
-  cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\ 0 < rc /\
-  intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc NONE
+  cenv.ce_func_info (nsid_to_string (src,name)) = (rc,rbs,pvs) /\ 0 < rc /\
+  intcall_callee_exit_full_mods mods (DF,lo) H func cenv cx mut nr rtv rc NONE
     sa.cs_next_id sm.cs_next_id t tn (INL v) ee (Gc,tc) (IntRet ir cs) /\
   unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),out) /\ safe_cast rtv v = SOME v /\
   bind_outputs outs ir.iret_values
@@ -657,7 +663,7 @@ Theorem intcall_return_register_post:
     (DRESTRICT G (COMPL (set outs)))
     (tc with t_var := DRESTRICT tn.t_var (COMPL (set outs))) /\
   rbuf.buf_operand = Var root /\ rbuf.buf_size = 32 * rc /\
-  vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (NONE,name))) (base_ptr rbuf) /\
+  vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (src,name))) (base_ptr rbuf) /\
   eval_operand rbuf.buf_operand t = SOME (n2w off) /\
   FLOOKUP t.vs_allocas sa.cs_next_id = SOME (off,rbuf.buf_size) /\
   sa.cs_next_id < sm.cs_next_id /\ lo <= off /\
@@ -685,11 +691,11 @@ Theorem intcall_return_register_post:
      mem_word_at (off + 32 * i) mem = EL i ir.iret_values) /\
   (!a len. a + len <= off \/ off + 32 * rc <= a ==>
      mem_bytes_at a len stored.vs_memory = mem_bytes_at a len returned.vs_memory) ==>
-  vv_post H ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
+  vv_post_mods H ctx func cenv cx (Call ann (IntCall (src,name)) es dflt)
     es0 sa sm s0 (out with scopes := prev) (Value v) vv
     (stored with vs_inst_idx := LENGTH sm.cs_current_insts) /\
-  vv_store_bound cx (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
-    (lowered_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
+  vv_store_bound cx (post_value_type cenv (Call ann (IntCall (src,name)) es dflt))
+    (lowered_value_type cenv (Call ann (IntCall (src,name)) es dflt))
     (out with scopes := prev) (Value v) vv
     (stored with vs_inst_idx := LENGTH sm.cs_current_insts) /\
   (stored with vs_inst_idx := LENGTH sm.cs_current_insts).vs_current_bb = sm.cs_current_bb /\
@@ -697,25 +703,25 @@ Theorem intcall_return_register_post:
   s0.vs_alloca_next <= stored.vs_alloca_next /\
   ghost_inv_at (DF H) lo d cenv cx (out with scopes := prev) Gs ts
     (stored with vs_inst_idx := LENGTH sm.cs_current_insts) /\
-  ptr_vv_ok cx (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
+  ptr_vv_ok cx (post_value_type cenv (Call ann (IntCall (src,name)) es dflt))
     (Value v) vv (out with scopes := prev) Gs ts
     (stored with vs_inst_idx := LENGTH sm.cs_current_insts) /\
-  vv_own cenv cx (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
+  vv_own cenv cx (post_value_type cenv (Call ann (IntCall (src,name)) es dflt))
     sa sm (out with scopes := prev) (Value v) vv
     (stored with vs_inst_idx := LENGTH sm.cs_current_insts) /\
   (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
    ?val. read_result cx (Value v) (out with scopes := prev) = (INL val,out with scopes := prev) /\
      !rt w. evaluate_type (get_tenv cx)
-       (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) = SOME rt /\
+       (post_value_type cenv (Call ann (IntCall (src,name)) es dflt)) = SOME rt /\
        eval_operand (vv_operand vv) (stored with vs_inst_idx := LENGTH sm.cs_current_insts) = SOME w ==>
        w2n w + type_memory_size rt <= lo /\
        (!mem. mem_agree_outside ts.t_mem stored.vs_memory mem ==> val_in_memory rt val (w2n w) mem)) /\
   (!ty' op. vv = StackValue ty' op /\
-    ~is_word_type (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) ==>
-    ptr_buf_ok cenv (Call ann (IntCall (NONE,name)) es dflt) op Gs
+    ~is_word_type (post_value_type cenv (Call ann (IntCall (src,name)) es dflt)) ==>
+    ptr_buf_ok cenv (Call ann (IntCall (src,name)) es dflt) op Gs
       (stored with vs_inst_idx := LENGTH sm.cs_current_insts)) /\
   (!ty' p. vv = LocatedValue ty' p /\ p.ptr_location = LocMemory ==>
-    ptr_buf_ok cenv (Call ann (IntCall (NONE,name)) es dflt) p.ptr_operand Gs
+    ptr_buf_ok cenv (Call ann (IntCall (src,name)) es dflt) p.ptr_operand Gs
       (stored with vs_inst_idx := LENGTH sm.cs_current_insts)) /\
   ghost_kept_at lo cenv es0 sa G0 tn0 s0 Gs ts
 Proof
@@ -899,17 +905,20 @@ Proof
 QED
 *)
 Theorem intcall_return_normal_owned:
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
+  !DF lo d ctx shadow_ctx PG func shadow_func mods exps caller_src caller_tops
+   src callee_tops vis cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
    rr prev penv rtv es1 t G tn rc rbs pvs callee entered bb inst lbl arg_ops argv dflts.
     (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-    lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
+     module_body_inv mods caller_src caller_tops cenv cx) /\
+    ALOOKUP mods src = SOME callee_tops /\
+    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
+    lookup_callable_function cx.in_deploy name callee_tops = SOME (mut,nr,args,dflts,ret,ss) /\
+    (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+    MEM (FunctionDecl vis mut nr rr name args dflts ret ss) callee_tops /\
+    compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt) sa = (vv,sm) /\
     compile_expr (gasShadowCompileBase$gas_shadow_env T cenv) ty
-      (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)) shadow_sa = (vv,shadow_sm) /\
+      (gas_shadow_expr (Call ann (IntCall (src,name)) es dflt)) shadow_sa = (vv,shadow_sm) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
     gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
@@ -920,16 +929,16 @@ Theorem intcall_return_normal_owned:
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
-       intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+       intcall_entry_full_mods (DF,lo,d) H mods src callee_tops ctx func cenv cx tenv name es
          sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn) /\
     (?H. valid_horizon cx st0 H es1.storage_trace) /\
-    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    cenv.ce_func_info (nsid_to_string (src,name)) = (rc,rbs,pvs) /\
     gas_invoke_entry (ctx,func) t callee entered /\
     lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb t.vs_inst_idx = SOME inst /\
     decode_invoke inst = SOME (lbl,arg_ops) /\ eval_operands arg_ops t = SOME argv /\
     (?marks res ee r Gc tc.
-       (!tail. intcall_callee_src cx name mut nr ss
+       (!tail. intcall_callee_src_at cx src name mut nr ss
           (es1 with gas_obs := gas_explicit marks entered.vs_gas_readings ++ tail) =
             (res,ee with gas_obs := tail)) /\
        storage_trace_domain cx st0 ee.storage_trace /\
@@ -939,41 +948,41 @@ Theorem intcall_return_normal_owned:
            (entered,FEMPTY,tn with t_var := FEMPTY) marks (r,Gc,tc) /\
          ((?u. r = OK u /\ F) \/
           (exit_result r /\ create_size_exit_ok ctx res r /\
-           intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc
+           intcall_callee_exit_full_mods mods (DF,lo) H func cenv cx mut nr rtv rc
              (if rc = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
              sa.cs_next_id sm.cs_next_id t tn res (ee with gas_obs := []) (Gc,tc) r))) ==>
     (fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func ==>
      gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-       cenv.ce_modules cx st0 (intcall_rest cx name mut nr ss prev rtv) (es1,t,G,tn)
+       mods cx st0 (intcall_rest_at cx src name mut nr ss prev rtv) (es1,t,G,tn)
        (\H res ee G tn t'. ?tv. res = INL tv /\
-         vv_post H ctx func cenv cx (Call ann (IntCall (NONE,name)) es dflt)
+         vv_post_mods H ctx func cenv cx (Call ann (IntCall (src,name)) es dflt)
            es0 sa sm s0 ee tv vv t' /\
-         vv_store_bound cx (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
-           (lowered_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) ee tv vv t' /\
+         vv_store_bound cx (post_value_type cenv (Call ann (IntCall (src,name)) es dflt))
+           (lowered_value_type cenv (Call ann (IntCall (src,name)) es dflt)) ee tv vv t' /\
          t'.vs_current_bb = sm.cs_current_bb /\ t'.vs_inst_idx = LENGTH sm.cs_current_insts /\
          alloca_history func t' /\
         (ctx_has_dalloca ctx ==> allocas_below_fmp t') /\ s0.vs_alloca_next <= t'.vs_alloca_next /\
          ghost_inv_at (DF H) lo d cenv cx ee G tn t' /\
-         ptr_vv_ok cx (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) tv vv ee G tn t' /\
+         ptr_vv_ok cx (post_value_type cenv (Call ann (IntCall (src,name)) es dflt)) tv vv ee G tn t' /\
          (!v. tv = Value v /\
               ~is_word_type
-                (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) /\
+                (post_value_type cenv (Call ann (IntCall (src,name)) es dflt)) /\
               ~is_bytestring_type
-                (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) ==>
+                (post_value_type cenv (Call ann (IntCall (src,name)) es dflt)) ==>
               vv_own cenv cx
-                (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt))
+                (post_value_type cenv (Call ann (IntCall (src,name)) es dflt))
                 sa sm ee tv vv t' /\
               (!ty' p. vv = LocatedValue ty' p ==> p.ptr_location = LocMemory)) /\
          (cenv.ce_is_ctor /\ vv_location vv = SOME LocCode ==>
           ?val. read_result cx tv ee = (INL val,ee) /\
-            !rt w. evaluate_type (get_tenv cx) (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) = SOME rt /\
+            !rt w. evaluate_type (get_tenv cx) (post_value_type cenv (Call ann (IntCall (src,name)) es dflt)) = SOME rt /\
               eval_operand (vv_operand vv) t' = SOME w ==>
               w2n w + type_memory_size rt <= lo /\
               (!mem. mem_agree_outside tn.t_mem t'.vs_memory mem ==> val_in_memory rt val (w2n w) mem)) /\
-         (!ty' op. vv = StackValue ty' op /\ ~is_word_type (post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt)) ==>
-            ptr_buf_ok cenv (Call ann (IntCall (NONE,name)) es dflt) op G t') /\
+         (!ty' op. vv = StackValue ty' op /\ ~is_word_type (post_value_type cenv (Call ann (IntCall (src,name)) es dflt)) ==>
+            ptr_buf_ok cenv (Call ann (IntCall (src,name)) es dflt) op G t') /\
          (!ty' p. vv = LocatedValue ty' p /\ p.ptr_location = LocMemory ==>
-            ptr_buf_ok cenv (Call ann (IntCall (NONE,name)) es dflt) p.ptr_operand G t') /\
+            ptr_buf_ok cenv (Call ann (IntCall (src,name)) es dflt) p.ptr_operand G t') /\
          ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn)
        (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))

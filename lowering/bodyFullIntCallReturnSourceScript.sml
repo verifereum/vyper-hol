@@ -1,7 +1,8 @@
 (* Source wrapper transport for noncompleted internal calls. *)
 Theory bodyFullIntCallReturnSource
 Ancestors
-  bodyFullIntCallDefs bodyIntCallSeams gasOutcomeFull gasExemptCert
+  bodyFullIntCallDefs bodyIntCallSeams gasOutcomeFull gasExemptCertMods
+  sourceExemptMods
   fragGasOriginPtr gasSummary fragGasMode vyperInterpreter vyperState vyperAST
   gasShadowCompileBase[qualified,ignore_grammar]
   bodyInvSplit[qualified] exprSimHypsDefs[qualified]
@@ -35,16 +36,16 @@ Proof
 QED
 
 Theorem intcall_exempt_pop[local]:
-  !memory tops ctx func a es s marks err ee leaf fin prev.
-    gas_exempt_cert memory tops (ctx,func)
+  !memory mods ctx func a es s marks err ee leaf fin prev.
+    gas_exempt_cert_mods memory mods (ctx,func)
       (ignore_bind (a : evaluation_state -> value evaluation_result) (return ()))
       (es,s) marks (err,ee) (leaf,fin) ==>
-    gas_exempt_cert memory tops (ctx,func)
+    gas_exempt_cert_mods memory mods (ctx,func)
       (ignore_bind (finally a (pop_function prev)) (return ()))
       (es,s) marks (err,ee with scopes := prev) (leaf,fin)
 Proof
   rpt strip_tac >> rewrite_tac[ignore_bind_finally_unit] >>
-  irule gas_exempt_cert_cleanup >> qexists_tac `ee` >>
+  irule gas_exempt_cert_mods_cleanup >> qexists_tac `ee` >>
   simp[pop_function_total]
 QED
 
@@ -66,11 +67,11 @@ Proof
 QED
 
 Theorem intcall_exempt_unlock[local]:
-  !memory tops ctx func a es s marks err ee leaf fin cx nr view k.
-    gas_exempt_cert memory tops (ctx,func)
+  !memory mods ctx func a es s marks err ee leaf fin cx nr view k.
+    gas_exempt_cert_mods memory mods (ctx,func)
       (ignore_bind (a : evaluation_state -> value evaluation_result) (return ()))
       (es,s) marks (err,ee) (leaf,fin) ==>
-    ?ee'. gas_exempt_cert memory tops (ctx,func)
+    ?ee'. gas_exempt_cert_mods memory mods (ctx,func)
       (ignore_bind (bind (finally_unless_halt a (unlock_if_nr cx nr view))
          (k : value -> evaluation_state -> eval_result evaluation_result))
                    (return ()))
@@ -88,17 +89,17 @@ Proof
      first_x_assum (qspec_then `st.gas_obs` mp_tac) >> simp[] >> metis_tac[]) >>
   simp[finally_unless_halt_bind_handler] >>
   rewrite_tac[ignore_bind_def, bind_assoc] >>
-  irule gas_exempt_cert_error_value >>
+  irule gas_exempt_cert_mods_error_value >>
   rewrite_tac[ignore_bind_try_unit] >>
-  irule gas_exempt_cert_handler >> qexists_tac `ee` >>
+  irule gas_exempt_cert_mods_handler >> qexists_tac `ee` >>
   simp[ignore_bind_def] >>
   simp[raise_def, ignore_bind_def, bind_def] >> gvs[]
 QED
 
 Theorem intcall_exempt_lock_success[local]:
-  !cx name mut nr ss st gs ee tops err.
-    unspecified_behaviour_exempt tops err /\
-    intcall_callee_src cx name mut nr ss (st with gas_obs := gs) =
+  !cx src name mut nr ss st gs ee mods err.
+    unspecified_behaviour_exempt_mods mods err /\
+    intcall_callee_src_at cx src name mut nr ss (st with gas_obs := gs) =
       (INR (Error err),ee) ==>
     ?locked. !tail. lock_if_nr cx nr (is_view_mut mut)
       (st with gas_obs := tail) = (INL (),locked with gas_obs := tail)
@@ -109,7 +110,7 @@ Proof
   pop_assum mp_tac >>
   reverse (Cases_on `nr`) >> simp[lock_if_nr_def, return_def] >>
   Cases_on `cx.nonreentrant_slot` >>
-  simp[intcall_callee_src_def, lock_if_nr_def, ignore_bind_def,
+  simp[intcall_callee_src_at_def, lock_if_nr_def, ignore_bind_def,
        bind_def, raise_def] >>
   simp[acquire_nonreentrant_lock_def, record_storage_event_def,
        get_transient_storage_def, update_transient_def,
@@ -119,33 +120,33 @@ Proof
   strip_tac >> simp[update_transient_def, assert_def, bind_def,
                     return_def, raise_def, check_def] >>
   gvs[check_def, assert_def, bind_def, return_def, raise_def,
-      e2eDefsTheory.unspecified_behaviour_exempt_def]
+      unspecified_behaviour_exempt_mods_def]
 QED
 
 Theorem intcall_rest_locked[local]:
-  !cx name mut nr ss prev rtv st locked.
+  !cx src name mut nr ss prev rtv st locked.
     lock_if_nr cx nr (is_view_mut mut) st = (INL (),locked) ==>
-    intcall_rest cx name mut nr ss prev rtv st =
+    intcall_rest_at cx src name mut nr ss prev rtv st =
     bind (finally_unless_halt
-      (finally (intcall_callee_src cx name mut nr ss) (pop_function prev))
+      (finally (intcall_callee_src_at cx src name mut nr ss) (pop_function prev))
       (unlock_if_nr cx nr (is_view_mut mut)))
       (\rv. bind (lift_option_type (safe_cast rtv rv) "IntCall cast ret")
                   (\crv. return (Value crv))) st
 Proof
   rpt strip_tac >>
   asm_simp_tac bool_ss
-    [intcall_rest_def, intcall_callee_src_def, ignore_bind_def,
+    [intcall_rest_at_def, intcall_callee_src_at_def, ignore_bind_def,
      bind_def, finally_def, finally_unless_halt_def,
      pairTheory.pair_case_thm, sumTheory.sum_case_def]
 QED
 
 Theorem intcall_return_source_exit:
-  !cx name mut nr ss st gs ex ee r prev rtv.
+  !cx src name mut nr ss st gs ex ee r prev rtv.
     expr_exit (INR ex : value + exception) r /\
-    (!tail. intcall_callee_src cx name mut nr ss
+    (!tail. intcall_callee_src_at cx src name mut nr ss
        (st with gas_obs := gs ++ tail) = (INR ex,ee with gas_obs := tail)) ==>
     ?out.
-      (!tail. intcall_rest cx name mut nr ss prev rtv
+      (!tail. intcall_rest_at cx src name mut nr ss prev rtv
         (st with gas_obs := gs ++ tail) = (INR ex,out with gas_obs := tail)) /\
       (!st0 H. valid_horizon cx st0 H out.storage_trace ==>
                 valid_horizon cx st0 H ee.storage_trace) /\
@@ -177,7 +178,7 @@ Resume intcall_return_source_exit[locked]:
      `lock_if_nr cx nr (is_view_mut mut) (st with gas_obs := gs ++ tail) =
        (INL (),r' with gas_obs := gs ++ tail)` by gvs[] >>
      drule intcall_rest_locked >>
-     disch_then (qspecl_then [`name`,`ss`,`prev`,`rtv`] SUBST1_TAC) >>
+     disch_then (qspecl_then [`src`,`name`,`ss`,`prev`,`rtv`] SUBST1_TAC) >>
      gvs[finally_unless_halt_def, finally_def, bind_def, pop_function_def,
          set_scopes_def, return_def, ignore_bind_def, raise_def]) >>
   qspec_then `ee with scopes := prev` strip_assume_tac
@@ -187,7 +188,7 @@ Resume intcall_return_source_exit[locked]:
       `lock_if_nr cx nr (is_view_mut mut) (st with gas_obs := gs ++ tail) =
         (INL (),r' with gas_obs := gs ++ tail)` by gvs[] >>
       drule intcall_rest_locked >>
-      disch_then (qspecl_then [`name`,`ss`,`prev`,`rtv`] SUBST1_TAC) >>
+      disch_then (qspecl_then [`src`,`name`,`ss`,`prev`,`rtv`] SUBST1_TAC) >>
       qpat_assum `!gs. unlock_if_nr _ _ _ _ = _`
         (qspec_then `tail` assume_tac) >>
       rule_assum_tac (REWRITE_RULE [unlock_if_nr_def]) >>
@@ -228,11 +229,11 @@ Resume intcall_return_source_exit[domain]:
          rpt IF_CASES_TAC >> simp[return_def, raise_def] >>
          strip_tac >> gvs[]) >>
       `?obs. ee.storage_trace = r'.storage_trace ++ obs` by
-        (qpat_x_assum `!tail. intcall_callee_src _ _ _ _ _ _ = _`
+        (qpat_x_assum `!tail. intcall_callee_src_at _ _ _ _ _ _ _ = _`
            (qspec_then `[]` mp_tac) >>
          qpat_assum `!tail. lock_if_nr _ _ _ _ = _`
            (qspec_then `[]` assume_tac) >>
-         pure_rewrite_tac[intcall_callee_src_def, ignore_bind_def, bind_def] >>
+         pure_rewrite_tac[intcall_callee_src_at_def, ignore_bind_def, bind_def] >>
          asm_simp_tac bool_ss [pairTheory.FST, pairTheory.SND,
            pairTheory.pair_case_thm, sumTheory.sum_case_def] >>
          strip_tac >>
@@ -277,12 +278,12 @@ Resume intcall_return_source_exit[lock_failed]:
   gvs[] >>
   `ex <> HaltException` by
     (`ex = y` by
-       (qpat_x_assum `!tail. intcall_callee_src _ _ _ _ _ _ = _`
+       (qpat_x_assum `!tail. intcall_callee_src_at _ _ _ _ _ _ _ = _`
           (qspec_then `[]` mp_tac) >>
         qpat_assum `!tail. _ (st with gas_obs := gs ++ tail) = (INR y,_)`
           (qspec_then `[]` (assume_tac o REWRITE_RULE [listTheory.APPEND_NIL])) >>
         rule_assum_tac (REWRITE_RULE [ignore_bind_def]) >>
-        simp[intcall_callee_src_def, lock_if_nr_def, ignore_bind_def, bind_def] >>
+        simp[intcall_callee_src_at_def, lock_if_nr_def, ignore_bind_def, bind_def] >>
         strip_tac >> gvs[]) >>
      qpat_x_assum `(if nr then _ else _) st = (INR y,_)` mp_tac >>
      pop_assum (fn th => SUBST1_TAC (SYM th)) >>
@@ -294,12 +295,12 @@ Resume intcall_return_source_exit[lock_failed]:
      rpt (IF_CASES_TAC >> simp[return_def, raise_def, bind_def]) >>
      gvs[update_transient_def, assert_def, check_def, return_def, raise_def]) >>
   qexists_tac `ee` >> simp[] >> gen_tac >>
-  qpat_x_assum `!tail. intcall_callee_src _ _ _ _ _ _ = _`
+  qpat_x_assum `!tail. intcall_callee_src_at _ _ _ _ _ _ _ = _`
     (qspec_then `tail` mp_tac) >>
   qpat_assum `!tail. _ (st with gas_obs := gs ++ tail) = (INR _,_)`
     (qspec_then `tail` assume_tac) >>
   rule_assum_tac (REWRITE_RULE [ignore_bind_def]) >>
-  simp[intcall_callee_src_def, intcall_rest_def, lock_if_nr_def,
+  simp[intcall_callee_src_at_def, intcall_rest_at_def, lock_if_nr_def,
        ignore_bind_def, bind_def] >>
   strip_tac >> gvs[]
 QED
@@ -307,12 +308,12 @@ Finalise intcall_return_source_exit
 
 (* Transport the certificate along source equality on the initial gas orbit. *)
 Theorem gas_exempt_cert_source_orbit_cong[local]:
-  !memory tops ctx func f g es s marks err ee leaf finish.
+  !memory mods ctx func f g es s marks err ee leaf finish.
     ~s.vs_halted /\
-    gas_exempt_cert memory tops (ctx,func) f (es,s)
+    gas_exempt_cert_mods memory mods (ctx,func) f (es,s)
       marks (err,ee) (leaf,finish) /\
     (!gs. f (es with gas_obs := gs) = g (es with gas_obs := gs)) ==>
-    gas_exempt_cert memory tops (ctx,func) g (es,s)
+    gas_exempt_cert_mods memory mods (ctx,func) g (es,s)
       marks (err,ee) (leaf,finish)
 Proof
   rpt strip_tac >>
@@ -330,25 +331,25 @@ Proof
     (simp[gas_marked_exec_def, Abbr `a`] >>
      irule gas_marked_path_from_mem >>
      simp[fragGasPathMemTheory.gas_path_mem_rules]) >>
-  `gas_exempt_cert memory tops (ctx,func) (k T)
+  `gas_exempt_cert_mods memory mods (ctx,func) (k T)
      (es with gas_obs := [],s) marks (err,ee) (leaf,finish')` by
     (simp[Abbr `k`] >>
-     drule gas_exempt_cert_start_gas_obs >> simp[]) >>
-  drule_all gas_exempt_cert_bind_bool >> simp[]
+     drule gas_exempt_cert_start_gas_obs_mods >> simp[]) >>
+  drule_all gas_exempt_cert_mods_bind_bool >> simp[]
 QED
 
 Theorem intcall_exempt_rest[local]:
-  !memory tops ctx func cx name mut nr ss prev rtv es s marks err ee leaf fin.
+  !memory mods ctx func cx src name mut nr ss prev rtv es s marks err ee leaf fin.
     ~s.vs_halted /\
-    gas_exempt_cert memory tops (ctx,func)
-      (ignore_bind (intcall_callee_src cx name mut nr ss) (return ()))
+    gas_exempt_cert_mods memory mods (ctx,func)
+      (ignore_bind (intcall_callee_src_at cx src name mut nr ss) (return ()))
       (es,s) marks (err,ee) (leaf,fin) ==>
-    ?out. gas_exempt_cert memory tops (ctx,func)
-      (ignore_bind (intcall_rest cx name mut nr ss prev rtv) (return ()))
+    ?out. gas_exempt_cert_mods memory mods (ctx,func)
+      (ignore_bind (intcall_rest_at cx src name mut nr ss prev rtv) (return ()))
       (es,s) marks (err,out) (leaf,fin)
 Proof
   rpt strip_tac >>
-  drule gas_exempt_cert_execution >> strip_tac >>
+  drule gas_exempt_cert_execution_mods >> strip_tac >>
   `?locked. !gs. lock_if_nr cx nr (is_view_mut mut)
        (es with gas_obs := gs) = (INL (),locked with gas_obs := gs)` by
     (irule intcall_exempt_lock_success >>
@@ -366,9 +367,9 @@ Proof
   qexists_tac `ee'` >> gvs[] >>
   irule gas_exempt_cert_source_orbit_cong >>
   first_assum (irule_at Any) >> simp[] >> gen_tac >>
-  `intcall_rest cx name mut nr ss prev rtv (es with gas_obs := gs) =
+  `intcall_rest_at cx src name mut nr ss prev rtv (es with gas_obs := gs) =
     bind (finally_unless_halt
-      (finally (intcall_callee_src cx name mut nr ss) (pop_function prev))
+      (finally (intcall_callee_src_at cx src name mut nr ss) (pop_function prev))
       (unlock_if_nr cx nr (is_view_mut mut)))
       (\rv. bind (lift_option_type (safe_cast rtv rv) "IntCall cast ret")
                   (\crv. return (Value crv))) (es with gas_obs := gs)` by
@@ -378,27 +379,27 @@ Proof
 QED
 
 Theorem intcall_bad_rest[local]:
-  !cx name mut nr ss prev rtv st st0.
+  !cx src name mut nr ss prev rtv st st0.
     ~storage_trace_domain cx st0
-      (SND (intcall_callee_src cx name mut nr ss st)).storage_trace ==>
+      (SND (intcall_callee_src_at cx src name mut nr ss st)).storage_trace ==>
     ~storage_trace_domain cx st0
-      (SND (intcall_rest cx name mut nr ss prev rtv st)).storage_trace
+      (SND (intcall_rest_at cx src name mut nr ss prev rtv st)).storage_trace
 Proof
   rpt gen_tac >>
   Cases_on `lock_if_nr cx nr (is_view_mut mut) st` >>
   Cases_on `q`
   >- (rename1 `lock_if_nr _ _ _ _ = (INL v,locked)` >>
       Cases_on `v` >>
-      `intcall_rest cx name mut nr ss prev rtv st =
+      `intcall_rest_at cx src name mut nr ss prev rtv st =
        bind (finally_unless_halt
-         (finally (intcall_callee_src cx name mut nr ss) (pop_function prev))
+         (finally (intcall_callee_src_at cx src name mut nr ss) (pop_function prev))
          (unlock_if_nr cx nr (is_view_mut mut)))
          (\rv. bind (lift_option_type (safe_cast rtv rv) "IntCall cast ret")
                      (\crv. return (Value crv))) st` by
         (irule intcall_rest_locked >> metis_tac[]) >>
       pop_assum SUBST1_TAC >>
-      Cases_on `intcall_callee_src cx name mut nr ss st` >>
-      rename1 `intcall_callee_src _ _ _ _ _ st = (res,ee)` >>
+      Cases_on `intcall_callee_src_at cx src name mut nr ss st` >>
+      rename1 `intcall_callee_src_at _ _ _ _ _ _ st = (res,ee)` >>
       simp[] >> strip_tac >>
       `?out. unlock_if_nr cx nr (is_view_mut mut) (ee with scopes := prev) =
                 (INL (),out)` by
@@ -410,23 +411,23 @@ Proof
            (mp_then Any mp_tac gasStorageTheory.storage_trace_frame_preserves_bad_domain) >>
          simp[vyperStorageTraceTheory.storage_trace_frame_optional_locks]) >>
       Cases_on `res`
-      >- (rename1 `intcall_callee_src _ _ _ _ _ _ = (INL v,_)` >>
+      >- (rename1 `intcall_callee_src_at _ _ _ _ _ _ _ = (INL v,_)` >>
           Cases_on `safe_cast rtv v` >>
           gvs[finally_unless_halt_def, finally_def, pop_function_def, set_scopes_def,
               unlock_if_nr_def, ignore_bind_def, bind_def, return_def,
               raise_def, lift_option_type_def, lift_option_def]) >>
-      rename1 `intcall_callee_src _ _ _ _ _ _ = (INR ex,_)` >>
+      rename1 `intcall_callee_src_at _ _ _ _ _ _ _ = (INR ex,_)` >>
       Cases_on `ex` >>
       gvs[finally_unless_halt_def, finally_def, pop_function_def, set_scopes_def,
           unlock_if_nr_def, ignore_bind_def, bind_def, return_def, raise_def]) >>
   asm_simp_tac bool_ss
-    [intcall_callee_src_def, intcall_rest_def,
+    [intcall_callee_src_at_def, intcall_rest_at_def,
      ignore_bind_def, bind_def, pairTheory.pair_case_thm, sumTheory.sum_case_def] >>
   simp[]
 QED
 
 Theorem intcall_entry_invoke_ptr:
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+  intcall_entry_full_mods (DF,lo,d) H mods src callee_tops ctx func cenv cx tenv name es
     sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst /\
@@ -436,8 +437,8 @@ Theorem intcall_entry_invoke_ptr:
   ptr_inst_ok (DF H) lo 0 ctx func G tn inst t
 Proof
   strip_tac >>
-  qhdtm_x_assum `intcall_entry_full`
-    (strip_assume_tac o PURE_REWRITE_RULE [intcall_entry_full_def]) >>
+  qhdtm_x_assum `intcall_entry_full_mods`
+    (strip_assume_tac o PURE_REWRITE_RULE [intcall_entry_full_mods_def]) >>
   qhdtm_x_assum `ghost_inv_at`
     (assume_tac o cj 7 o PURE_REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >>
   `EVERY (\op. op_taint tn op = {}) arg_ops` by
@@ -500,17 +501,20 @@ Proof
 QED
 *)
 Theorem intcall_return_noncompleted:
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
+  !DF lo d ctx shadow_ctx PG func shadow_func mods exps caller_src caller_tops
+   src callee_tops vis cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
    rr prev penv rtv es1 t G tn rc rbs pvs callee entered bb inst lbl arg_ops argv dflts Q.
     (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-    lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-    compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
+     module_body_inv mods caller_src caller_tops cenv cx) /\
+    ALOOKUP mods src = SOME callee_tops /\
+    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
+    lookup_callable_function cx.in_deploy name callee_tops = SOME (mut,nr,args,dflts,ret,ss) /\
+    (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+    MEM (FunctionDecl vis mut nr rr name args dflts ret ss) callee_tops /\
+    compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt) sa = (vv,sm) /\
     compile_expr (gasShadowCompileBase$gas_shadow_env T cenv) ty
-      (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)) shadow_sa =
+      (gas_shadow_expr (Call ann (IntCall (src,name)) es dflt)) shadow_sa =
       (vv,shadow_sm) /\
     gas_shadow_state sa shadow_sa /\ gas_shadow_state sm shadow_sm /\
     gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -522,30 +526,30 @@ Theorem intcall_return_noncompleted:
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
-       intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+       intcall_entry_full_mods (DF,lo,d) H mods src callee_tops ctx func cenv cx tenv name es
          sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn) /\
     (?H. valid_horizon cx st0 H es1.storage_trace) /\
-    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
+    cenv.ce_func_info (nsid_to_string (src,name)) = (rc,rbs,pvs) /\
     gas_invoke_entry (ctx,func) t callee entered /\
     lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
     get_instruction bb t.vs_inst_idx = SOME inst /\
     decode_invoke inst = SOME (lbl,arg_ops) /\ eval_operands arg_ops t = SOME argv /\
     (?marks.
-      (gas_bad_storage_at cx st0 (intcall_callee_src cx name mut nr ss) es1 entered marks /\
+      (gas_bad_storage_at cx st0 (intcall_callee_src_at cx src name mut nr ss) es1 entered marks /\
        ?H leaf leaf_pg leaf_g leaf_tn finish.
          (storage_trace_domain cx st0 es1.storage_trace ==> valid_horizon cx st0 H es1.storage_trace) /\
          gas_origin_ptr_focus (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
            (entered,FEMPTY,tn with t_var := FEMPTY) marks (leaf,leaf_pg,leaf_g,leaf_tn,finish)) \/
       (?err ee leaf leaf_pg leaf_g leaf_tn finish.
-         gas_exempt_cert T (cx_tops cx) (ctx,callee)
-           (ignore_bind (intcall_callee_src cx name mut nr ss) (return ()))
+         gas_exempt_cert_mods T mods (ctx,callee)
+           (ignore_bind (intcall_callee_src_at cx src name mut nr ss) (return ()))
            (es1,entered) marks (err,ee) (leaf,finish) /\
          ?H. (storage_trace_domain cx st0 es1.storage_trace ==> valid_horizon cx st0 H es1.storage_trace) /\
            gas_origin_ptr_focus (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,MAP (op_prov G) arg_ops)
              (entered,FEMPTY,tn with t_var := FEMPTY) marks (leaf,leaf_pg,leaf_g,leaf_tn,finish))) ==>
     (fn_has_code sa sm func /\ fn_has_code shadow_sa shadow_sm shadow_func ==>
      gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-       cenv.ce_modules cx st0 (intcall_rest cx name mut nr ss prev rtv) (es1,t,G,tn)
+       mods cx st0 (intcall_rest_at cx src name mut nr ss prev rtv) (es1,t,G,tn)
        Q
        (\H res ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
         (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)))
