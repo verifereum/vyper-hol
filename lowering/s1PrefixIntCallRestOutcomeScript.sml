@@ -2,7 +2,8 @@
 Theory s1PrefixIntCallRestOutcome
 Ancestors
   s1PrefixDefs bodyFullIntCall bodyFullIntCallCallee bodyFullIntCallReturn
-  gasOutcomeFull bodyInvCodeProps exprBodyPreProps
+  bodyFullIntCallDefs[qualified] bodyIntCallSeams[qualified]
+  contractInvContextProps[qualified] gasOutcomeFull bodyInvCodeProps exprBodyPreProps
 
 Theorem intcall_entry_rest_outcome:
   body_inv tops ctx cenv cx /\
@@ -72,21 +73,33 @@ Proof
   drule_then assume_tac bodySimTheory.body_inv_module >>
   drule_then strip_assume_tac body_inv_module_locations >>
   drule_all_then assume_tac body_inv_expr_body_pre_mods >>
-  `cenv.ce_modules = [(NONE,cx_tops cx)]` by
-    metis_tac[contract_inv_cenv_modules, body_inv_main_code] >>
-  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
-    (Q.SPECL [`DF`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`,
-       `shadow_func`, `tops`, `cenv`, `cx`, `tenv`, `ty`, `ann`, `name`,
+  `cx_tops cx = tops` by metis_tac[body_inv_main_code] >>
+  drule_then assume_tac contract_inv_cenv_modules >>
+  drule_then assume_tac bodyInvSplitTheory.contract_inv_immutable_section_layout >>
+  drule_then assume_tac contractInvContextPropsTheory.contract_inv_singleton_source_modules >>
+  `nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot` by
+    metis_tac[bodySimTheory.body_inv_nonreentrant_slot] >>
+  mp_tac (Q.SPECL [`DF`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`,
+       `shadow_func`, `[(NONE,tops)]`, `[]`, `NONE`, `tops`, `NONE`, `tops`,
+       `Internal`, `cenv`, `cx`, `tenv`, `ty`, `ann`, `name`,
        `es`, `dflt`, `es0`, `st0`, `sa`, `sb`, `shadow_sa`, `shadow_sb`,
        `vv`, `s0`, `G0`, `tn0`, `mut`, `nr`, `args`, `ret`, `ss`, `rr`,
        `prev`, `penv`, `rtv`, `es1`, `t`, `G`, `tn`, `result_count`,
-       `rbs`, `pvs`, `dflts`] intcall_return_full_owned)) >>
+       `rbs`, `pvs`, `dflts`] intcall_return_full_owned) >>
   impl_tac >-
-    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-     asm_rewrite_tac[GSYM gas_outcome_full_singleton_def]) >>
+    (qpat_assum `cx_tops cx = tops` (fn main =>
+       qpat_x_assum `!callee entered bb inst lbl arg_ops argv. _`
+         (assume_tac o REWRITE_RULE
+           [gas_outcome_full_singleton_def,
+            bodyFullIntCallDefsTheory.intcall_callee_exit_full_singleton_def,
+            bodyIntCallSeamsTheory.intcall_callee_src_singleton_def, main])) >>
+     asm_simp_tac (srw_ss())
+       [alistTheory.ALOOKUP_def, bodyFullIntCallDefsTheory.intcall_entry_full_mods_singleton] >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
   disch_then (mp_tac o CONJUNCT1) >>
   impl_tac >- simp[] >>
-  simp[GSYM gas_outcome_full_singleton_def] >>
+  simp[GSYM gas_outcome_full_singleton_def,
+       GSYM bodyIntCallSeamsTheory.intcall_rest_singleton_def] >>
   strip_tac >>
   irule gas_outcome_full_post_mono >>
   qhdtm_assum `gas_outcome_full` (irule_at Any) >> simp[]
