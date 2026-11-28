@@ -66,21 +66,22 @@ Whatever the result, when the call is the only frame running,
 
 ## IN
 
-and the contract is not scheduled for deletion after the run,
-
-## deployed
-
-the contract is still deployed in the world the call leaves: the EVM's
-accounts after a successful call, the world before it after a failed one.
+the contract is not scheduled for deletion after the run,
 
 ## target
 
-and for every later transaction `tx'` to the contract,
+and `tx'` is any later transaction to the contract,
+
+## deployed
+
+then the contract is still deployed in the world the call leaves: the
+EVM's accounts after a successful call, the world before it after a
+failed one;
 
 ## storage_ok
 
-the call theorems' storage hypothesis holds for `H` in the world the call
-leaves.
+and the call theorems' storage hypothesis holds for `H` and `tx'` in that
+world.
 
 # e2e_deploy_gas_sufficient
 
