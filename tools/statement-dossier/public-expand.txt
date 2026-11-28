@@ -1,0 +1,21 @@
+# Theories whose definitions the public dossier expands: the statement layer.
+e2eDeployed
+e2eDefs
+e2eCorrectness
+e2eDeployDefs
+e2eDeployEntry
+e2eGasSufficient
+frameOutcome
+frameGas
+callTrace
+loweringStateRelDefs
+vyperStorageFootprint
+immutableSectionRel
+# Single constants from other theories.
+asmOptimizer$accepted_finalizers
+asmOptimizer$asm_opt_finalizer
+vyperTypeContractSoundness$call_tx_well_typed
+vyperTypeInitialState$machine_well_typed
+ctorDeployDefs$deploy_source_exempt
+vyperCalldata$calldata_dispatch
+e2eTransactionWorld$transaction_world

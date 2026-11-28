@@ -5,6 +5,7 @@ import argparse
 from collections.abc import Iterator
 from contextlib import contextmanager, nullcontext
 import hashlib
+import html
 from pathlib import Path
 import re
 import subprocess
@@ -16,6 +17,11 @@ ROOT = CONFIG.parent.parent
 THEORY = "compilerCorrectnessDossierTarget"
 VYPER_URL = "https://github.com/verifereum/vyper-hol"
 PROVED = ["e2eDeployed", "e2eGasSufficientTop"]
+# The overview says these are proved with no admitted step.
+PUBLIC_THEOREMS = ["e2eDeployedTheory:e2e_deploy_correctness_deployed",
+                   "e2eDeployedTheory:vyper_call_correct_deployed",
+                   "e2eGasSufficientTopTheory:e2e_deploy_gas_sufficient",
+                   "e2eDeployedTheory:vyper_call_gas_sufficient_deployed"]
 
 
 def output(*command: str) -> str:
@@ -93,14 +99,121 @@ def draft_statement(spec: str) -> tuple[str, str]:
     return statement, f"Draft source: `{commit}:{path}`. Statement SHA-256: `{digest}`."
 
 
+def public_expansion() -> tuple[list[str], list[tuple[str, str]]]:
+    """The allowlist's theories and single `Thy$name` constants."""
+    theories, constants = [], []
+    for line in (CONFIG / "public-expand.txt").read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        thy, dollar, name = line.partition("$")
+        if dollar:
+            constants.append((thy, name))
+        else:
+            theories.append(line)
+    return theories, constants
+
+
+def markdown_html(text: str) -> str:
+    return subprocess.run(["pandoc", "--from", "markdown", "--to", "html5"], input=text,
+                          capture_output=True, text=True, check=True).stdout
+
+
+def conclusion_lists(parts: str) -> dict[str, str]:
+    """Each theorem's "Conclusion of" list, from the parts render.sml wrote
+    (theorem, key, anchor suffix, part) and the notes in conclusions.md.
+    The notes must have exactly one section per key of each theorem."""
+    keys: dict[str, dict[str, list[tuple[str, str]]]] = {}
+    for line in parts.splitlines():
+        theorem, key, anchor, shown = line.split("\t")
+        keys.setdefault(theorem, {}).setdefault(key, []).append((anchor, shown))
+    notes: dict[str, dict[str, list[str]]] = {}
+    theorem = key = None
+    for line in (CONFIG / "conclusions.md").read_text().splitlines():
+        if line.startswith("# "):
+            theorem, key = line[2:].strip(), None
+            if theorem in notes:
+                raise SystemExit(f"conclusions.md: {theorem} appears twice")
+            notes[theorem] = {}
+        elif line.startswith("## "):
+            key = line[3:].strip()
+            if theorem is None or key in notes[theorem]:
+                raise SystemExit(f"conclusions.md: section {key} is outside a theorem or appears twice")
+            notes[theorem][key] = []
+        elif key is not None:
+            notes[theorem][key].append(line)
+        elif line.strip():
+            raise SystemExit(f"conclusions.md: text outside a section: {line}")
+    if sorted(notes) != sorted(keys):
+        raise SystemExit("conclusions.md must have a section for each of these theorems: " + ", ".join(sorted(keys)))
+    lists = {}
+    for theorem, parts_of in keys.items():
+        if sorted(notes[theorem]) != sorted(parts_of):
+            raise SystemExit(f"conclusions.md: {theorem}'s sections must be exactly its conclusion keys: "
+                             + ", ".join(parts_of))
+        items = [f'<h2 id="conclusion-{theorem}">Conclusion of <code>{theorem}</code></h2>']
+        for key, shown in parts_of.items():
+            # Link a part to its key's entry only where the key is printed: `MEM`
+            # prints an overload of `IN`, whose entry would mislead.
+            terms = "<br>".join(
+                f'<code data-anchor="{anchor if re.search(rf"(?<![\w$]){re.escape(key)}(?![\w$])", part) else ""}">'
+                f'{html.escape(part)}</code>' for anchor, part in shown)
+            items.append(f'<h3 id="concl-{theorem}-{re.sub(r"[^A-Za-z0-9_]", "-", key)}">{terms}</h3>')
+            items.append(markdown_html("\n".join(notes[theorem][key])))
+        lists[theorem] = "\n".join(items) + "\n"
+    return lists
+
+
+def compose_public(dossier: str, conclusions: str) -> str:
+    """Place overview.md's sections around the dossier's theorem sections.
+
+    overview.md marks where each dossier part goes with a
+    `<!-- dossier: thm-Thy-name -->` line, or `<!-- dossier: index -->` for
+    the types, definitions and boundary index that follow the theorems.
+    """
+    prose = markdown_html((CONFIG / "overview.md").read_text())
+    starts = [match.start() for match in re.finditer(r'<h2 id="thm-', dossier)]
+    index = dossier.index("<h2>", starts[-1])
+    end = dossier.rindex("</body>")
+    parts = {re.match(r'<h2 id="([^"]+)"', dossier[start:])[1]: dossier[start:stop]
+             for start, stop in zip(starts, starts[1:] + [index])}
+    parts["index"] = dossier[index:end]
+    for theorem, items in conclusion_lists(conclusions).items():
+        parts[next(p for p in parts if p.endswith("-" + theorem))] += items
+    markers = re.findall(r"<!-- dossier: (\S+) -->", prose)
+    if sorted(markers) != sorted(parts):
+        raise SystemExit("overview.md must place each of these exactly once: " + ", ".join(sorted(parts)))
+    page = dossier[:starts[0]] + re.sub(r"<!-- dossier: (\S+) -->", lambda m: parts[m[1]], prose) + dossier[end:]
+    ids = set(re.findall(r'\bid="([^"]+)"', page))
+
+    def link(match: re.Match) -> str:
+        """Link a conclusion part to its key's definition or boundary entry."""
+        target = next((p + match[1] for p in ("def-", "nx-") if match[1] and p + match[1] in ids), None)
+        return f'<a href="#{target}"><code>{match[2]}</code></a>' if target else f"<code>{match[2]}</code>"
+
+    page = re.sub(r'<code data-anchor="([^"]*)">(.*?)</code>', link, page)
+    missing = sorted(set(re.findall(r'\bhref="#([^"]+)"', page)) - ids)
+    if missing:
+        raise SystemExit("the page links to anchors that do not exist: " + ", ".join(missing))
+    return page
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--draft", metavar="REVISION:PATH", help="render the module-list target from a Git object")
     parser.add_argument("--exporter", type=Path, help="use statementDossierLib.sml from this HOL checkout's HEAD")
-    parser.add_argument("--output", required=True, type=Path, help="HTML file to write")
-    parser.add_argument("--depth", type=int, default=4,
+    output_arg = parser.add_mutually_exclusive_group(required=True)
+    output_arg.add_argument("--output", type=Path, help="HTML file to write")
+    output_arg.add_argument("--public", metavar="DIR", type=Path,
+                            help="write the public page, index.html: overview.md's explanations around the "
+                                 "theorems, expanding only the definitions public-expand.txt lists")
+    parser.add_argument("--depth", type=int,
                         help="expand only definitions this many steps below the theorems (default 4)")
     args = parser.parse_args()
+    if args.public and (args.draft or args.depth is not None):
+        raise SystemExit("--public takes neither --draft nor --depth")
+    if args.depth is None:
+        args.depth = 4
     if args.depth < 1:
         raise SystemExit(f"--depth must be at least 1, not {args.depth}")
     target, draft_source = draft_statement(args.draft) if args.draft else ("", "")
@@ -120,13 +233,18 @@ def main() -> None:
     links += [(Path(path).name.removesuffix("Script.sml"), f"{VYPER_URL}/blob/{revision}/{path}")
               for path in output("git", "ls-files", "*Script.sml").splitlines()]
     sources = ",\n  ".join(f"({sml_string(theory)}, {sml_string(url)})" for theory, url in links)
-    destination = args.output.resolve()
+    public_theories, public_consts = public_expansion() if args.public else ([], [])
+    public_dir = args.public.resolve() if args.public else None
+    destination = public_dir / "index.html" if public_dir else args.output.resolve()
     scratch = target_script(target) if target else nullcontext()
     with tempfile.TemporaryDirectory(prefix=".compiler-dossier-", dir=destination.parent) as temp, scratch:
         html = Path(temp) / "dossier.html"
+        conclusions = Path(temp) / "conclusions.tsv"
         theories = [THEORY] if target else PROVED
         subprocess.run(["holbuild", "-j4", "build", *[thy + "Theory" for thy in theories]],
                        cwd=ROOT, check=True)
+        if args.public:
+            subprocess.run(["holbuild", "check", *PUBLIC_THEOREMS], cwd=ROOT, check=True)
         objects = [ROOT / ".holbuild" / "obj" / "lowering" / (thy + "Theory") for thy in theories]
         loads = ",\n  ".join(map(sml_string, objects))
         script = f"""val () = Globals.print_thy_loads := false;
@@ -139,12 +257,16 @@ val () = load "statementDossierLib";
 val projectRoot = {sml_string(ROOT)}
 val configDir = {sml_string(CONFIG)}
 val htmlOutput = {sml_string(html)}
+val conclusionsOutput = {sml_string(conclusions)}
 val sourceRevision = {sml_string(revision)}
 val holRevision = {sml_string(hol_revision)}
 val exporterRevision = {sml_string(exporter_revision)}
 val draftSource = {sml_string(draft_source)}
 val draftTheory = {sml_string(THEORY)}
 val depth = {args.depth}
+val public = {"true" if args.public else "false"}
+val publicTheories = [{", ".join(map(sml_string, public_theories))}]
+val publicConsts = [{", ".join(f"{{Thy = {sml_string(t)}, Name = {sml_string(n)}}}" for t, n in public_consts)}]
 val theorySources = [
   {sources}]
 
@@ -153,6 +275,8 @@ val theorySources = [
         driver.write_text(script, encoding="utf-8")
         subprocess.run([hol / "bin" / "hol", "--maxheap", "4096", "--gcthreads", "1",
                         "run", driver], cwd=ROOT, check=True)
+        if args.public:
+            html.write_text(compose_public(html.read_text(), conclusions.read_text()), encoding="utf-8")
         html.replace(destination)
 
 
