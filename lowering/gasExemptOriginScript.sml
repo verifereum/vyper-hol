@@ -24,6 +24,8 @@ Theorem gas_exempt_origin_def:
       evaluate_type_builtin cx tb ty [expr_type e] [v] = INR err /\
       ?unwrap. tb = AbiDecode unwrap /\
         err = RuntimeError "abi_decode invalid" /\
+        unspecified_behaviour_exempt_mods [(NONE,tops)]
+          (RuntimeError "abi_decode invalid") /\
         ?target_ty. occurs_abi_decode_target target_ty tops /\
           is_dynamic (vyper_to_abi_type (type_env tops) target_ty)) \/
     (?(H : (bool # bytes32 # type_value) list # num list)
