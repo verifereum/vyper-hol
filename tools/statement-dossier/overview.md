@@ -17,8 +17,7 @@ they should. Four theorems state this for a single-module contract:
   result the source semantics gives or stops by starvation (below), when
   the call's own hypotheses hold; and, when it is the only frame running
   and the contract isn't scheduled for deletion, the contract is still
-  deployed for the next call, and its storage still meets the storage
-  hypothesis.
+  deployed for the next call, storage condition included.
 - **Gas sufficiency for deployment and for calls**
   ([`e2e_deploy_gas_sufficient`](#thm-e2eGasSufficientTop-e2e_deploy_gas_sufficient),
   [`vyper_call_gas_sufficient_deployed`](#thm-e2eDeployed-vyper_call_gas_sufficient_deployed)):
@@ -110,8 +109,9 @@ plain-language note on each. In groups:
   slots. They require each region to fit in the slot space, distinct
   regions of the same kind not to overlap, transient regions to avoid the
   lock slots, for a call, the source's initial storage to decode on the
-  regions ([`storage_ok`](#def-e2eCorrectness-storage_ok);
-  deployment doesn't assume it, and establishes it for later calls), and the
+  regions ([`storage_ok`](#def-e2eCorrectness-storage_ok), part of
+  `deployed`; deployment doesn't assume it, and establishes it for later
+  calls), and the
   source run, for every gas filling, to keep within them: every storage
   region it uses is in `H`, every lock it takes is in the lock list, and
   every storage it takes back from a called contract decodes on the
@@ -137,13 +137,15 @@ or:
   with the source's; when the
   source constructor fails, the frame fails as described for calls below; and
 - on success, unless the new account is scheduled for deletion, the
-  contract is [`deployed`](#def-e2eDeployed-deployed) at its address,
-  and its storage satisfies the call theorems' storage hypothesis.
+  contract is [`deployed`](#def-e2eDeployed-deployed) at its address:
+  its code is installed, and for every well-typed transaction to it the
+  source state is well typed and deployed, and its storage meets the
+  storage condition for `H`.
 
-`deployed` is exactly what the call theorems assume about the installed
-contract, so the two compose: the call theorems apply to each later call
-whose own hypotheses (below) hold, and the call correctness theorem
-concludes that the contract stays deployed for the call after it. The
+`deployed H` is the one thing the call theorems assume about the installed
+contract and its state, so the two compose: the call theorems apply to each
+later call whose own hypotheses (below) hold, and the call correctness
+theorem concludes that the same `deployed H` holds for the call after it. The
 deployment's next source state
 ([`next_source_machine`](#def-e2eDefs-next_source_machine))
 is the source's result with the EVM run's accounts after deletions, and
@@ -178,12 +180,12 @@ and either the frame is starved, or
 
 Whether or not the frame starved, when the call is the only frame running
 and the contract is not scheduled for deletion afterwards, the contract is
-still `deployed` in the world the call leaves
+still `deployed H`, storage condition included, in the world the call
+leaves
 ([`transaction_world`](#def-e2eTransactionWorld-transaction_world)):
 after a successful call, the state before it with the EVM run's accounts
 after deletions and with transient storage, logs and pending deletions
-cleared; after a failed one, the state before the call. The storage
-hypothesis holds there for every later call to the contract. So the call
+cleared; after a failed one, the state before the call. So the call
 theorems apply again to the next call, whose other hypotheses still have
 to hold.
 

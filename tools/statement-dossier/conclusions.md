@@ -31,16 +31,8 @@ The source constructor succeeds, giving the source machine `am'`.
 ## deployed
 
 The contract is then deployed at its address in the next source machine,
-which is what the call theorems assume about it.
-
-## target
-
-For every later transaction `tx'` to that address,
-
-## storage_ok
-
-the call theorems' storage hypothesis holds for `H` on the next source
-machine.
+storage condition for `H` included: the `deployed H` the call theorems
+assume.
 
 # vyper_call_correct_deployed
 
@@ -68,20 +60,11 @@ Whatever the result, when the call is the only frame running,
 
 the contract is not scheduled for deletion after the run,
 
-## target
-
-and `tx'` is any later transaction to the contract,
-
 ## deployed
 
-then the contract is still deployed in the world the call leaves: the
-EVM's accounts after a successful call, the world before it after a
-failed one;
-
-## storage_ok
-
-and the call theorems' storage hypothesis holds for `H` and `tx'` in that
-world.
+then the same `deployed H`, storage condition included, holds in the world
+the call leaves: the EVM's accounts after a successful call, the world
+before it after a failed one.
 
 # e2e_deploy_gas_sufficient
 
