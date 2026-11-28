@@ -5819,8 +5819,8 @@ QED
 Finalise range_full_round_with_entry
 *)
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem range_full_round:
+  ^range_full_round_statement
 Proof
   disch_then (mk_asm "joint_round" o MATCH_MP range_full_round_with_entry) >>
   rpt gen_tac >>
@@ -5829,12 +5829,6 @@ Proof
       (MATCH_MP joint pre))) >>
   qexistsl_tac rangeRoundEntryLib.layout_names >>
   rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-*)
-Theorem range_full_round:
-  ^range_full_round_statement
-Proof
-  cheat
 QED
 
 val _ = Parse.hide "body";
