@@ -32,12 +32,12 @@ Proof
        rpt strip_tac >> qpat_assum `!x. expr_size x < _ /\ _ ==> _` irule >>
        rpt conj_tac
        >- (rpt strip_tac >> res_tac >>
-           fs[int_calls_expr_def, int_calls_target_indices] >> metis_tac[]) >>
+           fs[int_calls_expr_def, int_calls_target_indices] >>
+           res_tac >> first_assum ACCEPT_TAC) >>
        drule target_indices_size >> simp[expr_size_def] >> NO_TAC) >>
-  reverse (Cases_on `?tops env es. body_const_cells_agree [(NONE,tops)] cx env es`) >>
-  TRY (qpat_assum `~(?tops env es. _)` mp_tac >>
-       once_rewrite_tac[body_expr_prefix_ok_def] >> simp[] >>
-       metis_tac[] >> NO_TAC) >>
+  (reverse (Cases_on `?tops env es. body_const_cells_agree [(NONE,tops)] cx env es`)
+   >- (qpat_assum `~(?tops env es. _)` mp_tac >>
+       once_rewrite_tac[body_expr_prefix_ok_def] >> simp[] >> metis_tac[])) >>
   qpat_x_assum `?tops env es. _` strip_assume_tac >>
   drule_then strip_assume_tac checked_context_full_exprs >>
   `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
