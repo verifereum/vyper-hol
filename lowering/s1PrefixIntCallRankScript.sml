@@ -76,7 +76,7 @@ Proof
      TRY (res_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>
      `cx_tops cx = tops` by fs[cx_tops_def, get_module_code_def, ALOOKUP_def] >>
      asm_rewrite_tac[] >>
-     TRY (irule callable_body_loop_calls_ok >> metis_tac[] >> NO_TAC) >>
+     TRY (drule_all_then ACCEPT_TAC callable_body_loop_calls_ok >> NO_TAC) >>
      Cases_on `src` >> gvs[get_module_code_def, ALOOKUP_def, optionTheory.IS_SOME_EXISTS] >>
      drule_all_then strip_assume_tac callable_compiled_calls_live >>
      TRY (res_tac >> first_assum ACCEPT_TAC >> NO_TAC) >>

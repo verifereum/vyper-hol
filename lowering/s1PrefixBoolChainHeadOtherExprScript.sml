@@ -55,8 +55,11 @@ Proof
       fs[int_calls_exprs_members, MEM_MAP, pairTheory.EXISTS_PROD] >> metis_tac[])
   >- (irule attribute_expr_prefix_ok >>
       simp[expr_attribute_child_bound] >> fs[expr_size_def] >> metis_tac[])
-  >- (irule body_type_builtin_case_prefix >> simp[] >> rpt strip_tac >>
-      TRY (metis_tac[] >> NO_TAC) >>
+  >- (irule body_type_builtin_case_prefix >> conj_tac
+      >- (rpt strip_tac >>
+          qpat_assum `!ys. EVERY _ _ ==> body_exprs_full_ok cx ys` irule >>
+          first_assum ACCEPT_TAC) >>
+      rpt strip_tac >>
       irule s1PrefixBoolChainHeadMakeArrayTheory.prefix_list_from_members >>
       rpt strip_tac >>
       qpat_assum `!x. expr_size x < _ /\ _ ==> _` irule >>
