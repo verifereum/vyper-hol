@@ -297,7 +297,7 @@ Proof
 QED
 
 (* The unlock and member loads share one endpoint for every dead mask. *)
-Theorem return_stack_aggregate_suffix[local]:
+Theorem return_stack_aggregate_suffix:
   compile_return_unlock cenv sm = ((),su) /\
   compile_tuple_load_all cenv (Var root) tys 0 su = (elems,sl) /\
   emit_inst RET (elems ++ [Var rpc]) [] sl = ((),sb) /\

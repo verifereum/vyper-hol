@@ -772,7 +772,7 @@ fun apply_case_lift lift =
        `supported_exprs_exists expr_msg_gas_root (DROP _ defaults)` >>
      MATCH_MP_TAC intcall_args_full >> qexists `defaults` >>
      rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-  (impl_tac >- MATCH_ACCEPT_TAC intcall_callee_full) >>
+  (impl_tac >- MATCH_ACCEPT_TAC intcall_callee_full_singleton) >>
   disch_then (qspecl_then [`DF`,`lo`,`d`,`ctx`,`shadow_ctx`,`PG`,`func`,
                           `shadow_func`,`tops`,`cenv`,`cx`,`env`,`ty`,`v16`,
                           `fn`,`es`,`v17`,`es'`,`mut`,`nr`,`args`,`ret`,`ss`,

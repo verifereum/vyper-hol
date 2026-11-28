@@ -1131,8 +1131,20 @@ Proof
   simp[immutables_rel_def, LET_THM] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem state_rel_cenv_cong:
+  !H.
+  !func cenv cenv' cx vs ss.
+    state_rel H func cenv' cx vs ss /\
+    (!n e. lookup_scopes n vs.scopes = SOME e ==>
+           FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
+    (!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv'.ce_module_vars n = SOME l) /\
+    (!n l. FLOOKUP cenv'.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv.ce_module_vars n = SOME l) /\
+    (!src. IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+       src = cenv'.ce_module \/ IS_SOME (ALOOKUP cenv'.ce_modules src)) /\
+    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
+    state_rel H func cenv cx vs ss
 Proof
   gen_tac >>
   rw[state_rel_def]
@@ -1171,24 +1183,6 @@ Proof
         (qspec_then `src` mp_tac) >>
       simp[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
   fs[logs_rel_def, listTheory.LIST_REL_EL_EQN, log_entry_equiv_def]
-QED
-*)
-Theorem state_rel_cenv_cong:
-  !H.
-  !func cenv cenv' cx vs ss.
-    state_rel H func cenv' cx vs ss /\
-    (!n e. lookup_scopes n vs.scopes = SOME e ==>
-           FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
-    (!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
-           FLOOKUP cenv'.ce_module_vars n = SOME l) /\
-    (!n l. FLOOKUP cenv'.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
-           FLOOKUP cenv.ce_module_vars n = SOME l) /\
-    (!src. IS_SOME (ALOOKUP cenv.ce_modules src) ==>
-       src = cenv'.ce_module \/ IS_SOME (ALOOKUP cenv'.ce_modules src)) /\
-    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
-    state_rel H func cenv cx vs ss
-Proof
-  cheat
 QED
 
 (* stmt_state_rel reads the compile environment through the locals in

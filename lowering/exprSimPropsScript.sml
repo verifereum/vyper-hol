@@ -736,8 +736,16 @@ Proof
   qexists_tac `s.vs_memory` >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem stmt_state_rel_vars_frame:
+  !H func cenv cx es s V ctx.
+    stmt_state_rel H ctx func cenv cx es s /\
+    (!name entry p sz.
+       lookup_scopes name es.scopes = SOME entry /\
+       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
+       lookup_var p (s with vs_vars := V) = lookup_var p s) /\
+    (!p. cenv.ce_imm_alloca = SOME (Var p) ==>
+       lookup_var p (s with vs_vars := V) = lookup_var p s) ==>
+    stmt_state_rel H ctx func cenv cx es (s with vs_vars := V)
 Proof
   rpt strip_tac >>
   `immutable_base_zero cenv (s with vs_vars := V)` by
@@ -754,30 +762,20 @@ Proof
     (irule alloca_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
   `fmp_room ctx func (s with vs_vars := V)` by
     (irule fmp_room_fields >> qexists_tac `s` >> fs[stmt_state_rel_def]) >>
-  `immutable_alloca_sep func cenv cx es (s with vs_vars := V)` by
-    (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
-     fs[stmt_state_rel_def] >>
-     rpt strip_tac >> qexists_tac `id` >>
-     fs[local_region_def] >> metis_tac[]) >>
+  `!ce id b sz. ce.ce_vars = cenv.ce_vars /\
+       local_region ce es.scopes (s with vs_vars := V) id b sz ==>
+       local_region ce es.scopes s id b sz` by
+    (rpt strip_tac >> fs[local_region_def] >> metis_tac[]) >>
+  `!ce. ce.ce_vars = cenv.ce_vars /\
+       immutable_alloca_sep func ce cx es s ==>
+       immutable_alloca_sep func ce cx es (s with vs_vars := V)` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`, `es`] >> simp[] >> metis_tac[]) >>
   fs[stmt_state_rel_def, state_rel_def,
      storage_rel_def, transient_rel_def,
      immutables_rel_def, logs_rel_def, contract_storage_def,
      contract_transient_def] >>
   metis_tac[]
-QED
-*)
-Theorem stmt_state_rel_vars_frame:
-  !H func cenv cx es s V ctx.
-    stmt_state_rel H ctx func cenv cx es s /\
-    (!name entry p sz.
-       lookup_scopes name es.scopes = SOME entry /\
-       FLOOKUP cenv.ce_vars name = SOME (PtrVar (Var p) sz) ==>
-       lookup_var p (s with vs_vars := V) = lookup_var p s) /\
-    (!p. cenv.ce_imm_alloca = SOME (Var p) ==>
-       lookup_var p (s with vs_vars := V) = lookup_var p s) ==>
-    stmt_state_rel H ctx func cenv cx es (s with vs_vars := V)
-Proof
-  cheat
 QED
 
 Theorem stmt_state_rel_vars_ext:

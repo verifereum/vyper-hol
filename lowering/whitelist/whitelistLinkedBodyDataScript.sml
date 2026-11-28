@@ -57,9 +57,18 @@ Proof
   simp[module_allocated_def, EVERY_MEM] >> metis_tac[]
 QED
 
+(* The data whitelist only needs allocated source declarations, not the
+   concrete layout agreement used to establish them at other call sites. *)
+val source_slots_present = ``!tl. MEM tl tops ==>
+  case tl of
+    VariableDecl _ Storage _ _ slot => IS_SOME slot
+  | VariableDecl _ Transient _ _ slot => IS_SOME slot
+  | HashMapDecl _ _ _ _ _ slot => IS_SOME slot
+  | _ => T``;
+
 Triviality checked_main_variable:
-  check_contract mode am.layouts tx.target mods = SOME art /\
-  ALOOKUP mods NONE = SOME tops /\ layouts_agree tops am tx /\
+  check_contract mode layouts addr mods = SOME art /\
+  ALOOKUP mods NONE = SOME tops /\ (^source_slots_present) /\
   (!ty. assignable_type (type_env_all_modules mods) ty ==> supported_place_type tops ty) /\
   MEM (VariableDecl vis mut id ty slot) tops ==>
   supported_place_root tops (NONE,id) /\ build_hashmap_info tops (NONE,id) = NONE /\
@@ -70,7 +79,7 @@ Proof
   strip_tac >> drule_all main_vtype_keys >> strip_tac >>
   drule_all supported_variable_decl_distinct_mem >> strip_tac >>
   drule_all build_hashmap_info_variable >> strip_tac >>
-  drule_all checked_main_slot >> strip_tac >>
+  qpat_assum `!tl. MEM tl tops ==> _` (drule_then assume_tac) >>
   drule_all check_contract_toplevel_decl_MEM_checked >>
   Cases_on `mut` >> Cases_on `slot` >>
   gvs[check_toplevel_decl_def, supported_place_root_def, supported_storage_value_def,
@@ -79,8 +88,8 @@ Proof
 QED
 
 Triviality checked_main_hashmap:
-  check_contract mode am.layouts tx.target mods = SOME art /\
-  ALOOKUP mods NONE = SOME tops /\ layouts_agree tops am tx /\
+  check_contract mode layouts addr mods = SOME art /\
+  ALOOKUP mods NONE = SOME tops /\ (^source_slots_present) /\
   (!ty. assignable_type (type_env_all_modules mods) ty ==> supported_place_type tops ty) /\
   MEM (HashMapDecl vis tr id kt vt slot) tops ==>
   supported_place_root tops (NONE,id) /\
@@ -90,15 +99,15 @@ Proof
   drule_all getter_hashmap_member_lookup >> strip_tac >>
   drule_all getter_hashmap_excludes_variable >> strip_tac >>
   drule_all build_hashmap_info_hashmap >> strip_tac >>
-  drule_all checked_main_slot >> strip_tac >>
+  qpat_assum `!tl. MEM tl tops ==> _` (drule_then assume_tac) >>
   drule_all check_contract_toplevel_decl_MEM_checked >>
   Cases_on `slot` >> gvs[check_toplevel_decl_def, supported_place_root_def] >>
   metis_tac[checker_hashmap_key_supported, checked_value_type_supported_hashmap]
 QED
 
 Triviality checked_main_vtype:
-  check_contract mode am.layouts tx.target mods = SOME art /\
-  ALOOKUP mods NONE = SOME tops /\ layouts_agree tops am tx /\
+  check_contract mode layouts addr mods = SOME art /\
+  ALOOKUP mods NONE = SOME tops /\ (^source_slots_present) /\
   (!ty. assignable_type (type_env_all_modules mods) ty ==> supported_place_type tops ty) /\
   FLOOKUP art.cta_toplevel_vtypes (NONE,id) = SOME vt ==>
   supported_place_root tops (NONE,id) /\
@@ -115,8 +124,8 @@ Proof
 QED
 
 Triviality checked_main_assignable:
-  check_contract mode am.layouts tx.target mods = SOME art /\
-  ALOOKUP mods NONE = SOME tops /\ layouts_agree tops am tx /\
+  check_contract mode layouts addr mods = SOME art /\
+  ALOOKUP mods NONE = SOME tops /\ (^source_slots_present) /\
   (!ty. assignable_type (type_env_all_modules mods) ty ==> supported_place_type tops ty) /\
   FLOOKUP art.cta_bare_global_assignable (NONE,id) = SOME ty ==>
   supported_place_root tops (NONE,id) /\ supported_immutable_type tops (NONE,id) = SOME ty
@@ -127,8 +136,8 @@ Proof
 QED
 
 Triviality checked_main_storage_value:
-  check_contract mode am.layouts tx.target mods = SOME art /\
-  ALOOKUP mods NONE = SOME tops /\ layouts_agree tops am tx /\
+  check_contract mode layouts addr mods = SOME art /\
+  ALOOKUP mods NONE = SOME tops /\ (^source_slots_present) /\
   (!ty. assignable_type (type_env_all_modules mods) ty ==> supported_place_type tops ty) /\
   FLOOKUP art.cta_bare_globals (NONE,id) = NONE /\
   FLOOKUP art.cta_toplevel_vtypes (NONE,id) = SOME (Type ty) ==>
@@ -161,10 +170,10 @@ Proof
   qexists_tac `mods` >> gvs[contract_namespaces_ok_def]
 QED
 
-Theorem linked_checked_data_env:
-  check_contract mode am.layouts tx.target mods = SOME art /\
+Theorem linked_checked_data_env_from_slots:
+  check_contract mode layouts addr mods = SOME art /\
   ALOOKUP mods src = SOME tops /\
-  (src = NONE ==> layouts_agree tops am tx) /\
+  (src = NONE ==> ^source_slots_present) /\
   (src = NONE ==> !ty. assignable_type (type_env_all_modules mods) ty ==>
                        supported_place_type tops ty) /\
   env.type_defs = type_env_all_modules mods /\
@@ -183,4 +192,24 @@ Proof
   >- (PairCases_on `k` >> gvs[] >> irule checked_main_assignable >> metis_tac[])
   >- (PairCases_on `k` >> gvs[] >> irule checked_main_storage_value >> metis_tac[]) >>
   PairCases_on `k` >> gvs[] >> drule_all checked_main_event >> simp[]
+QED
+
+Theorem linked_checked_data_env:
+  check_contract mode am.layouts tx.target mods = SOME art /\
+  ALOOKUP mods src = SOME tops /\
+  (src = NONE ==> layouts_agree tops am tx) /\
+  (src = NONE ==> !ty. assignable_type (type_env_all_modules mods) ty ==>
+                       supported_place_type tops ty) /\
+  env.type_defs = type_env_all_modules mods /\
+  env.toplevel_vtypes = art.cta_toplevel_vtypes /\
+  env.bare_globals = art.cta_bare_globals /\
+  env.event_fields = art.cta_event_fields /\
+  (!k ty. FLOOKUP env.bare_global_assignable k = SOME ty ==>
+           FLOOKUP art.cta_bare_global_assignable k = SOME ty) ==>
+  linked_body_data_env tops src env
+Proof
+  strip_tac >>
+  `src = NONE ==> ^source_slots_present` by
+    (rpt strip_tac >> gvs[] >> drule_all checked_main_slot >> simp[]) >>
+  drule_all linked_checked_data_env_from_slots >> simp[]
 QED
