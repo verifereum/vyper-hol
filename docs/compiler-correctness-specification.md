@@ -164,7 +164,14 @@ deferred.
 
 ### Fixed storage regions
 
-The public single-call theorem `vyper_call_correct` quantifies over a fixed
+The single-module headline `vyper_call_correct_deployed` takes the installed
+contract as `deployed H`, which includes initial storage validity on `H`
+for well-typed transactions to the address. It gives back `deployed H`
+in the next transaction world after a root call whose target survives.
+`e2e_deploy_correctness_deployed` establishes the same predicate on
+successful deployment at a surviving target.
+
+The underlying theorem `vyper_call_correct` quantifies over a fixed
 set of storage regions and lock slots `H`. Its storage premises are
 `storage_ok H am tx`, which requires the initial source state to decode on
 those regions, and `call_within H tops am tx es`, which checks the dispatched
@@ -360,7 +367,7 @@ The result relation ties source gas observations to the frame's EVM gas readings
   success regardless of resources; the companion `vyper_call_gas_sufficient_deployed`
   guarantees a run with enough added gas. On unmatched calldata the entry
   frame cannot raise OutOfGas. When `calldata_dispatch` selects a source call, the same
-  holds for a fixed horizon with `storage_ok H` at entry and `call_within H`
+  holds for a fixed horizon with `deployed H` at entry and `call_within H`
   on the raised-gas run, with no exempt source observation
   (`~gas_source_exempt`) and fewer than 2⁶⁴ entries. The identity
   case composes proved lowering, O1 fuel/memory and codegen gas bounds. The
