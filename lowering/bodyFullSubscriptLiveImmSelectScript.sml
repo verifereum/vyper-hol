@@ -10,7 +10,7 @@ Ancestors
   vyperSubscriptOverlap vyperStoragePlaceProvenance vyperBareGlobalName
   vyperCallFrame vyperCreateFrame vyperLocalAccessFrame vyperMisc pair
   bodySim constSubst constSubstCorrect exprSimHypsDefs exprSimSubscriptArraySource gasContext
-  supportedNames supportedProgram targetOverlapAccess vyperContext
+  supportedNames supportedProgram supportedExprTraverse targetOverlapAccess vyperContext
   vyperImmutableAccessFrame vyperTypeContractStaticMaps externalBodyFrame
   vyperTypeInvariants vyperTypeExprSoundness vyperTypeEvalSoundness vyperTypeSystem
   exprPtrCtorCodeLoad exprSimCopy bodyFullUnwrapRun exprSimBopRestWordLoadSafety
@@ -18,10 +18,11 @@ Ancestors
   bodyFullSubscriptArrayCodeOps bodyFullSubscriptArrayCodeBounds
   bodyPtrSignedConvertSourceFrame exprSimSubscriptArrayEndpoint
   exprSimSubscriptArrayCompose bodyFullGhostFrame bodyFullPathHistory
-  targetSubscriptMemory vyperStorageFootprint
+  targetSubscriptMemory vyperStorageFootprint vyperTypeEnv[qualified]
+  vyperPlaceStatePreservation[qualified] bodySimStmtFacts[qualified]
   exprSimSubscriptArraySuffix gasOutcomeFullCompose compileEnv bodyPtrDefs
   freshWrites wordArgsPtr gasSummary fragExec exprSimMemDefs venomState
-  gasOutcomeFullMods[qualified]
+  gasOutcomeFullMods[qualified] exprSimAbiDecodeCompose[qualified]
 
 Theorem selected_constructor_code_read[local]:
   (contract_inv mods exps ctx cenv cx /\
@@ -48,17 +49,6 @@ QED
 
 (* A fixed projection can be read from the current root even if the index
    changed that root.  The last selected value may itself be dynamic. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `value_has_type itv iv /\ well_formed_type_value itv` by
-    (irule imm_place_at_value_type >> goal_assum (drule_at Any) >>
-     qexistsl [`cenv`, `env`, `0`, `[]`] >>
-     simp[mem_path_offset_def, evaluate_subscripts_def]) >>
-  irule fixed_shape_path_live >> simp[]
-QED
-*)
 Theorem current_immutable_fixed_path_live[local]:
   expr_sim_inv_mods mods cenv cx env fin /\
   FLOOKUP (case ALOOKUP fin.immutables cx.txn.target of
@@ -67,7 +57,12 @@ Theorem current_immutable_fixed_path_live[local]:
   fixed_shape_path itv path ==>
   ?v. evaluate_subscripts itv iv path = INL v
 Proof
-  cheat
+  strip_tac >>
+  `state_well_typed fin` by fs[expr_sim_inv_mods_def] >>
+  Cases_on `ALOOKUP fin.immutables cx.txn.target` >> gvs[] >>
+  drule_all vyperTypeEnvTheory.state_well_typed_immutables_ALOOKUP >>
+  strip_tac >> drule_all vyperTypeEnvTheory.imms_well_typed_get_source_immutables >>
+  strip_tac >> irule fixed_shape_path_live >> simp[]
 QED
 
 Theorem evaluated_immutable_spine[local]:
@@ -174,6 +169,19 @@ Proof
   measureInduct_on `expr_size e` >> rpt strip_tac >>
   drule evaluated_immutable_spine >> strip_tac >> gvs[accesses_expr_def] >>
   first_x_assum (qspec_then `obj` mp_tac) >> simp[expr_size_def] >> metis_tac[]
+QED
+
+Theorem evaluated_immutable_root_nonconstant[local]:
+  !e cx es src id path t.
+    ~supported_expr_exists (const_name_root_mods mods) e /\
+    eval_expr cx e es = (INL (PlaceR (ImmutablePlace src id path)),t) ==>
+    ~cx_const_name_mods mods (src,id)
+Proof
+  measureInduct_on `expr_size e` >> rpt strip_tac >>
+  drule evaluated_immutable_spine >> strip_tac >>
+  gvs[supported_expr_exists_def, const_name_root_mods_def] >>
+  first_x_assum (qspec_then `obj` mp_tac) >>
+  simp[expr_size_def] >> metis_tac[]
 QED
 
 Theorem constant_decl_mem_consts:
@@ -486,38 +494,6 @@ Resume immutable_fixed_spine[attribute]:
 QED
 Finalise immutable_fixed_spine
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >> disch_tac >>
-  Cases_on `base_through_dynarray obj`
-  >- (`~supported_expr_exists (const_name_root cx) obj` by metis_tac[expr_body_pre_static_facts] >>
-      drule_then assume_tac body_inv_contract >>
-      drule_then strip_assume_tac body_inv_main_code >>
-      drule_all_then assume_tac eval_expr_immutable_root_nonconstant >>
-      `~cx_const_name_mods [(NONE,tops)] (src,id)` by
-        (qpat_assum `cx_tops cx = tops` (SUBST1_TAC o SYM) >>
-         fs[cx_const_name_split_def]) >>
-      `expr_body_pre_mods [(NONE,tops)] cenv cx env idx ix` by
-        metis_tac[body_inv_expr_body_pre_mods] >>
-      drule_all_then strip_assume_tac immutable_no_copy_dynamic_frame_mods >>
-      qexists `saved` >>
-      qpat_x_assum `read_result cx _ mid = _` mp_tac >>
-      Cases_on `ALOOKUP mid.immutables cx.txn.target` >>
-      gvs[read_result_def, read_place_def, get_immutables_def,
-          get_address_immutables_def, bind_def, lift_option_type_def,
-          lift_sum_def, return_def, raise_def, AllCaseEqs()] >>
-      Cases_on `evaluate_subscripts rt rv path` >> simp[return_def, raise_def]) >>
-  `fixed_shape_path itv path` by
-    (irule immutable_fixed_spine >> goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-     qexistsl [`env`,`root_ty`] >>
-     qpat_assum `expr_body_pre cenv cx env obj es`
-       (strip_assume_tac o REWRITE_RULE [expr_body_pre_split_def, expr_body_pre_mods_def]) >>
-     fs[expr_sim_inv_def, vyperTypeExprSoundnessTheory.runtime_consistent_def]) >>
-  drule_all live_immutable_root_current >> strip_tac >> gvs[] >>
-  irule current_immutable_fixed_path_live >> metis_tac[]
-QED
-*)
 Theorem live_immutable_path_after_index[local]:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -533,56 +509,39 @@ Theorem live_immutable_path_after_index[local]:
     NONE => FEMPTY | SOME imms => get_source_immutables src imms) id = SOME (rt,rv) ==>
     ?v. evaluate_subscripts rt rv path = INL v
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >> rpt gen_tac >> disch_tac >>
+  Cases_on `base_through_dynarray obj`
+  >- (`~cx_const_name_mods mods (src,id)` by
+        (irule evaluated_immutable_root_nonconstant >>
+         goal_assum (drule_at Any) >> fs[expr_body_pre_mods_def]) >>
+      drule_all_then assume_tac immutable_no_copy_dynamic_frame_mods >>
+      qexists `saved` >>
+      qpat_x_assum `read_result cx _ mid = _` mp_tac >>
+      Cases_on `ALOOKUP mid.immutables cx.txn.target` >>
+      gvs[read_result_def, read_place_def, get_immutables_def,
+          get_address_immutables_def, bind_def, lift_option_type_def,
+          lift_sum_def, return_def, raise_def, AllCaseEqs()] >>
+      Cases_on `evaluate_subscripts rt rv path` >> simp[return_def, raise_def]) >>
+  qpat_assum `expr_body_pre_mods _ _ _ _ obj es`
+    (strip_assume_tac o MATCH_MP expr_body_pre_mods_runtime_typing) >>
+  qpat_assum `expr_body_pre_mods _ _ _ _ obj es`
+    (assume_tac o MATCH_MP expr_body_pre_mods_call_evaluation_safe) >>
+  `fixed_shape_path itv path` by
+    (irule immutable_fixed_spine >> goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+     qexistsl [`env`,`root_ty`] >> gvs[]) >>
+  `env_immutables_consistent env cx fin` by
+    fs[expr_sim_inv_mods_def, env_consistent_def] >>
+  `rt = itv` by
+    (Cases_on `ALOOKUP fin.immutables cx.txn.target` >>
+     gvs[env_immutables_consistent_def] >>
+     qpat_assum `!src id ty tv v. FLOOKUP env.bare_globals (src,id) = SOME ty /\
+         FLOOKUP _ id = SOME (tv,v) ==> _` (drule_all_then mp_tac) >> simp[]) >>
+  gvs[] >> irule current_immutable_fixed_path_live >>
+  goal_assum (drule_at (Pat `fixed_shape_path _ _`)) >> simp[] >>
+  metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then strip_assume_tac expr_body_pre_place_metadata >>
-  `?etv. evaluate_type (get_tenv cx) et = SOME etv /\
-     evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd) /\
-     runtime_place_typed cx mid (ImmutablePlace src id path) (ArrayTV etv bd)` by
-    (qpat_x_assum `evaluate_type _ (expr_type obj) = _` mp_tac >>
-     simp[Once vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-     rpt strip_tac >> gvs[] >> simp[vyperValueTheory.evaluate_type_def]) >>
-  `expr_body_pre cenv cx env idx (mid with gas_obs := gs)` by simp[] >>
-  drule_all_then strip_assume_tac exprSimSourceTheory.expr_body_pre_eval_result >>
-  `expr_sim_inv cenv cx env mid /\ expr_sim_inv cenv cx env fin` by
-    metis_tac[cj 1 exprSimSourceTheory.expr_body_pre_eval_result] >>
-  `~cx_const_name cx (src,id)` by
-    (irule eval_expr_immutable_root_nonconstant >>
-     goal_assum (drule_at Any) >> metis_tac[expr_body_pre_static_facts]) >>
-  `stmt_state_rel H ctx func cenv cx fin s` by fs[expr_post_def] >>
-  `vv_place_ptr cenv cx mid u (PlaceR (ImmutablePlace src id path))
-     (LocatedValue (ArrayT et bd) p)` by fs[vv_post_def] >>
-  `!w. eval_operand p.ptr_operand u = SOME w ==> eval_operand p.ptr_operand s = SOME w` by
-    (rpt strip_tac >> irule exprBopSimPropsTheory.eval_operand_frame >>
-     simp[] >> qexistsl [`sb`,`u`] >> simp[] >> drule_all expr_post_frame >> simp[wb_frame_def]) >>
-  `!rt rv. FLOOKUP (case ALOOKUP fin.immutables cx.txn.target of
-      NONE => FEMPTY | SOME imms => get_source_immutables src imms) id = SOME (rt,rv) ==>
-      ?v. evaluate_subscripts rt rv path = INL v` by
-    (qpat_assum `vv_place_ptr _ _ _ _ _ _` (strip_assume_tac o SRULE [vv_place_ptr_def]) >>
-     `?root_ty. FLOOKUP env.bare_globals (src,id) = SOME root_ty /\
-               evaluate_type (get_tenv cx) root_ty = SOME itv` by
-       (qpat_x_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
-        drule_then (irule_at Any) (cj 2 live_immutable_captured_root) >>
-        simp[] >> goal_assum (drule_at Any) >> simp[]) >>
-     `?saved. read_result cx (PlaceR (ImmutablePlace src id path)) mid = (INL saved,mid)` by
-       fs[vv_post_def, vv_holds_def, immutable_holds_def] >>
-     drule_at (Pat `eval_expr _ _ _ = (INL (PlaceR _),_)`) live_immutable_path_after_index >>
-     disch_then (drule_at (Pat `eval_expr _ _ _ = _`)) >>
-     simp[vyperASTTheory.is_ArrayT_def] >> metis_tac[]) >>
-  drule_at (Pat `vv_place_ptr _ _ _ _ _ _`) live_immutable_captured_array_view >>
-  disch_then (drule_at (Pat `stmt_state_rel _ _ _ _ _ _ _`)) >>
-  disch_then (qspecl_then [`etv`,`env`] mp_tac) >>
-  (impl_tac >- simp[]) >> strip_tac >>
-  `?av. v = ArrayV av` by (Cases_on `v` >> gvs[vyperTypingTheory.value_has_type_def]) >>
-  gvs[] >> metis_tac[]
-QED
-*)
-Theorem live_immutable_index_cut_view[local]:
+Theorem live_immutable_index_cut_view:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
   expr_body_pre_mods mods cenv cx env obj es /\ expr_body_pre_mods mods cenv cx env idx mid /\
@@ -597,7 +556,8 @@ Theorem live_immutable_index_cut_view[local]:
   (!l. p.ptr_operand <> Label l) ==>
   ?etv off itv k iv av.
     evaluate_type (get_tenv cx) et = SOME etv /\
-    src = cenv.ce_module /\ p.ptr_location = LocCode /\
+    (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
+    p.ptr_location = LocCode /\
     FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
     FLOOKUP (case ALOOKUP fin.immutables cx.txn.target of NONE => FEMPTY
       | SOME imms => get_source_immutables src imms) id = SOME (itv,iv) /\
@@ -612,7 +572,104 @@ Theorem live_immutable_index_cut_view[local]:
     immutable_holds cenv cx (ArrayT et bd)
       (PlaceR (ImmutablePlace src id path)) (n2w (off+k)) fin s
 Proof
-  cheat
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `vv_place_ptr cenv cx mid u (PlaceR (ImmutablePlace src id path))
+     (LocatedValue (ArrayT et bd) p)` by fs[vv_post_def] >>
+  qpat_x_assum `vv_place_ptr _ _ _ _ _ _`
+    (fn th =>
+       let val [location,namespace,layout] =
+         CONJUNCTS (SIMP_RULE (srw_ss()) [vv_place_ptr_def] th)
+       in assume_tac location >> assume_tac namespace >> strip_assume_tac layout end) >>
+  `!w. eval_operand p.ptr_operand u = SOME w ==> eval_operand p.ptr_operand s = SOME w` by
+    (rpt strip_tac >> irule exprBopSimPropsTheory.eval_operand_frame >>
+     simp[] >> qexistsl [`sb`,`u`] >> simp[] >> drule_all expr_post_frame >> simp[wb_frame_def]) >>
+  `?saved. read_result cx (PlaceR (ImmutablePlace src id path)) mid = (INL saved,mid)` by
+    fs[vv_post_def, vv_holds_def, immutable_holds_def] >>
+  `~cx_const_name_mods mods (src,id)` by
+    (irule evaluated_immutable_root_nonconstant >>
+     goal_assum (drule_at Any) >> fs[expr_body_pre_mods_def]) >>
+  `expr_sim_inv_mods mods cenv cx env mid` by metis_tac[expr_body_pre_mods_inv] >>
+  `?root_ty. FLOOKUP env.bare_globals (src,id) = SOME root_ty` by
+    (fs[expr_sim_inv_mods_def, bare_globals_layout_def] >> metis_tac[]) >>
+  `evaluate_type (get_tenv cx) root_ty = SOME itv` by
+    (fs[expr_sim_inv_mods_def, env_consistent_def, env_immutables_consistent_def] >>
+     Cases_on `ALOOKUP mid.immutables cx.txn.target` >> gvs[] >> metis_tac[]) >>
+  `off + type_memory_size itv < dimword (:256)` by
+    (qpat_x_assum `expr_sim_inv_mods _ _ _ _ mid`
+       (strip_assume_tac o REWRITE_RULE [expr_sim_inv_mods_def]) >>
+     qpat_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\ _ ==> _`
+       (qspecl_then [`src`,`id`,`root_ty`] mp_tac) >>
+     qpat_assum `FLOOKUP env.bare_globals (src,id) = SOME root_ty` mp_tac >>
+     qpat_assum `~cx_const_name_mods mods (src,id)` mp_tac >>
+     qpat_assum `FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off)` mp_tac >>
+     qpat_assum `evaluate_type (get_tenv cx) root_ty = SOME itv` mp_tac >>
+     POP_ASSUM_LIST kall_tac >> simp[] >> metis_tac[optionTheory.SOME_11]) >>
+  qpat_assum `expr_body_pre_mods _ _ _ _ obj es`
+    (strip_assume_tac o MATCH_MP expr_body_pre_mods_runtime_typing) >>
+  qpat_assum `expr_body_pre_mods _ _ _ _ obj es`
+    (assume_tac o MATCH_MP expr_body_pre_mods_call_evaluation_safe) >>
+  `?tv. evaluate_type (get_tenv cx) (expr_type obj) = SOME tv /\
+        subscripts_type itv path = SOME tv` by
+    (irule immutable_annotated_path >> simp[] >>
+     qexistsl [`env`,`es`,`id`,`root_ty`,`src`,`mid`] >> simp[]) >>
+  drule_all_then strip_assume_tac exprSimPropsTheory.mem_path_offset_sound >>
+  `?etv. evaluate_type (get_tenv cx) et = SOME etv /\ tvk = ArrayTV etv bd` by
+    (gvs[] >> drule vyperTypeValuesTheory.evaluate_type_ArrayT_cases >>
+     strip_tac >> qexists_tac `elem_tv` >> simp[]) >>
+  qpat_x_assum `tvk = ArrayTV etv bd` SUBST_ALL_TAC >>
+  `expr_body_pre_mods mods cenv cx env idx (mid with gas_obs := gs)` by
+    simp[exprSimAbiDecodeComposeTheory.abi_decode_pre_mods_gas_obs] >>
+  `expr_sim_inv_mods mods cenv cx env fin` by
+    (irule bodySimStmtFactsTheory.expr_sim_inv_mods_eval_result >>
+     goal_assum (drule_at (Pat `eval_expr _ _ _ = _`)) >>
+     fs[expr_body_pre_mods_def]) >>
+  `env_immutables_consistent env cx fin` by
+    fs[expr_sim_inv_mods_def, env_consistent_def] >>
+  `?final_imm. ALOOKUP fin.immutables cx.txn.target = SOME final_imm` by
+    (qpat_assum `env_immutables_consistent env cx fin`
+       (mp_tac o Q.SPECL [`src`,`id`,`root_ty`] o CONJUNCT1 o
+        REWRITE_RULE [env_immutables_consistent_def]) >>
+     Cases_on `ALOOKUP fin.immutables cx.txn.target` >>
+     simp[get_source_immutables_def]) >>
+  `?actual_tv final_iv. FLOOKUP (get_source_immutables src final_imm) id =
+       SOME (actual_tv,final_iv)` by
+    (qpat_assum `env_immutables_consistent env cx fin`
+       (mp_tac o Q.SPECL [`src`,`id`,`root_ty`] o CONJUNCT1 o
+        REWRITE_RULE [env_immutables_consistent_def]) >>
+     simp[optionTheory.IS_SOME_EXISTS, pairTheory.EXISTS_PROD]) >>
+  `actual_tv = itv` by
+    (qpat_assum `env_immutables_consistent env cx fin`
+       (mp_tac o Q.SPECL [`src`,`id`,`root_ty`,`actual_tv`,`final_iv`] o
+        CONJUNCT1 o CONJUNCT2 o REWRITE_RULE [env_immutables_consistent_def]) >>
+     simp[]) >>
+  qpat_x_assum `actual_tv = itv` SUBST_ALL_TAC >>
+  `?final_v. evaluate_subscripts itv final_iv path = INL final_v` by
+    (mp_tac (Q.INST [`ix` |-> `mid with gas_obs := gs`,
+             `res` |-> `INL ir`] live_immutable_path_after_index) >>
+     (impl_tac >- simp[vyperASTTheory.is_ArrayT_def]) >>
+     disch_then (qspecl_then [`itv`,`final_iv`] mp_tac) >> simp[]) >>
+  `state_well_typed fin` by fs[expr_sim_inv_mods_def] >>
+  drule_all vyperTypeEnvTheory.state_well_typed_immutables_ALOOKUP >> strip_tac >>
+  drule_all vyperTypeEnvTheory.imms_well_typed_get_source_immutables >> strip_tac >>
+  `value_has_type (ArrayTV etv bd) final_v /\ well_formed_type_value (ArrayTV etv bd)` by
+    metis_tac[vyperPlaceStatePreservationTheory.evaluate_subscripts_type,
+              vyperPlaceStatePreservationTheory.subscripts_type_well_formed] >>
+  `?av. final_v = ArrayV av` by
+    (Cases_on `final_v` >> gvs[vyperTypingTheory.value_has_type_def]) >>
+  qpat_x_assum `final_v = ArrayV av` SUBST_ALL_TAC >>
+  `sub_layout itv final_iv k (ArrayTV etv bd) (ArrayV av)` by
+    (simp[sub_layout_def] >> rpt strip_tac >>
+     mp_tac (Q.SPECL [`path`,`itv`,`final_iv`,`ArrayV av`,`b`,`mem`,`k`,`ArrayTV etv bd`]
+       mem_path_offset_current_value) >> simp[]) >>
+  `read_result cx (PlaceR (ImmutablePlace src id path)) fin = (INL (ArrayV av),fin)` by
+    simp[read_result_def, read_place_def, get_immutables_def, get_address_immutables_def,
+         bind_def, lift_option_type_def, lift_sum_def, return_def] >>
+  `eval_operand p.ptr_operand s = SOME (n2w (off+k))` by simp[] >>
+  `k + off < dimword (:256)` by decide_tac >>
+  qexistsl_tac [`etv`,`off`,`itv`,`k`,`final_iv`,`av`] >>
+  simp[vv_place_ptr_def, immutable_holds_def] >>
+  qexistsl_tac [`src`,`id`,`off`,`itv`,`final_iv`,`k`,`ArrayTV etv bd`] >>
+  gvs[]
 QED
 
 (* Use the existing LocCode load safety proof and keep the raw execution and
@@ -1059,8 +1116,8 @@ Proof
   fs[contextTheory.mk_ptr_def]
 QED
 
-Theorem live_immutable_selected_facts[local]:
-  src = cenv.ce_module /\
+Theorem live_immutable_selected_facts:
+  (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) /\
   FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
   FLOOKUP (case ALOOKUP fin.immutables cx.txn.target of NONE => FEMPTY
     | SOME imms => get_source_immutables src imms) id = SOME (itv,iv) /\
@@ -1085,25 +1142,22 @@ Theorem live_immutable_selected_facts[local]:
     (LocatedValue et (mk_ptr dst LocCode))
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_x_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
   `evaluate_subscripts (ArrayTV etv bd) (ArrayV av) [ValueSubscript (IntV i)] = INL v` by
     simp[evaluate_subscripts_def] >>
   drule_all live_immutable_select >> disch_then (qspec_then `ArrayT et bd` strip_assume_tac) >>
   simp[] >> conj_tac
   >- (simp[vv_holds_def, contextTheory.mk_ptr_def] >>
-      `well_formed_type_value etv` by
-        (drule vyperTypeValuesTheory.evaluate_type_well_formed_type_value >> simp[]) >>
       `value_has_type etv v` by
         (drule vyperAssignPreservesTypeTheory.array_index_has_type >>
-         disch_then (qspecl_then [`etv`,`bd`] mp_tac) >> simp[]) >>
+         disch_then (qspecl_then [`etv`,`bd`] mp_tac) >>
+         simp[] >> metis_tac[vyperTypeValuesTheory.evaluate_type_well_formed_type_value]) >>
       drule_all exprSimSubscriptArrayFramedTheory.immutable_holds_array_element >>
-      simp[immutable_holds_def] >> strip_tac >>
-      qexistsl [`name`,`off'`,`itv'`,`iv'`,`k'`,`v`] >> simp[]) >>
-  simp[contextTheory.mk_ptr_def] >>
-  irule (SIMP_RULE (srw_ss()) [contextTheory.mk_ptr_def]
-    (Q.SPEC `mk_ptr dst LocCode`
-      (Q.GEN `p` (SPEC_ALL live_immutable_element_place_ptr)))) >>
-  simp[] >> metis_tac[]
+      simp[immutable_holds_def]) >>
+  drule_all exprSimSubscriptArraySuffixTheory.array_element_step_offset >> strip_tac >>
+  drule_all exprSimPropsTheory.mem_path_offset_snoc >> strip_tac >>
+  simp[vv_place_ptr_def, contextTheory.mk_ptr_def] >>
+  PURE_REWRITE_TAC[wordsTheory.word_add_n2w, arithmeticTheory.ADD_ASSOC] >>
+  REFL_TAC
 QED
 
 (* The successful index cut, before executing the immutable bounds suffix. *)

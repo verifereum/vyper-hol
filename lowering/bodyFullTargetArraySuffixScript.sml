@@ -10,7 +10,7 @@ Ancestors
   targetSubscriptSplit bodyPtrBopInMemoryContents vyperTypeSystem
   vyperTypeExprResult vyperTypeExprSoundness vyperTypeInvariants vyperTyping
   vyperValue compileEnv valueEncoding vyperTypeEnv vyperInterpreter vyperState
-  exprSimHypsDefs[qualified]
+  exprSimHypsDefs[qualified] exprSimSource[qualified] targetLocalLive[qualified]
 
 Definition array_tail_packet_def:
   array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
@@ -101,65 +101,32 @@ Proof
   metis_tac[mem_path_offset_current_value]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  simp[array_tail_packet_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  drule_all target_array_source_cases >> strip_tac >>
-  simp[] >> conj_tac >- fs[expr_post_def] >>
-  `is_int_type (expr_type e)` by
-    gvs[type_place_target_SubscriptTarget, subscript_vtype_def, AllCaseEqs()] >>
-  fs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def] >>
-  Cases_on `expr_type e` >> gvs[is_int_type_def] >>
-  rename1 `is_int_type (BaseT ity)` >> Cases_on `ity` >>
-  gvs[is_int_type_def, evaluate_type_def, value_has_type_def] >>
-  qpat_x_assum `expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _` mp_tac >>
-  simp[expr_post_def, expr_val_rel_def, evaluate_type_def, AllCaseEqs(),
-     is_word_type_def, typed_val_to_w256_def, val_to_w256_def,
-     post_value_type_def] >> strip_tac >>
-  mp_tac exprSimArithTheory.math_val_i2w >>
-  disch_then (qspec_then `expr_type e` (qspec_then `i` mp_tac)) >>
-  gvs[arithmeticPropsTheory.math_val_def, is_signed_type_def,
-      type_bits_def, within_int_bound_def]
-QED
-*)
 Theorem array_tail_packet_source_index:
   array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace ==>
-  expr_sim_inv_mods mods cenv cx env mid2 /\
+  expr_sim_inv cenv cx env mid2 /\
   stmt_state_rel H ctx func cenv cx mid2 t2 /\
   ?i iw. v = IntV i /\ eval_operand iop t2 = SOME iw /\
     i = (if is_signed_type (expr_type e) then w2i iw else &(w2n iw))
 Proof
-  cheat
+  simp[array_tail_packet_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  `expr_body_pre cenv cx env e (mid1 with gas_obs := index_gas)` by
+    fs[targetPlaceSimTheory.target_pre_def, targetPlaceSimTheory.target_indices_pre_def] >>
+  drule_all (REWRITE_RULE [ETA_AX] exprSimSourceTheory.expr_body_pre_eval) >>
+  strip_tac >>
+  simp[] >> conj_tac >- fs[expr_post_def] >>
+  `is_int_type (expr_type e)` by
+    gvs[type_place_target_SubscriptTarget, subscript_vtype_def, AllCaseEqs()] >>
+  `env.type_defs = get_tenv cx` by
+    fs[exprSimHypsDefsTheory.expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
+  `?tv. evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\ value_has_type tv v` by
+    fs[expr_result_typed_def, expr_runtime_typed_def, value_result_typed_def] >>
+  drule_all target_subscript_index_word >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  drule_all array_tail_packet_source_index >> strip_tac >>
-  drule_all array_tail_packet_base_at_index >> strip_tac >>
-  gvs[] >>
-  `target_root bt = NameTarget id` by
-    (fs[array_tail_packet_def] >>
-     metis_tac[targetPlaceSimTheory.target_base_memory_root_ptr]) >>
-  `?entry live. lookup_scopes id mid2.scopes = SOME entry /\
-    evaluate_subscripts entry.type entry.value path = INL live` by
-    (fs[array_tail_packet_def] >>
-     drule_all target_array_source_cases >> simp[]) >>
-  `?etv. evaluate_type (get_tenv cx) et = SOME etv /\
-    evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd)` by
-    (fs[place_ptr_rel_def, evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
-  drule_all place_ptr_rel_memory_current >> strip_tac >>
-  Cases_on `live` >> gvs[value_has_type_def] >>
-  rename1 `value_has_type (ArrayTV etv bd) (ArrayV av)` >>
-  drule_all target_memory_array_length_bound >> simp[wordsTheory.dimword_def]
-QED
-*)
 Theorem array_tail_packet_memory_source[local]:
   array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
@@ -175,7 +142,26 @@ Theorem array_tail_packet_memory_source[local]:
     well_formed_type_value (ArrayTV etv bd) /\
     array_length (ArrayTV etv bd) av < dimword (:256)
 Proof
-  cheat
+  strip_tac >>
+  drule_all array_tail_packet_source_index >> strip_tac >>
+  drule_all array_tail_packet_base_at_index >> strip_tac >>
+  gvs[] >>
+  `target_root bt = NameTarget id` by
+    (fs[array_tail_packet_def] >>
+     metis_tac[targetPlaceSimTheory.target_base_memory_root_ptr]) >>
+  `?entry live. lookup_scopes id mid2.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL live` by
+    (fs[array_tail_packet_def] >>
+     `target_pre cenv cx env (SubscriptTarget bt e) (es with gas_obs := base_gas)` by
+       fs[targetPlaceSimTheory.target_pre_def] >>
+     drule_all targetLocalLiveTheory.local_subscript_index_live >> simp[]) >>
+  `?etv. evaluate_type (get_tenv cx) et = SOME etv /\
+    evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd)` by
+    (fs[place_ptr_rel_def, evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule_all place_ptr_rel_memory_current >> strip_tac >>
+  Cases_on `live` >> gvs[value_has_type_def] >>
+  rename1 `value_has_type (ArrayTV etv bd) (ArrayV av)` >>
+  drule_all target_memory_array_length_bound >> simp[wordsTheory.dimword_def]
 QED
 
 Theorem array_tail_packet_storage_source[local]:
@@ -215,50 +201,12 @@ Proof
   drule_all eval_base_place_storage_ready >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> drule_all array_tail_packet_source_index >> strip_tac >>
-  simp[] >> conj_tac
-  >- (rpt gen_tac >> strip_tac >>
-      drule_all array_tail_packet_memory_source >> strip_tac >>
-      qexistsl_tac [`entry`, `etv`, `av`] >> simp[] >>
-      `idx_in_range (is_signed_type (expr_type e)) iw
-         (n2w (array_length (ArrayTV etv bd) av)) <=>
-         0 <= i /\ Num i < array_length (ArrayTV etv bd) av` by
-        (drule exprSimSubscriptArraySuffixTheory.idx_in_range_integer >>
-         disch_then (qspecl_then [`iw`, `is_signed_type (expr_type e)`] mp_tac) >>
-         simp[] >> Cases_on `0 <= i` >> simp[] >>
-         metis_tac[integerTheory.NUM_LT, integerTheory.NUM_OF_INT,
-                   integerTheory.INT_POS]) >>
-      simp[] >> gvs[] >> irule extend_place_memory_array_index >> simp[]) >>
-  rpt gen_tac >> strip_tac >>
-  drule_all array_tail_packet_storage_source >> strip_tac >>
-  qexists `etv` >> simp[] >>
-  qabbrev_tac `n = (case bd of Fixed cap => cap | Dynamic cap =>
-       w2n (lookup_storage slot (get_storage cx mid2 tr)))` >>
-  `n < dimword (:256)` by
-    (Cases_on `bd` >> fs[Abbr `n`, vyperASTTheory.bound_length_def] >> decide_tac) >>
-  simp[] >>
-  `idx_in_range (is_signed_type (expr_type e)) iw (n2w n) <=>
-     0 <= i /\ Num i < n` by
-    (drule exprSimSubscriptArraySuffixTheory.idx_in_range_integer >>
-     disch_then (qspecl_then [`iw`, `is_signed_type (expr_type e)`] mp_tac) >>
-     simp[] >> Cases_on `0 <= i` >> simp[] >>
-     metis_tac[integerTheory.NUM_LT, integerTheory.NUM_OF_INT,
-               integerTheory.INT_POS]) >>
-  simp[] >> gvs[] >>
-  simp[extend_place_storage_array_index] >>
-  Cases_on `bd` >> fs[Abbr `n`] >>
-  rpt IF_CASES_TAC >> gvs[] >> decide_tac
-QED
-*)
 Theorem array_tail_packet_source_bounds:
   array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace ==>
-  expr_sim_inv_mods mods cenv cx env mid2 /\
+  expr_sim_inv cenv cx env mid2 /\
   stmt_state_rel H ctx func cenv cx mid2 t2 /\
   ?i iw. v = IntV i /\ eval_operand iop t2 = SOME iw /\
     i = (if is_signed_type (expr_type e) then w2i iw else &(w2n iw)) /\
@@ -295,7 +243,39 @@ Theorem array_tail_packet_source_bounds:
                 if 0 <= i /\ Num i < cap then "array dynamic length oob"
                 else "array dynamic capacity oob"))),mid2)))
 Proof
-  cheat
+  strip_tac >> drule_all array_tail_packet_source_index >> strip_tac >>
+  simp[] >> conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      drule_all array_tail_packet_memory_source >> strip_tac >>
+      qexistsl_tac [`entry`, `etv`, `av`] >> simp[] >>
+      `idx_in_range (is_signed_type (expr_type e)) iw
+         (n2w (array_length (ArrayTV etv bd) av)) <=>
+         0 <= i /\ Num i < array_length (ArrayTV etv bd) av` by
+        (drule exprSimSubscriptArraySuffixTheory.idx_in_range_integer >>
+         disch_then (qspecl_then [`iw`, `is_signed_type (expr_type e)`] mp_tac) >>
+         simp[] >> Cases_on `0 <= i` >> simp[] >>
+         metis_tac[integerTheory.NUM_LT, integerTheory.NUM_OF_INT,
+                   integerTheory.INT_POS]) >>
+      simp[] >> gvs[] >> irule extend_place_memory_array_index >> simp[]) >>
+  rpt gen_tac >> strip_tac >>
+  drule_all array_tail_packet_storage_source >> strip_tac >>
+  qexists `etv` >> simp[] >>
+  qabbrev_tac `n = (case bd of Fixed cap => cap | Dynamic cap =>
+       w2n (lookup_storage slot (get_storage cx mid2 tr)))` >>
+  `n < dimword (:256)` by
+    (Cases_on `bd` >> fs[Abbr `n`, vyperASTTheory.bound_length_def] >> decide_tac) >>
+  simp[] >>
+  `idx_in_range (is_signed_type (expr_type e)) iw (n2w n) <=>
+     0 <= i /\ Num i < n` by
+    (drule exprSimSubscriptArraySuffixTheory.idx_in_range_integer >>
+     disch_then (qspecl_then [`iw`, `is_signed_type (expr_type e)`] mp_tac) >>
+     simp[] >> Cases_on `0 <= i` >> simp[] >>
+     metis_tac[integerTheory.NUM_LT, integerTheory.NUM_OF_INT,
+               integerTheory.INT_POS]) >>
+  simp[] >> gvs[] >>
+  simp[extend_place_storage_array_index] >>
+  Cases_on `bd` >> fs[Abbr `n`] >>
+  rpt IF_CASES_TAC >> gvs[] >> decide_tac
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body

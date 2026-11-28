@@ -52,7 +52,15 @@ Proof
      lo d cenv cx es0 G0 tn0 s0` by metis_tac[] >>
   `dead_lo_ok (storage_trace_horizon es0.storage_trace)
      (DF (storage_trace_horizon es0.storage_trace)) lo cenv cx` by simp[] >>
-  drule_all toplevel_ctor_source_layout >> strip_tac >>
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
+  drule_then assume_tac bodySimTheory.body_inv_contract >>
+  drule_all_then assume_tac exprBodyPrePropsTheory.body_inv_expr_body_pre_mods >>
+  `dead_lo_ok_mods (storage_trace_horizon es0.storage_trace)
+     (DF (storage_trace_horizon es0.storage_trace)) lo cenv cx` by
+    fs[bodyFullShadowBodyInvTheory.dead_lo_ok_mods_def, bodyPtrDefsTheory.dead_lo_ok_def] >>
+  `src = NONE` by metis_tac[bodyInvCodePropsTheory.body_inv_module_locations] >>
+  gvs[] >> drule_all toplevel_ctor_source_layout >> strip_tac >>
+  gvs[alistTheory.ALOOKUP_def, compileUnitTheory.make_struct_fields_map_mods_singleton] >>
   `type_memory_size ptv = 32` by metis_tac[word_tv_memory_size] >>
   `s0.vs_alloca_next < dimword (:256)` by
     metis_tac[stmt_state_rel_alloca_room, alloca_room_next_lt] >>

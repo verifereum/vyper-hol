@@ -28,11 +28,17 @@ Proof
   drule_all immutable_augassign_entry >> strip_tac >>
   drule_all augassign_immutable_synthetic_pre >> strip_tac >>
   drule_all immutable_augassign_source_prefix >> strip_tac >>
+  drule_then assume_tac bodySimTheory.body_inv_contract >>
+  drule_all_then assume_tac exprBodyPrePropsTheory.body_inv_expr_body_pre_mods >>
+  `dead_lo_ok_mods H D lo cenv cx` by
+    fs[dead_lo_ok_mods_def, dead_lo_ok_def] >>
+  `ghost_inv_at_mods D lo d cenv cx es G tn s` by
+    (qpat_assum `ghost_inv_at _ _ _ _ _ _ _ _ _` mp_tac >>
+     PURE_REWRITE_TAC[ghost_inv_at_mods_def, ghost_inv_at_def] >> simp[]) >>
+  qpat_x_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
   drule_all toplevel_ctor_source_layout >> strip_tac >>
-  qpat_x_assum `ty' = ty` SUBST_ALL_TAC >>
-  `!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-     val_in_memory tv v off mem` by
-    metis_tac[toplevel_ctor_source_frame] >>
+  drule_all (Q.INST [`src` |-> `cenv.ce_module`] toplevel_ctor_source_frame_mods) >>
+  strip_tac >>
   `type_memory_size tv = 32` by metis_tac[word_tv_memory_size] >>
   drule_all robust_typed_word_clean >> strip_tac >>
   qexistsl_tac [`off`, `tv`, `v`] >>
@@ -86,8 +92,6 @@ Resume augassign_immutable_load_resources[finish]:
   `lo <= s.vs_alloca_next /\ allocas_from lo s` by
     fs[ghost_inv_at_def] >>
   `off + 32 <= lo /\ off + 32 <= s.vs_alloca_next` by decide_tac >>
-  qpat_x_assum `off = compute_immutables_len _ _` kall_tac >>
-  qpat_x_assum `tops = _ ++ _` kall_tac >>
   simp[eval_operand_def, op_taint_def, w2n_n2w] >> rpt gen_tac >>
   simp[ptr_inst_ok_def, mk_inst_def] >>
   conj_tac
