@@ -253,6 +253,13 @@ Resume ctor_saved_rows_at_last_cut[advance]:
   qpat_assum `!K. _ ==> extcall_positional_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ K _ _ _ _ _`
     (drule_then (MAP_EVERY assume_tac o CONJUNCTS o
        SIMP_RULE (srw_ss()) [extcall_positional_post_def])) >>
+  `expr_sim_inv ce cx env (E (SUC i))` by
+    (drule_then assume_tac bodySimTheory.body_inv_contract >>
+     drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_module_locations >>
+     drule_then assume_tac bodyInvCodePropsTheory.body_inv_unit_immutable_layout >>
+     drule_then assume_tac bodyInvCodePropsTheory.contract_inv_cenv_modules >>
+     drule_then assume_tac contractInvContextPropsTheory.contract_inv_singleton_source_modules >>
+     fs[bodyFullPostsModsTheory.expr_sim_inv_mods_singleton]) >>
   simp[] >> qx_gen_tac `K1` >> disch_tac >>
   qpat_assum `!K. _ ==> extcall_positional_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ K _ _ _ _ _`
     (qspec_then `K1` (drule_then (MAP_EVERY assume_tac o CONJUNCTS o

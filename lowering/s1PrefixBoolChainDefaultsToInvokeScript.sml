@@ -56,6 +56,18 @@ Proof
   `intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
      sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
     (first_assum irule >> first_assum ACCEPT_TAC) >>
+  qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+    let
+      val contract = MATCH_MP bodySimTheory.body_inv_contract inv
+      val pins = LIST_CONJ
+        [MATCH_MP contractInvContextPropsTheory.contract_inv_singleton_source_modules contract,
+         CONJUNCT1 (MATCH_MP bodyInvCodePropsTheory.body_inv_module_locations inv),
+         MATCH_MP bodyInvSplitTheory.contract_inv_immutable_section_layout contract]
+      val singleton = MATCH_MP bodyFullIntCallDefsTheory.intcall_entry_full_mods_singleton pins
+    in
+      qhdtm_assum `intcall_entry_full`
+        (assume_tac o PURE_REWRITE_RULE [GSYM singleton])
+    end) >>
   `((nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
       body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
         (subst_consts_stmts (module_consts_env tops []) ss))` by
@@ -260,7 +272,6 @@ Resume bool_chain_defaults_to_invoke_projected_prefix[native_entry]:
   `well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt)` by
     (drule expr_body_pre_static_facts >> simp[]) >>
   `cx_tops cx = tops` by drule_then (ACCEPT_TAC o CONJUNCT2) body_inv_main_code >>
-  `cx_tops cxd = tops` by fs[cx_tops_def, vyperContextTheory.get_module_code_def] >>
   `expr_sim_inv_mods [(NONE,tops)] cenv cx tenv es0` by
     (qpat_assum `expr_sim_inv cenv cx tenv es0` (fn th =>
        qpat_assum `cx_tops cx = tops` (fn code =>
@@ -271,9 +282,9 @@ Resume bool_chain_defaults_to_invoke_projected_prefix[native_entry]:
          ACCEPT_TAC (CONJUNCT1 (REWRITE_RULE [expr_sim_inv_split_def,code] th))))) >>
   `expr_sim_inv_mods [(NONE,tops)] (cenv_without_defaults cenv name) cxd
       (tenv with current_src := NONE) ed` by
-    (qpat_assum `expr_sim_inv (cenv_without_defaults cenv name) cxd _ ed` (fn th =>
-       qpat_assum `cx_tops cxd = tops` (fn code =>
-         ACCEPT_TAC (CONJUNCT1 (REWRITE_RULE [expr_sim_inv_split_def,code] th))))) >>
+    (drule_then
+       (assume_tac o MATCH_MP contract_inv_cenv_modules) body_inv_contract >>
+     gvs[cenv_without_defaults_def]) >>
   `cenv.ce_module = NONE` by
     fs[body_inv_split_def, cenv_module_pins_split_def, cenv_module_pins_mods_def] >>
   `?penv tv.
@@ -296,8 +307,18 @@ Resume bool_chain_defaults_to_invoke_projected_prefix[native_entry]:
      (?H. valid_horizon cx st0 H ed.storage_trace) /\
      gas_admissible (bind (intcall_rest cx name mut nr ss ed.scopes tv) f)
        P (ed with scopes := [penv])` by
-    (irule (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
-       (PURE_REWRITE_RULE [APPEND] intcall_args_after_defaults_data)) >>
+    (qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
+       let
+         val contract = MATCH_MP body_inv_contract inv
+         val pins = LIST_CONJ
+           [MATCH_MP contractInvContextPropsTheory.contract_inv_singleton_source_modules contract,
+            CONJUNCT1 (MATCH_MP body_inv_module_locations inv),
+            MATCH_MP contract_inv_immutable_section_layout contract]
+         val singleton = MATCH_MP intcall_entry_full_mods_singleton pins
+       in
+         irule (PURE_REWRITE_RULE [APPEND, singleton] (Q.INST
+           [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`] intcall_args_after_defaults_data))
+       end) >>
      qpat_assum `body_inv tops ctx cenv cx`
        (strip_assume_tac o REWRITE_RULE [body_inv_split_def]) >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
@@ -307,7 +328,8 @@ Resume bool_chain_defaults_to_invoke_projected_prefix[native_entry]:
         `gas_explicit_sites ctx shadow_ctx`,`ilabel`,`marks`,`pin`,`pvs`,`rbs`,`result_count`,
         `st2`,`st2a`,`st3`,`sup_ops`,`t`,`tna`,`ws1`,`svs`]) >>
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-     simp[nsid_to_string_def] >> first_assum ACCEPT_TAC) >>
+     simp[nsid_to_string_def, compileUnitTheory.make_struct_fields_map_mods_singleton] >>
+     first_assum ACCEPT_TAC) >>
   suspend "continuation"
 QED
 

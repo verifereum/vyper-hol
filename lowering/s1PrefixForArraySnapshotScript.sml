@@ -57,7 +57,7 @@ Theorem for_array_snapshot_continue_prefix:
     (em,u,Gu,tu)
 Proof
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  mp_tac (SPEC_ALL for_array_snapshot_length_setup) >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`] (SPEC_ALL for_array_snapshot_length_setup)) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
   disch_then (REPEAT_TCL CHOOSE_THEN (map_every assume_tac o CONJUNCTS)) >>
   rename1 `!D. gas_origin_ptr_path (D,lo,_,ctx,func,PG) (u,Gu,tu) [] (OK tL,GL,tnL)` >>

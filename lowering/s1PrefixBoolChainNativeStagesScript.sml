@@ -481,6 +481,14 @@ Proof
   rpt gen_tac >> strip_tac >>
   qpat_x_assum `bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (_::_)`
     (strip_assume_tac o REWRITE_RULE [bool_chain_full_ok_def]) >>
+  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,cx_tops cx)]` by
+    (drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
+     drule_then
+       (assume_tac o MATCH_MP contractInvContextPropsTheory.contract_inv_singleton_source_modules)
+       bodySimTheory.body_inv_contract >>
+     simp[]) >>
+  drule_then (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th]))
+    bodyFullPredsModsTheory.body_expr_full_ok_mods_singleton >>
   conj_tac
   >- (qpat_assum `!e rest sa sc shadow_sa shadow_sc es s G tn op. _ ==> gas_prefix_full _ _ _ _ _`
         (drule_all_then ACCEPT_TAC)) >>
