@@ -103,9 +103,15 @@ QED
 *)
 Theorem bool_chain_head_other_call_prefix_ok:
   !cx ann target args dr.
+    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+      EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+        (vyperTypeCallGraph$int_calls_expr (Call ann target args dr))) /\
     (!fid. target <> IntCall fid) /\
     (!stat skip fsig opts. target <> ExtCall stat skip fsig opts) /\
-    (!a. expr_size a < expr_size (Call ann target args dr) ==>
+    (!a. expr_size a < expr_size (Call ann target args dr) /\
+         (!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
+           EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+             (vyperTypeCallGraph$int_calls_expr a)) ==>
          body_expr_prefix_ok cx a) ==>
     body_expr_prefix_ok cx (Call ann target args dr)
 Proof

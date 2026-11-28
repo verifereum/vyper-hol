@@ -4,7 +4,8 @@ Ancestors
   linkedBodyLoopCalls constSubstMods vyperTypeContract
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeContractSoundness
   vyperTypeContractGetter vyperTypeContractStaticMaps vyperInterpreter
-  vyperTypeContractModes bodyFullPreds list option
+  vyperTypeContractModes vyperTypeCallStackSoundness vyperReadOnlyEval
+  bodyFullPreds constSubstCorrect list option
 
 Theorem singleton_decl_calls_live:
   MEM (FunctionDecl vis mut nr raw name args ds ret ss) tops /\
@@ -61,6 +62,17 @@ Proof
   simp[function_int_calls_def, EVERY_APPEND]
 QED
 
+Theorem singleton_callable_calls_live:
+  lookup_callable_function in_deploy name tops = SOME (mut,nr,args,ds,ret,ss) /\
+  MEM (NONE,name) (linked_live_functions [(NONE,tops)] []) ==>
+  EVERY (\k. MEM k (linked_live_functions [(NONE,tops)] []))
+    (function_int_calls ds ss)
+Proof
+  strip_tac >> drule lookup_callable_function_SOME_decompose >> strip_tac
+  >- simp[function_int_calls_def, int_calls_stmt_def, int_calls_expr_def] >>
+  drule singleton_decl_calls_live >> simp[]
+QED
+
 Theorem checked_singleton_subst_int_calls:
   check_contract mode layouts addr [(NONE,tops)] = SOME art ==>
   (!e. int_calls_expr (subst_consts_expr (module_consts_env tops []) e) =
@@ -70,6 +82,27 @@ Theorem checked_singleton_subst_int_calls:
 Proof
   strip_tac >> drule checked_subst_consts_int_calls_mods >>
   simp[consts_env_mods_singleton, subst_consts_mods_singleton]
+QED
+
+Theorem callable_compiled_calls_live:
+  check_contract mode layouts addr [(NONE,tops)] = SOME art /\
+  lookup_callable_function in_deploy name tops = SOME (mut,nr,args,ds,ret,ss) /\
+  MEM (NONE,name) (linked_live_functions [(NONE,tops)] []) ==>
+  EVERY (\k. MEM k (linked_live_functions [(NONE,tops)] []))
+    (int_calls_stmts (subst_consts_stmts (module_consts_env tops []) ss)) /\
+  !n. EVERY (\k. MEM k (linked_live_functions [(NONE,tops)] []))
+    (int_calls_exprs
+      (DROP n (subst_consts_exprs (module_consts_env tops []) ds)))
+Proof
+  strip_tac >> drule_all singleton_callable_calls_live >>
+  simp[function_int_calls_def, EVERY_APPEND] >> strip_tac >>
+  drule_then strip_assume_tac checked_singleton_subst_int_calls >>
+  simp[int_calls_exprs_FLAT_MAP, EVERY_FLAT, EVERY_MAP,
+       subst_consts_exprs_map, GSYM MAP_DROP, combinTheory.o_DEF] >>
+  fs[int_calls_exprs_FLAT_MAP, EVERY_FLAT, EVERY_MAP] >>
+  gen_tac >> qspecl_then [`n`, `ds`] mp_tac TAKE_DROP >>
+  disch_then (fn th => qpat_x_assum `EVERY _ ds` (mp_tac o ONCE_REWRITE_RULE [GSYM th])) >>
+  simp[EVERY_APPEND]
 QED
 
 Theorem body_const_cells_agree_runtime_check:
