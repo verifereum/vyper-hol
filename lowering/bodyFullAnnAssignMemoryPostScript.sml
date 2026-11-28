@@ -1,5 +1,5 @@
 Theory bodyFullAnnAssignMemoryPost
-Ancestors
+Ancestors bodyPtrDefs[qualified,ignore_grammar]
   bodyFullMemoryStage bodyFullMemoryStore bodyFullPathHistory stateRelProj
   bodyFullLog bodyFullShared
   stmtLowering exprLoweringProps compileEnv context localPtrsProps
@@ -709,55 +709,6 @@ QED
 Finalise annassign_memory_full_installation_post
 
 (* RHS enrichment at one concrete, already allocated declaration entry. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `ci_mono sa a /\ ci_mono a b` by
-    metis_tac[ci_mono_compile_alloc_buffer,ci_mono_lower_value_compile_expr,
-              pairTheory.SND] >>
-  `sa.cs_next_var <= a.cs_next_var /\ a.cs_next_var <= b.cs_next_var /\
-   sa.cs_next_id <= a.cs_next_id` by fs[ci_mono_def] >>
-  `!x. not_fresh_at sa x ==> not_fresh_at a x /\ not_fresh_at b x` by
-    (rpt strip_tac >> metis_tac[not_fresh_at_mono,arithmeticTheory.LESS_EQ_TRANS]) >>
-  `not_fresh_at b p /\ local_ptrs_reserved ce b` by
-    (conj_tac >- metis_tac[not_fresh_at_mono] >>
-     irule local_ptrs_reserved_next_var >> qexists_tac `a` >> simp[]) >>
-  `ce.ce_is_ctor = old.ce_is_ctor /\
-   ce.ce_return_buf = old.ce_return_buf /\ ce.ce_return_pc = old.ce_return_pc` by
-    (qpat_assum `ce with <|ce_vars := _; ce_var_type := _;
-                         ce_dynarray_capacity := _|> = old` mp_tac >>
-     simp[compile_env_component_equality]) >>
-  `(!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x) /\
-   (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x)` by
-    (fs[ret_pc_ok_def] >> metis_tac[]) >>
-  simp[] >>
-  `return_buf_frame d ce a entry` by
-    (irule return_buf_frame_frame >> qexistsl_tac [`old`,`s0`,`sa`] >>
-     simp[] >> metis_tac[]) >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp entry` by
-    (`stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func ce cx es entry` by
-       metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-     qpat_assum `stmt_state_rel _ ctx func ce cx es entry`
-       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
-     simp[]) >>
-  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
-  rewrite_tac[expr_sim_full_def] >>
-  disch_then (qspecl_then [`st0`,`a`,`b`,`shadow_a`,`shadow_b`,
-    `op`,`entry`,`Ga`,`tna`] mp_tac) >>
-  (impl_tac >-
-    (asm_rewrite_tac[] >> rpt conj_tac
-     >- (qpat_x_assum `!H. dead_lo_ok H (DF H) lo old cx` mp_tac >>
-         simp[bodyPtrDefsTheory.dead_lo_ok_def])
-     >~ [`gas_admissible _ expr_res_ok es`]
-     >- metis_tac[annassign_admissible_rhs] >>
-     fs[ret_pc_ok_def] >> metis_tac[])) >>
-  disch_tac >> irule gas_outcome_full_post_source >>
-  goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >>
-  simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
-  suspend "success"
-QED
-*)
 Theorem annassign_full_rhs_from_entry:
   !DF lo d PG ctx shadow_ctx func shadow_func old ce cx es id typ e
    sa r a b shadow_a shadow_b p sz op s0 G0 tn0 lctx st0 w entry Ga tna.
@@ -856,10 +807,55 @@ Theorem annassign_full_rhs_from_entry:
       (\H res mid gt rr. expr_exit res rr /\ halt_exit H cx mid res rr /\
         (ctx_has_dalloca ctx ==> !s. rr = Halt s ==> allocas_below_fmp s))
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `ci_mono sa a /\ ci_mono a b` by
+    metis_tac[ci_mono_compile_alloc_buffer,ci_mono_lower_value_compile_expr,
+              pairTheory.SND] >>
+  `sa.cs_next_var <= a.cs_next_var /\ a.cs_next_var <= b.cs_next_var /\
+   sa.cs_next_id <= a.cs_next_id` by fs[ci_mono_def] >>
+  `!x. not_fresh_at sa x ==> not_fresh_at a x /\ not_fresh_at b x` by
+    (rpt strip_tac >> metis_tac[not_fresh_at_mono,arithmeticTheory.LESS_EQ_TRANS]) >>
+  `not_fresh_at b p /\ local_ptrs_reserved ce b` by
+    (conj_tac >- metis_tac[not_fresh_at_mono] >>
+     irule local_ptrs_reserved_next_var >> qexists_tac `a` >> simp[]) >>
+  `ce.ce_is_ctor = old.ce_is_ctor /\ ce.ce_modules = old.ce_modules /\
+   ce.ce_return_buf = old.ce_return_buf /\ ce.ce_return_pc = old.ce_return_pc` by
+    (qpat_assum `ce with <|ce_vars := _; ce_var_type := _;
+                         ce_dynarray_capacity := _|> = old` mp_tac >>
+     simp[compile_env_component_equality]) >>
+  `(!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x) /\
+   (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x)` by
+    (fs[ret_pc_ok_def] >> metis_tac[]) >>
+  simp[] >>
+  `return_buf_frame d ce a entry` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`old`,`s0`,`sa`] >>
+     simp[] >> metis_tac[]) >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp entry` by
+    (`stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func ce cx es entry` by
+       metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+     qpat_assum `stmt_state_rel _ ctx func ce cx es entry`
+       (mp_tac o MATCH_MP bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp) >>
+     simp[]) >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _` mp_tac >>
+  rewrite_tac[expr_sim_full_def] >>
+  disch_then (qspecl_then [`st0`,`a`,`b`,`shadow_a`,`shadow_b`,
+    `op`,`entry`,`Ga`,`tna`] mp_tac) >>
+  (impl_tac >-
+    (asm_rewrite_tac[] >> rpt conj_tac
+     >- (gen_tac >>
+         qpat_assum `!H. dead_lo_ok H (DF H) lo old cx`
+           (qspec_then `H` assume_tac) >>
+         qpat_x_assum `dead_lo_ok H (DF H) lo old cx` mp_tac >>
+         gvs[bodyPtrDefsTheory.dead_lo_ok_def])
+     >~ [`gas_admissible _ expr_res_ok es`]
+     >- metis_tac[annassign_admissible_rhs] >>
+     fs[ret_pc_ok_def] >> metis_tac[])) >>
+  disch_tac >> irule gas_outcome_full_post_source >>
+  goal_assum (drule_at (Pat `gas_outcome_full _ _ _ _ _ _ _ _`)) >>
+  simp[] >> rpt gen_tac >> strip_tac >> gvs[] >>
+  suspend "success"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_full_rhs_from_entry[success]:
   qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
   `MAP FDOM ee.scopes = MAP FDOM es.scopes` by
@@ -897,9 +893,7 @@ Resume annassign_full_rhs_from_entry[success]:
   fs[expr_post_def,bodyPtrDefsTheory.ghost_kept_at_def] >>
   rpt conj_tac >> FIRST [first_assum ACCEPT_TAC, metis_tac[]]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_full_rhs_from_entry[horizon]:
   qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >> strip_tac >>
   drule_at (Pat `f st = _`) vyperStorageFootprintTheory.valid_horizon_frame >>
@@ -908,9 +902,7 @@ Resume annassign_full_rhs_from_entry[horizon]:
        vyperStorageTraceTheory.storage_trace_frame_read_result] >>
   disch_then drule >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_full_rhs_from_entry[taint]:
   fs[bodyPtrDefsTheory.ghost_kept_at_def] >>
   qpat_assum `alloca_frame old es sa s0 ce es entry`
@@ -921,40 +913,10 @@ Resume annassign_full_rhs_from_entry[taint]:
   simp[arithmeticTheory.ADD_COMM] >>
   (impl_tac >- (rpt strip_tac >> first_x_assum drule >> decide_tac)) >> simp[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise annassign_full_rhs_from_entry
-*)
 
 (* Capacity-generic allocation, before the RHS or empty-value execution. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func old cx es s0 /\
-   ghost_inv_at (DF (storage_trace_horizon es.storage_trace)) lo d old cx es G0 tn0 s0` by
-    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  `allocas_from lo s0 /\ lo <= s0.vs_alloca_next` by
-    fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by metis_tac[] >>
-  drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
-    alloc_buffer_origin_ptr_path_exact) >>
-  disch_then (qspecl_then [`tn0`,`explicit`,`PG`,`G0`] strip_assume_tac) >> gvs[] >>
-  `!H. valid_horizon cx st0 H es.storage_trace ==>
-    ghost_inv_at (DF H) lo d old cx es G' tn' t` by
-    (rpt strip_tac >> irule (INST_TYPE [alpha |-> ``:256``] alloc_buffer_ghost_inv_at) >>
-     rpt (first_assum (irule_at Any)) >>
-     qexistsl_tac [`w2n w + type_memory_bytes old typ`,`G0`] >>
-     simp[] >> metis_tac[ret_pc_ok_def]) >>
-  `!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx func old cx es t` by
-    (rpt strip_tac >> first_x_assum irule >>
-     qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _ /\ _ /\ _`
-       (drule_then strip_assume_tac) >> simp[]) >>
-  suspend "declare"
-QED
-*)
 Theorem annassign_full_alloc_entry:
   !DF lo d PG explicit ctx func old ce cx es id typ st0 sa r a p sz s0 G0 tn0.
     declare_local old id typ sa = (ce,r) /\ old.ce_alloca_locals /\
@@ -1012,41 +974,63 @@ Theorem annassign_full_alloc_entry:
         storage_well_formed_on cx es (FST H) /\
         ghost_inv_at (DF H) lo d ce cx es Ga tna entry)
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  `stmt_state_rel (storage_trace_horizon es.storage_trace) ctx func old cx es s0 /\
+   ghost_inv_at (DF (storage_trace_horizon es.storage_trace)) lo d old cx es G0 tn0 s0` by
+    metis_tac[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  `allocas_from lo s0 /\ lo <= s0.vs_alloca_next` by
+    fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by metis_tac[] >>
+  drule_all (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
+    alloc_buffer_origin_ptr_path_exact) >>
+  disch_then (qspecl_then [`tn0`,`explicit`,`PG`,`G0`] strip_assume_tac) >> gvs[] >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    ghost_inv_at (DF H) lo d old cx es G' tn' t` by
+    (rpt strip_tac >> irule (INST_TYPE [alpha |-> ``:256``] alloc_buffer_ghost_inv_at) >>
+     rpt (first_assum (irule_at Any)) >>
+     qexistsl_tac [`w2n w + type_memory_bytes old typ`,`G0`] >>
+     simp[] >> metis_tac[ret_pc_ok_def]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func old cx es t` by
+    (rpt strip_tac >> first_x_assum irule >>
+     qpat_x_assum `!H. valid_horizon _ _ _ _ ==> _ /\ _ /\ _`
+       (drule_then strip_assume_tac) >> simp[]) >>
+  suspend "declare"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_full_alloc_entry[declare]:
   drule_all declare_local_ptr >> strip_tac >>
   drule compile_alloc_buffer_parts >> simp[] >> strip_tac >> gvs[] >>
   `ce.ce_return_buf = old.ce_return_buf /\ ce.ce_return_pc = old.ce_return_pc /\
-   ce.ce_imm_alloca = old.ce_imm_alloca` by
+   ce.ce_imm_alloca = old.ce_imm_alloca /\ ce.ce_modules = old.ce_modules /\
+   ce.ce_module_vars = old.ce_module_vars` by
     (qpat_assum `ce with <|ce_vars := _; ce_dynarray_capacity := _;
-      ce_var_type := _|> = old` mp_tac >>
-     simp[compile_env_component_equality]) >>
+      ce_var_type := _|> = old` mp_tac >> simp[compile_env_component_equality]) >>
   `!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx func ce cx es t /\
-    ghost_inv_at (DF H) lo d ce cx es G' tn' t` by
-    (gen_tac >> disch_tac >> conj_tac
+    stmt_state_rel H ctx func ce cx es t /\ ghost_inv_at (DF H) lo d ce cx es G' tn' t` by
+    (qx_gen_tac `H` >> disch_tac >> conj_tac
      >- (irule stmt_state_rel_declare_local_entry >>
-         goal_assum (drule_at (Pat `declare_local _ _ _ _ = _`)) >>
-         simp[] >> metis_tac[]) >>
+         goal_assum (drule_at (Pat `declare_local _ _ _ _ = _`)) >> simp[] >> metis_tac[]) >>
      `ghost_inv_at (DF H) lo d old cx es G' tn' t` by metis_tac[] >>
-     fs[bodyPtrDefsTheory.ghost_inv_at_def] >> conj_tac
-     >- (rpt gen_tac >> strip_tac >> Cases_on `name = id` >> gvs[] >>
-         qpat_x_assum `!name entry p sz. _`
-           (qspecl_then [`name`,`entry`,`p`,`sz`] mp_tac) >> simp[]) >>
-     simp[] >> Cases_on `d` >> gvs[bodyPtrDefsTheory.return_buf_ptr_def] >>
-     PairCases_on `x` >> gvs[bodyPtrDefsTheory.return_buf_ptr_def]) >>
+     pop_assum (strip_assume_tac o REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >>
+     `!i. imm_section_dead_mods ce (mem_bytes_at 0 lo t.vs_memory) i =
+          imm_section_dead_mods old (mem_bytes_at 0 lo t.vs_memory) i` by
+       simp[immSectionDeadTheory.imm_section_dead_mods_def] >>
+     `return_buf_ptr d ce G' tn' t` by
+       (Cases_on `d` >> simp[bodyPtrDefsTheory.return_buf_ptr_def] >>
+        rename1 `return_buf_ptr (SOME rb) _ _ _ _` >> PairCases_on `rb` >>
+        fs[bodyPtrDefsTheory.return_buf_ptr_def]) >>
+     simp[bodyPtrDefsTheory.ghost_inv_at_def] >>
+     rpt gen_tac >> strip_tac >> Cases_on `name = id` >> gvs[] >>
+     qpat_assum `!name entry p sz. lookup_scopes name es.scopes = _ /\ FLOOKUP old.ce_vars name = _ ==> _`
+       (qspecl_then [`name`,`entry`,`p`,`sz`] mp_tac) >> simp[]) >>
   `~t.vs_halted /\ t.vs_memory = s0.vs_memory` by
     (qpat_assum `t with <|vs_vars := _; vs_inst_idx := _;
        vs_allocas := _; vs_alloca_next := _|> = s0` mp_tac >>
      simp[venom_state_component_equality] >> metis_tac[]) >>
   suspend "frame"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_full_alloc_entry[frame]:
   `alloca_frame old es sa s0 old es t` by
     (irule (INST_TYPE [alpha |-> ``:256``, beta |-> ``:256``]
@@ -1077,9 +1061,7 @@ Resume annassign_full_alloc_entry[frame]:
      simp[bodyPtrDefsTheory.ghost_kept_at_def] >> metis_tac[]) >>
   suspend "finish"
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_full_alloc_entry[finish]:
   `MEM (mk_inst sa.cs_next_id ALLOCA [Lit (n2w (type_memory_bytes old typ))]
      [STRING #"%" (toString sa.cs_next_var)]) (fn_insts func)` by
@@ -1096,11 +1078,8 @@ Resume annassign_full_alloc_entry[finish]:
      goal_assum (drule_at (Pat `return_buf_frame _ _ _ _`)) >> simp[] >> metis_tac[]) >>
   qexistsl_tac [`w`,`t`,`G'`,`tn'`] >> simp[] >> metis_tac[ret_pc_ok_def]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise annassign_full_alloc_entry
-*)
 
 (* The common allocation/RHS prefix: allocation witnesses precede all horizons. *)
 Theorem annassign_full_alloc_rhs_prefix:
