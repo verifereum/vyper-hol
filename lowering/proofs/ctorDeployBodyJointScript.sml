@@ -598,8 +598,39 @@ Proof
      initial_evaluation_context_def] >> gvs[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem deploy_ctor_body_joint_raw_with:
+  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan off am tx es vs
+   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final
+   func mut nr' body' am_c es0 shadow_ctx shadow_func shadow_sa shadow_sb.
+    deploy_phases policy tops (assemble prog, runtime_bc)
+      (rpolicy, dunit, dout, prog, cplan) /\
+    deploy_source_ok tops am tx /\
+    deploy_state_rel tops (assemble prog') am tx es /\
+    call_outcomes_ok am tx vs.vs_outcomes /\
+    FLOOKUP (lo_reloc prog prog') "runtime_begin" = SOME off /\
+    off < dimword(:256) /\ off <= LENGTH (assemble prog') /\
+    DROP off (assemble prog') = runtime_bc /\
+    raw_variant vs.vs_initial_fmp vs
+      (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
+    (ctx_has_dalloca dunit.cu_context ==>
+      imm_len tops + unit_alloca_budget dunit.cu_context <= w2n vs.vs_initial_fmp /\
+      w2n vs.vs_initial_fmp < 2 ** 254) /\
+    (ctx_has_dalloca dunit.cu_context ==> !fn inst s.
+      raw_reachable vs dunit.cu_context fn inst s ==> dalloca_fmp_headroom inst s) /\
+    deploy_ctor_code tops rpolicy runtime_bc dunit
+      (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
+       st_epilogue, st_final, func) /\
+    deploy_ctor_start tops am tx (mut, nr', body', am_c, es0) /\
+    shadow_body_inv tops dunit.cu_context shadow_ctx /\
+    gas_shadow_context dunit.cu_context shadow_ctx /\
+    gas_shadow_function func shadow_func /\
+    MEM shadow_func shadow_ctx.ctx_functions /\
+    compile_stmts (gas_shadow_env T cenv) NoLoop NoneT (MAP gas_shadow_stmt body) shadow_sa =
+      ((), shadow_sb) /\
+    gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
+    fn_has_code shadow_sa shadow_sb shadow_func ==>
+    ?marks.
+      deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx dunit vs
 Proof
   rpt gen_tac >> strip_tac >>
   `IS_SOME (FLOOKUP (lo_reloc prog prog') "runtime_begin")` by simp[] >>
@@ -615,6 +646,8 @@ Proof
     (gvs[] >> drule_all deploy_ctor_body_substitution >> simp[]) >>
   qpat_x_assum `body = subst_consts_stmts _ body'` kall_tac >>
   drule deploy_ctor_return_metadata >> strip_tac >>
+  `cenv.ce_modules = [(NONE,tops)]` by
+    (drule_all deploy_ctor_body_inv >> simp[body_inv_def, cenv_module_pins_def]) >>
   drule_all deploy_ctor_immutable_size >> strip_tac >>
   qspecl_then [`tops`, `am`, `tx`, `mut`, `nr`, `body`, `body'`, `am_c`, `es0`,
     `rpolicy`, `runtime_bc`, `dunit`, `cenv`, `nkey`, `ut`, `imm`,
@@ -968,41 +1001,4 @@ Proof
      impl_tac >- (simp[] >> first_assum irule >> first_assum ACCEPT_TAC) >>
      strip_tac >> fs[]) >>
   simp[]
-QED
-*)
-Theorem deploy_ctor_body_joint_raw_with:
-  !policy tops runtime_bc rpolicy dunit dout prog prog' cplan off am tx es vs
-   body cenv nr nkey ut imm exit_lbl sa sb sj st_exit st_epilogue st_final
-   func mut nr' body' am_c es0 shadow_ctx shadow_func shadow_sa shadow_sb.
-    deploy_phases policy tops (assemble prog, runtime_bc)
-      (rpolicy, dunit, dout, prog, cplan) /\
-    deploy_source_ok tops am tx /\
-    deploy_state_rel tops (assemble prog') am tx es /\
-    call_outcomes_ok am tx vs.vs_outcomes /\
-    FLOOKUP (lo_reloc prog prog') "runtime_begin" = SOME off /\
-    off < dimword(:256) /\ off <= LENGTH (assemble prog') /\
-    DROP off (assemble prog') = runtime_bc /\
-    raw_variant vs.vs_initial_fmp vs
-      (opt_deploy_entry_state_own prog prog' cplan tops es with vs_outcomes := vs.vs_outcomes) /\
-    (ctx_has_dalloca dunit.cu_context ==>
-      imm_len tops + unit_alloca_budget dunit.cu_context <= w2n vs.vs_initial_fmp /\
-      w2n vs.vs_initial_fmp < 2 ** 254) /\
-    (ctx_has_dalloca dunit.cu_context ==> !fn inst s.
-      raw_reachable vs dunit.cu_context fn inst s ==> dalloca_fmp_headroom inst s) /\
-    deploy_ctor_code tops rpolicy runtime_bc dunit
-      (body, cenv, nr, nkey, ut, imm, exit_lbl, sa, sb, sj, st_exit,
-       st_epilogue, st_final, func) /\
-    deploy_ctor_start tops am tx (mut, nr', body', am_c, es0) /\
-    shadow_body_inv tops dunit.cu_context shadow_ctx /\
-    gas_shadow_context dunit.cu_context shadow_ctx /\
-    gas_shadow_function func shadow_func /\
-    MEM shadow_func shadow_ctx.ctx_functions /\
-    compile_stmts (gas_shadow_env T cenv) NoLoop NoneT (MAP gas_shadow_stmt body) shadow_sa =
-      ((), shadow_sb) /\
-    gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
-    fn_has_code shadow_sa shadow_sb shadow_func ==>
-    ?marks.
-      deploy_unit_execution_correct_with shadow_ctx marks tops runtime_bc am tx dunit vs
-Proof
-  cheat
 QED
