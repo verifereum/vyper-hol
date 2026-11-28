@@ -10,7 +10,7 @@ Theorem intcall_after_defaults_storage_trace_frame:
        bind (lift_option_type (evaluate_type (get_tenv cx) ret)
                 "IntCall eval ret") (\rtv.
        ignore_bind (lock_if_nr cx nr (is_view_mut mut))
-         (bind (push_function (NONE,name) penv cx) (\cxf.
+         (bind (push_function (src,name) penv cx) (\cxf.
           bind (finally_unless_halt
             (finally
               (try (ignore_bind (eval_stmts cxf ss) (return NoneV)) handle_function)
