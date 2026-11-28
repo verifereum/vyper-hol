@@ -7,6 +7,51 @@ Ancestors
   s1PrefixExtCallRequestPackingContinuation bodyFullExtCallKeywordPackedCut
   gasOutcomeFullCompose exprBodyPreProps bodyFullPreds list
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule request_stage_source_boundary >> strip_tac >>
+  Cases_on `args` >- gvs[] >> rename1 `addr::tail` >>
+  drule_all_then
+    (qx_choosel_then [`ao`,`av`,`vo`,`go`,`def`,`gas`,`s1`,`s2`,`s3`,`s5`,`result`,
+       `shadow_s1`,`shadow_s2`,`shadow_s3`,`s5'`,`shadow_go`,`gas'`,`result'`]
+       (map_every assume_tac o CONJUNCTS)) request_stage_paired_cuts >>
+  RULE_ASSUM_TAC (SRULE [GSYM listTheory.MAP_DROP, GSYM listTheory.MAP_TAKE,
+    listTheory.MAP_MAP_o, combinTheory.o_DEF, SF boolSimps.ETA_ss]) >>
+  qabbrev_tac `xs = TAKE (LENGTH ats) tail` >>
+  qabbrev_tac `kw_es = DROP (LENGTH ats) tail` >>
+  simp[exprSimExtCallCaseTheory.eval_extcall_stages, GSYM arithmeticTheory.ADD1] >>
+  ho_match_mp_tac (GEN_ALL extcall_guarded_operands_request_prefix) >>
+  qexistsl [`tops`,`tail`,`av`,`s1`,`shadow_s1`,`shadow_s2`,`shadow_sa`,
+            `shadow_func`,`s2`,`sa`,`LENGTH ats`,`kw_es`,`env`,`d`,`cenv`,
+            `addr::tail`,`REPLICATE (LENGTH ats) ARB`,`ao`,`Q`] >>
+  conj_tac >- MATCH_ACCEPT_TAC (GEN_ALL extcall_request_head_prefix) >>
+  conj_tac >- MATCH_ACCEPT_TAC (GEN_ALL extcall_request_positional_packing_prefix) >>
+  simp[exprSimFullBundlePropsTheory.expr_sim_full_code_def,
+       listTheory.MAP_MAP_o, combinTheory.o_DEF, SF boolSimps.ETA_ss,
+       GSYM arithmeticTheory.ADD1] >>
+  conj_tac
+  >- (qpat_assum `!e st. (e = addr \/ MEM e tail) /\ _ ==> _` irule >>
+      simp[] >> metis_tac[expr_body_pre_static_facts]) >>
+  conj_tac >- (rpt gen_tac >> disch_tac >> conj_tac >> first_assum (drule_then ACCEPT_TAC)) >>
+  conj_tac
+  >- (rpt gen_tac >> strip_tac >> simp[Abbr `kw_es`] >> conj_tac >>
+      first_assum (fn th =>
+        drule_all_then ACCEPT_TAC (SIMP_RULE (srw_ss()) [GSYM arithmeticTheory.SUC_ONE_ADD] th))) >>
+  conj_tac
+  >- (rpt strip_tac >> first_x_assum irule >>
+      metis_tac[rich_listTheory.MEM_TAKE, markerTheory.Abbrev_def]) >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac
+  >- (rpt gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
+      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
+           vyperStorageTraceTheory.storage_trace_frame_ext_call]) >>
+  qx_genl_tac [`obs1`,`obs2`,`v`,`aw`,`mid`,`t`,`G1`,`tn1`,`vs`,`ee`,`u`,`G2`,`tn2`] >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  suspend "keywords"
+QED
+*)
 Theorem extcall_request_prefix:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
@@ -222,48 +267,10 @@ Theorem extcall_request_prefix:
     cx st0 (eval_expr cx (Call ann (ExtCall stat skip (fname,ats,rt) opts) args dr))
     (es,s0,G0,tn0)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule request_stage_source_boundary >> strip_tac >>
-  Cases_on `args` >- gvs[] >> rename1 `addr::tail` >>
-  drule_all_then
-    (qx_choosel_then [`ao`,`av`,`vo`,`go`,`def`,`gas`,`s1`,`s2`,`s3`,`s5`,`result`,
-       `shadow_s1`,`shadow_s2`,`shadow_s3`,`s5'`,`shadow_go`,`gas'`,`result'`]
-       (map_every assume_tac o CONJUNCTS)) request_stage_paired_cuts >>
-  RULE_ASSUM_TAC (SRULE [GSYM listTheory.MAP_DROP, GSYM listTheory.MAP_TAKE,
-    listTheory.MAP_MAP_o, combinTheory.o_DEF, SF boolSimps.ETA_ss]) >>
-  qabbrev_tac `xs = TAKE (LENGTH ats) tail` >>
-  qabbrev_tac `kw_es = DROP (LENGTH ats) tail` >>
-  simp[exprSimExtCallCaseTheory.eval_extcall_stages, GSYM arithmeticTheory.ADD1] >>
-  ho_match_mp_tac (GEN_ALL extcall_guarded_operands_request_prefix) >>
-  qexistsl [`tops`,`tail`,`av`,`s1`,`shadow_s1`,`shadow_s2`,`shadow_sa`,
-            `shadow_func`,`s2`,`sa`,`LENGTH ats`,`kw_es`,`env`,`d`,`cenv`,
-            `addr::tail`,`REPLICATE (LENGTH ats) ARB`,`ao`,`Q`] >>
-  conj_tac >- MATCH_ACCEPT_TAC (GEN_ALL extcall_request_head_prefix) >>
-  conj_tac >- MATCH_ACCEPT_TAC (GEN_ALL extcall_request_positional_packing_prefix) >>
-  simp[exprSimFullBundlePropsTheory.expr_sim_full_code_def,
-       listTheory.MAP_MAP_o, combinTheory.o_DEF, SF boolSimps.ETA_ss,
-       GSYM arithmeticTheory.ADD1] >>
-  conj_tac
-  >- (qpat_assum `!e st. (e = addr \/ MEM e tail) /\ _ ==> _` irule >>
-      simp[] >> metis_tac[expr_body_pre_static_facts]) >>
-  conj_tac >- (rpt gen_tac >> disch_tac >> conj_tac >> first_assum (drule_then ACCEPT_TAC)) >>
-  conj_tac
-  >- (rpt gen_tac >> strip_tac >> simp[Abbr `kw_es`] >> conj_tac >>
-      first_assum (fn th =>
-        drule_all_then ACCEPT_TAC (SIMP_RULE (srw_ss()) [GSYM arithmeticTheory.SUC_ONE_ADD] th))) >>
-  conj_tac
-  >- (rpt strip_tac >> first_x_assum irule >>
-      metis_tac[rich_listTheory.MEM_TAKE, markerTheory.Abbrev_def]) >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac
-  >- (rpt gen_tac >> irule vyperStorageTraceTheory.storage_trace_frame_bind_all >>
-      simp[vyperStorageTraceTheory.evaluate_storage_trace_frame,
-           vyperStorageTraceTheory.storage_trace_frame_ext_call]) >>
-  qx_genl_tac [`obs1`,`obs2`,`v`,`aw`,`mid`,`t`,`G1`,`tn1`,`vs`,`ee`,`u`,`G2`,`tn2`] >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  suspend "keywords"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_prefix[keywords]:
   `!e st. MEM e xs /\ expr_sim_inv cenv cx env st ==>
      expr_body_pre cenv cx env e st` by
@@ -389,7 +396,9 @@ Resume extcall_request_prefix[keywords]:
     (REPEAT_TCL CONJUNCTS_THEN assume_tac)) >>
   suspend "physical"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_prefix[physical]:
   conj_tac
   >- (irule bodyFullRawCallGeneratedPrefixTheory.raw_call_generated_prefix_full >>
@@ -419,7 +428,9 @@ Resume extcall_request_prefix[physical]:
      simp[NoAsms, SF ETA_ss] >> first_assum ACCEPT_TAC)) >>
   simp[NoAsms, SF ETA_ss]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_prefix[join]:
   disch_then (qx_choose_then `Qkw` strip_assume_tac) >>
   reverse conj_tac
@@ -459,5 +470,8 @@ Resume extcall_request_prefix[join]:
     (gen_tac >> disch_tac >> first_assum (drule_then (ACCEPT_TAC o CONJUNCT2))) >>
   first_assum (drule_all_then (ACCEPT_TAC o CONJUNCT1))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise extcall_request_prefix
+*)

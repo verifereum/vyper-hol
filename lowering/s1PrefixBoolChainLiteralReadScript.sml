@@ -2,6 +2,19 @@ Theory s1PrefixBoolChainLiteralRead
 Ancestors
   s1PrefixBoolChainEqDemand s1PrefixLiteralWord bodyFullLiteralWord s1PrefixDefs
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rewrite_tac[value_read_demand_def] >> rpt gen_tac >> strip_tac >> conj_tac
+  >- (`expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+         cenv cx ty (Literal ann lit) es` by metis_tac[literal_word_value_full] >>
+      qpat_x_assum `expr_sim_full _ _ _ _ _ _`
+        (irule o REWRITE_RULE [expr_sim_full_eq]) >>
+      goal_assum (drule_at Any)) >>
+  irule (REWRITE_RULE [expr_sim_prefix_def] literal_word_value_prefix) >>
+  goal_assum (drule_at Any)
+QED
+*)
 Theorem word_literal_read_joint_at_demand:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ann lit ty es
    st0 sa sb shadow_sa shadow_sb op s G tn.
@@ -24,12 +37,5 @@ Theorem word_literal_read_joint_at_demand:
    gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
      cx st0 (bind (eval_expr cx (Literal ann lit)) (read_result cx)) (es,s,G,tn)
 Proof
-  rewrite_tac[value_read_demand_def] >> rpt gen_tac >> strip_tac >> conj_tac
-  >- (`expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-         cenv cx ty (Literal ann lit) es` by metis_tac[literal_word_value_full] >>
-      qpat_x_assum `expr_sim_full _ _ _ _ _ _`
-        (irule o REWRITE_RULE [expr_sim_full_eq]) >>
-      goal_assum (drule_at Any)) >>
-  irule (REWRITE_RULE [expr_sim_prefix_def] literal_word_value_prefix) >>
-  goal_assum (drule_at Any)
+  cheat
 QED

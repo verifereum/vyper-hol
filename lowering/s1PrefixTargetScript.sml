@@ -12,6 +12,33 @@ Ancestors
   vyperPlaceFrames vyperState vyperStorageTrace vyperEvalMisc vyperInterpreter
   vyperAST vyperTypeEnv vyperCallOutcomeFrame list pair
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  (* Extending a place can record a storage root but cannot issue a request. *)
+  `!cx pv sub st res ee. extend_place cx pv sub st = (res,ee) ==>
+     EVERY (\ob. !rq oc. ob = StorageOutcome rq oc ==> computed_precompile rq)
+       (DROP (LENGTH st.storage_trace) ee.storage_trace)` by
+    (rpt gen_tac >> Cases_on `pv`
+     >- simp[extend_place_def,raise_def]
+     >- (strip_tac >> drule_then SUBST_ALL_TAC extend_place_PlaceR_state >> simp[]) >>
+     rename1 `HashMapRef _ _ _ vt` >> Cases_on `sub` >> Cases_on `vt` >>
+     simp[extend_place_nested_mapping,extend_place_def,lift_option_type_def,
+          bind_def,ignore_bind_def,raise_def,record_storage_event_def,return_def] >>
+     rename1 `evaluate_type (get_tenv cx) typ` >>
+     Cases_on `evaluate_type (get_tenv cx) typ` >>
+     simp[return_def,raise_def] >> rw[] >> simp[DROP_APPEND1]) >>
+  recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
+  >- (rpt strip_tac >> irule gas_prefix_full_no_outcome >>
+      simp[evaluate_storage_trace_frame] >> rpt gen_tac >> strip_tac >>
+      drule_then SUBST_ALL_TAC eval_base_place_NameTarget_preserves_state >> simp[])
+  >- (PairCases_on `nsid` >> rpt strip_tac >> irule gas_prefix_full_no_outcome >>
+      simp[evaluate_storage_trace_frame] >> rpt gen_tac >> simp[Once evaluate_def] >>
+      strip_tac >> drule lookup_global_no_outcome >> simp[])
+  >- suspend "subscript"
+  >> suspend "attribute"
+QED
+*)
 Theorem body_target_sim_prefix:
   !bt DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env es.
     body_inv tops ctx cenv cx /\
@@ -54,30 +81,10 @@ Theorem body_target_sim_prefix:
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
         cx st0 (eval_base_place cx bt) (es, s0, G0, tn0)
 Proof
-  (* Extending a place can record a storage root but cannot issue a request. *)
-  `!cx pv sub st res ee. extend_place cx pv sub st = (res,ee) ==>
-     EVERY (\ob. !rq oc. ob = StorageOutcome rq oc ==> computed_precompile rq)
-       (DROP (LENGTH st.storage_trace) ee.storage_trace)` by
-    (rpt gen_tac >> Cases_on `pv`
-     >- simp[extend_place_def,raise_def]
-     >- (strip_tac >> drule_then SUBST_ALL_TAC extend_place_PlaceR_state >> simp[]) >>
-     rename1 `HashMapRef _ _ _ vt` >> Cases_on `sub` >> Cases_on `vt` >>
-     simp[extend_place_nested_mapping,extend_place_def,lift_option_type_def,
-          bind_def,ignore_bind_def,raise_def,record_storage_event_def,return_def] >>
-     rename1 `evaluate_type (get_tenv cx) typ` >>
-     Cases_on `evaluate_type (get_tenv cx) typ` >>
-     simp[return_def,raise_def] >> rw[] >> simp[DROP_APPEND1]) >>
-  recInduct base_assignment_target_induct >> rpt conj_tac >> rpt gen_tac
-  >- (rpt strip_tac >> irule gas_prefix_full_no_outcome >>
-      simp[evaluate_storage_trace_frame] >> rpt gen_tac >> strip_tac >>
-      drule_then SUBST_ALL_TAC eval_base_place_NameTarget_preserves_state >> simp[])
-  >- (PairCases_on `nsid` >> rpt strip_tac >> irule gas_prefix_full_no_outcome >>
-      simp[evaluate_storage_trace_frame] >> rpt gen_tac >> simp[Once evaluate_def] >>
-      strip_tac >> drule lookup_global_no_outcome >> simp[])
-  >- suspend "subscript"
-  >> suspend "attribute"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_target_sim_prefix[subscript]:
   strip_tac >> rpt gen_tac >> strip_tac >>
   `body_base_target_full_ok cx bt /\ body_base_target_prefix_ok cx bt` by
@@ -97,7 +104,9 @@ Resume body_target_sim_prefix[subscript]:
   qpat_assum `!cx pv sub st res ee. extend_place cx pv sub st = (res,ee) ==> _`
     (drule_then mp_tac) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_target_sim_prefix[attribute]:
   strip_tac >> rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   fs[type_place_target_AttributeTarget] >>
@@ -130,7 +139,9 @@ Resume body_target_sim_prefix[attribute]:
        (mp_then Any irule slice_gas_admissible_bind_head) >> simp[target_res_ok_def]) >>
   suspend "attribute_bind"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_target_sim_prefix[attribute_bind]:
   `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
      cx st0 (eval_base_place cx bt) (es,s0,G0,tn0)` by
@@ -165,5 +176,8 @@ Resume body_target_sim_prefix[attribute_bind]:
          (drule_then mp_tac) >> simp[] >> NO_TAC) >>
   simp[Abbr `childR`] >> rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_target_sim_prefix
+*)

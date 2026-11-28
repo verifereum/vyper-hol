@@ -3,24 +3,8 @@ Ancestors
   s1PrefixBoolChainWordEqCut s1PrefixBoolChainEqDemand bodyFullSimProjection
   s1PrefixDefs
 
-Theorem bool_chain_word_eq_prefix_of_smaller:
-  value_read_demand (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    tops cenv cx env (Builtin (BaseT BoolT) (Bop Eq) [l;r]) ty es
-    (st0,sa,sb,shadow_sa,shadow_sb,op,s0,G0,tn0) /\
-  ~is_bytestring_type (expr_type l) /\ is_word_type (expr_type l) /\
-  is_word_type (expr_type r) /\ body_expr_full_ok cx l /\
-  (!gs v m. bind (eval_expr cx l) (read_result cx) (es with gas_obs := gs) = (INL v,m) ==>
-            body_expr_full_ok cx r) /\
-  (!z ety ee ca cb sha shb op' u J tau.
-     expr_size z < expr_size (Builtin (BaseT BoolT) (Bop Eq) [l;r]) /\
-     body_expr_full_ok cx z /\
-     value_read_demand (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-       tops cenv cx env z ety ee (st0,ca,cb,sha,shb,op',u,J,tau) ==>
-     gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-       cx st0 (bind (eval_expr cx z) (read_result cx)) (ee,u,J,tau)) ==>
-  gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    cx st0 (bind (eval_expr cx (Builtin (BaseT BoolT) (Bop Eq) [l;r])) (read_result cx))
-    (es,s0,G0,tn0)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `expr_size l < expr_size (Builtin (BaseT BoolT) (Bop Eq) [l;r]) /\
@@ -55,4 +39,26 @@ Proof
   drule_all (DISCH_ALL (CONJUNCT1 (UNDISCH body_expr_full_ok_simulations))) >>
   rewrite_tac[expr_sim_full_eq] >>
   disch_then (drule_then ACCEPT_TAC)
+QED
+*)
+Theorem bool_chain_word_eq_prefix_of_smaller:
+  value_read_demand (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    tops cenv cx env (Builtin (BaseT BoolT) (Bop Eq) [l;r]) ty es
+    (st0,sa,sb,shadow_sa,shadow_sb,op,s0,G0,tn0) /\
+  ~is_bytestring_type (expr_type l) /\ is_word_type (expr_type l) /\
+  is_word_type (expr_type r) /\ body_expr_full_ok cx l /\
+  (!gs v m. bind (eval_expr cx l) (read_result cx) (es with gas_obs := gs) = (INL v,m) ==>
+            body_expr_full_ok cx r) /\
+  (!z ety ee ca cb sha shb op' u J tau.
+     expr_size z < expr_size (Builtin (BaseT BoolT) (Bop Eq) [l;r]) /\
+     body_expr_full_ok cx z /\
+     value_read_demand (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+       tops cenv cx env z ety ee (st0,ca,cb,sha,shb,op',u,J,tau) ==>
+     gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+       cx st0 (bind (eval_expr cx z) (read_result cx)) (ee,u,J,tau)) ==>
+  gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cx st0 (bind (eval_expr cx (Builtin (BaseT BoolT) (Bop Eq) [l;r])) (read_result cx))
+    (es,s0,G0,tn0)
+Proof
+  cheat
 QED

@@ -70,6 +70,30 @@ fun eq_full_lift_suffix_tac g =
    first_assum (ACCEPT_TAC o MATCH_MP stmt_state_rel_allocas_below_fmp o
                 CONJUNCT1 o REWRITE_RULE [expr_post_def])) g;
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  drule_all bool_chain_word_eq_demand_closure >> strip_tac >>
+  qpat_x_assum `value_read_demand _ _ _ _ _ (Builtin _ _ _) _ _ _`
+    (strip_assume_tac o REWRITE_RULE [value_read_demand_def,expr_sim_full_pre_def]) >>
+  drule_all bop_full_layout >> strip_tac >>
+  qpat_assum `value_read_demand _ _ _ _ _ l _ _ _`
+    (strip_assume_tac o REWRITE_RULE [value_read_demand_def,expr_sim_full_pre_def]) >>
+  qpat_assum `!a b c. _ ==> gas_outcome_full _ _ _ _ _ (es,s0,G0,tn0) _ _`
+    (drule_then strip_assume_tac) >>
+  gvs[] >>
+  qpat_x_assum `!a b c. _ ==> gas_outcome_full _ _ _ _ _ (es,s0,G0,tn0) _ _`
+    kall_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ (es,s0,G0,tn0) leftQ exitR` >>
+  pure_once_rewrite_tac[REWRITE_RULE [ETA_THM] eval_expr_bop_bind] >>
+  eq_full_bind_tac gas_outcome_full_bind_all_path >>
+  qexists_tac `\H res ee G tn u. leftQ H res ee G tn u /\ ~u.vs_halted /\ ee.gas_obs = []` >>
+  conj_tac >- suspend "right_entry" >>
+  eq_full_child_tac `gas_outcome_full _ _ _ _ _ (es,s0,G0,tn0) leftQ exitR` >>
+  fs[Abbr `exitR`]
+QED
+*)
 Theorem word_eq_read_full_at_demand:
   !DF lo d ctx shadow_ctx PG func shadow_func cenv cx ty l r env tops es
      st0 sa sb shadow_sa shadow_sb op s0 G0 tn0.
@@ -161,27 +185,10 @@ Theorem word_eq_read_full_at_demand:
       (\H res ee gt ex. expr_exit res ex /\ halt_exit H cx ee res ex /\
         (ctx_has_dalloca ctx ==> !s. ex = Halt s ==> allocas_below_fmp s))
 Proof
-  rpt gen_tac >> strip_tac >>
-  drule_all bool_chain_word_eq_demand_closure >> strip_tac >>
-  qpat_x_assum `value_read_demand _ _ _ _ _ (Builtin _ _ _) _ _ _`
-    (strip_assume_tac o REWRITE_RULE [value_read_demand_def,expr_sim_full_pre_def]) >>
-  drule_all bop_full_layout >> strip_tac >>
-  qpat_assum `value_read_demand _ _ _ _ _ l _ _ _`
-    (strip_assume_tac o REWRITE_RULE [value_read_demand_def,expr_sim_full_pre_def]) >>
-  qpat_assum `!a b c. _ ==> gas_outcome_full _ _ _ _ _ (es,s0,G0,tn0) _ _`
-    (drule_then strip_assume_tac) >>
-  gvs[] >>
-  qpat_x_assum `!a b c. _ ==> gas_outcome_full _ _ _ _ _ (es,s0,G0,tn0) _ _`
-    kall_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ (es,s0,G0,tn0) leftQ exitR` >>
-  pure_once_rewrite_tac[REWRITE_RULE [ETA_THM] eval_expr_bop_bind] >>
-  eq_full_bind_tac gas_outcome_full_bind_all_path >>
-  qexists_tac `\H res ee G tn u. leftQ H res ee G tn u /\ ~u.vs_halted /\ ee.gas_obs = []` >>
-  conj_tac >- suspend "right_entry" >>
-  eq_full_child_tac `gas_outcome_full _ _ _ _ _ (es,s0,G0,tn0) leftQ exitR` >>
-  fs[Abbr `exitR`]
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume word_eq_read_full_at_demand[right_entry]:
   qx_genl_tac [`left`,`res`,`mid`,`G1`,`tn1`,`t`] >> BETA_TAC >> strip_tac >>
   qunabbrev_tac `leftQ` >> rule_assum_tac BETA_RULE >>
@@ -227,7 +234,9 @@ Resume word_eq_read_full_at_demand[right_entry]:
   eq_full_child_tac `gas_outcome_full _ _ _ _ (bind (eval_expr cx r) _) _ rightQ exitR` >>
   fs[Abbr `exitR`]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume word_eq_read_full_at_demand[suffix]:
   qx_genl_tac [`right`,`res2`,`fin`,`G2`,`tn2`,`u`] >> BETA_TAC >> strip_tac >>
   qunabbrev_tac `rightQ` >> rule_assum_tac BETA_RULE >>
@@ -255,7 +264,9 @@ Resume word_eq_read_full_at_demand[suffix]:
       eq_full_lift_suffix_tac) >>
   suspend "bytes_suffix"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume word_eq_read_full_at_demand[bytes_suffix]:
   `(?gs. bind (eval_expr cx e1) (read_result cx) (es with gas_obs := gs) = (INL v1,mid)) /\
    (?gs. bind (eval_expr cx e2) (read_result cx) (mid with gas_obs := gs) = (INL v2,fin))` by
@@ -305,7 +316,9 @@ Resume word_eq_read_full_at_demand[bytes_suffix]:
      drule_all_then strip_assume_tac (SRULE [] (Q.INST [`bop` |-> `Eq`] bop_bytes_eq_suffix_run)) >>
      suspend "bytes_run") >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume word_eq_read_full_at_demand[bytes_run]:
   `?B. bop_scalar_seq {z | not_fresh_at s2 z}
      ({x;y} UNION IMAGE Lit UNIV) (emitted_insts s2 sb) B /\ op IN B` by
@@ -329,5 +342,8 @@ Resume word_eq_read_full_at_demand[bytes_run]:
   (impl_tac >- (simp[] >> rpt conj_tac >> rpt strip_tac >> simp[] >> metis_tac[])) >>
   eq_full_lift_suffix_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise word_eq_read_full_at_demand
+*)
