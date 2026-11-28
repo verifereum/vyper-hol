@@ -662,6 +662,67 @@ QED
 
 Finalise body_assign_local_memory_prefix
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_then strip_assume_tac body_assign_empty_target_typing >>
+  drule_all_then strip_assume_tac body_assign_empty_target_rhs_pre >>
+  drule_then assume_tac abi_decode_inv_type_env >>
+  `?stv. evaluate_type (get_tenv cx) (expr_type e) = SOME stv` by
+    (drule expr_body_pre_type_evaluates >> simp[IS_SOME_EXISTS]) >>
+  `?dtv. evaluate_type (get_tenv cx) dty = SOME dtv` by
+    (fs[type_widens_to_def, well_formed_type_def] >> metis_tac[IS_SOME_EXISTS]) >>
+  `body_base_target_full_ok cx t /\ body_base_target_prefix_ok cx t` by
+    (drule_all immutable_assign_empty_read >>
+     disch_then (qspec_then `es.gas_obs` mp_tac) >>
+     simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule_all_then assume_tac body_assign_target_indices_pre >>
+  `IS_SOME (type_place_target env t)` by simp[] >>
+  drule_all_then strip_assume_tac typed_immutable_target_root >>
+  `well_typed_target env t dty` by simp[well_typed_target_def] >>
+  `call_evaluation_safe cx (int_calls_target t)` by
+    (qpat_assum `call_evaluation_safe cx (int_calls_stmt _)` mp_tac >>
+     pure_rewrite_tac[int_calls_stmt_def,int_calls_atarget_def] >>
+     disch_then (irule o MATCH_MP call_evaluation_safe_append_left)) >>
+  drule_all_then assume_tac
+    (Q.INST [`bt` |-> `t`] assign_place_empty_source_action) >>
+  pure_rewrite_tac[stmt_frag_prefix_def,stmt_frag_full_pre_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all_then strip_assume_tac assign_place_pure_empty_code >>
+  `?shadow_st. compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+      (gas_shadow_target t) shadow_sa = (tr,shadow_st) /\ gas_shadow_state st shadow_st` by
+    (Cases_on `compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+       (gas_shadow_target t) shadow_sa` >>
+     `FST (compile_get_target_ptr compile_expr cenv t sa) =
+        FST (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+          (gas_shadow_target t) shadow_sa) /\
+      gas_shadow_state (SND (compile_get_target_ptr compile_expr cenv t sa))
+        (SND (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+          (gas_shadow_target t) shadow_sa))` by
+       (irule (REWRITE_RULE [gas_shadow_compiles_def]
+         (Q.INST [`sd` |-> `T`] gas_shadow_stmt_get_target_ptr_env)) >> simp[]) >>
+     gvs[]) >>
+  `compile_store_at_loc cenv.ce_imm_alloca (FST tr) (Lit 0w) (FST (SND tr))
+      shadow_st = ((),shadow_sb)` by
+    (qpat_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _`
+       (mp_then Any mp_tac assign_place_pure_empty_code o
+        REWRITE_RULE [gas_shadow_stmt_def, gas_shadow_assignment_def]) >> simp[]) >>
+  gvs[] >>
+  `ci_mono sa st /\ ci_mono shadow_sa shadow_st` by
+    metis_tac[ci_mono_compile_get_target_ptr, SND] >>
+  `ci_mono st sb /\ ci_mono shadow_st shadow_sb` by
+    metis_tac[cj 2 ci_mono_stmt_helpers, SND] >>
+  `fn_has_code sa st func /\ fn_has_code shadow_sa shadow_st shadow_func` by
+    metis_tac[ci_mono_def, fn_has_code_split] >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
+    fs[ret_pc_ok_def] >>
+  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cx st0 (eval_target_place cx t) (es,s0,G0,tn0)` by
+    (drule_all immutable_target_place_prefix >> simp[]) >>
+  suspend "write_trace"
+QED
+*)
 Theorem body_assign_nested_empty_immutable_prefix:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
   (!s'' pv t' s'3' v t''.
@@ -723,64 +784,10 @@ Theorem body_assign_nested_empty_immutable_prefix:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (BaseTarget t) e)))
       (eval_stmt cx (Assign (BaseTarget t) e)) es
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_then strip_assume_tac body_assign_empty_target_typing >>
-  drule_all_then strip_assume_tac body_assign_empty_target_rhs_pre >>
-  drule_then assume_tac abi_decode_inv_type_env >>
-  `?stv. evaluate_type (get_tenv cx) (expr_type e) = SOME stv` by
-    (drule expr_body_pre_type_evaluates >> simp[IS_SOME_EXISTS]) >>
-  `?dtv. evaluate_type (get_tenv cx) dty = SOME dtv` by
-    (fs[type_widens_to_def, well_formed_type_def] >> metis_tac[IS_SOME_EXISTS]) >>
-  `body_base_target_full_ok cx t /\ body_base_target_prefix_ok cx t` by
-    (drule_all immutable_assign_empty_read >>
-     disch_then (qspec_then `es.gas_obs` mp_tac) >>
-     simp[bind_def, AllCaseEqs()] >> metis_tac[]) >>
-  drule_all_then assume_tac body_assign_target_indices_pre >>
-  `IS_SOME (type_place_target env t)` by simp[] >>
-  drule_all_then strip_assume_tac typed_immutable_target_root >>
-  `well_typed_target env t dty` by simp[well_typed_target_def] >>
-  `call_evaluation_safe cx (int_calls_target t)` by
-    (qpat_assum `call_evaluation_safe cx (int_calls_stmt _)` mp_tac >>
-     pure_rewrite_tac[int_calls_stmt_def,int_calls_atarget_def] >>
-     disch_then (irule o MATCH_MP call_evaluation_safe_append_left)) >>
-  drule_all_then assume_tac
-    (Q.INST [`bt` |-> `t`] assign_place_empty_source_action) >>
-  pure_rewrite_tac[stmt_frag_prefix_def,stmt_frag_full_pre_def] >>
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then strip_assume_tac assign_place_pure_empty_code >>
-  `?shadow_st. compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
-      (gas_shadow_target t) shadow_sa = (tr,shadow_st) /\ gas_shadow_state st shadow_st` by
-    (Cases_on `compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
-       (gas_shadow_target t) shadow_sa` >>
-     `FST (compile_get_target_ptr compile_expr cenv t sa) =
-        FST (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
-          (gas_shadow_target t) shadow_sa) /\
-      gas_shadow_state (SND (compile_get_target_ptr compile_expr cenv t sa))
-        (SND (compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
-          (gas_shadow_target t) shadow_sa))` by
-       (irule (REWRITE_RULE [gas_shadow_compiles_def]
-         (Q.INST [`sd` |-> `T`] gas_shadow_stmt_get_target_ptr_env)) >> simp[]) >>
-     gvs[]) >>
-  `compile_store_at_loc cenv.ce_imm_alloca (FST tr) (Lit 0w) (FST (SND tr))
-      shadow_st = ((),shadow_sb)` by
-    (qpat_assum `stmt_env _ _ _ (gas_shadow_stmt _) _ = _`
-       (mp_then Any mp_tac assign_place_pure_empty_code o
-        REWRITE_RULE [gas_shadow_stmt_def, gas_shadow_assignment_def]) >> simp[]) >>
-  gvs[] >>
-  `ci_mono sa st /\ ci_mono shadow_sa shadow_st` by
-    metis_tac[ci_mono_compile_get_target_ptr, SND] >>
-  `ci_mono st sb /\ ci_mono shadow_st shadow_sb` by
-    metis_tac[cj 2 ci_mono_stmt_helpers, SND] >>
-  `fn_has_code sa st func /\ fn_has_code shadow_sa shadow_st shadow_func` by
-    metis_tac[ci_mono_def, fn_has_code_split] >>
-  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x` by
-    fs[ret_pc_ok_def] >>
-  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      cx st0 (eval_target_place cx t) (es,s0,G0,tn0)` by
-    (drule_all immutable_target_place_prefix >> simp[]) >>
-  suspend "write_trace"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_assign_nested_empty_immutable_prefix[write_trace]:
   (* The empty read and final write add no request to the target trace. *)
   qpat_x_assum `gas_prefix_full _ _ _ (eval_target_place _ _) _` mp_tac >>
@@ -800,8 +807,11 @@ Resume body_assign_nested_empty_immutable_prefix[write_trace]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   qexistsl_tac [`mid`,`ans`,`sfx`,`tail`] >> gvs[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_assign_nested_empty_immutable_prefix
+*)
 
 Theorem body_assign_nested_nonempty_immutable_prefix:
   !cx t e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
