@@ -85,8 +85,18 @@ Proof
      bind_def, return_def, raise_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem toplevel_immutable_post:
+  src = cenv.ce_module /\
+  FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+  ALOOKUP es.immutables cx.txn.target = SOME imms /\
+  FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
+  evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
+  off + type_memory_size tv < dimword (:256) /\
+  stmt_state_rel H ctx func cenv cx es s0 /\
+  storage_well_formed_on cx es (FST H) ==>
+  vv_post H ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
+    (es with gas_obs := []) (PlaceR (ImmutablePlace src id []))
+    (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode)) s0
 Proof
   strip_tac >>
   `stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0` by
@@ -104,27 +114,11 @@ Proof
   simp[vv_post_def, vv_holds_def, vv_at_def, immutable_holds_def,
        contextTheory.mk_ptr_def, eval_operand_def, locals_kept_mem,
        vyperASTTheory.expr_type_def] >>
-  qexistsl_tac [`id`, `off`, `tv`, `v`, `0`] >>
+  qexistsl_tac [`src`, `id`, `off`, `tv`, `v`, `0`] >>
   fs[sub_layout_def, read_result_def, read_place_def, get_immutables_def,
      get_address_immutables_def, lift_option_type_def, bind_def,
      return_def, evaluate_subscripts_def, lift_sum_def] >>
   qexists_tac `v` >> gvs[return_def]
-QED
-*)
-Theorem toplevel_immutable_post:
-  src = cenv.ce_module /\
-  FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
-  ALOOKUP es.immutables cx.txn.target = SOME imms /\
-  FLOOKUP (get_source_immutables src imms) id = SOME (tv,v) /\
-  evaluate_type (get_tenv cx) ann = SOME tv /\ value_has_type tv v /\
-  off + type_memory_size tv < dimword (:256) /\
-  stmt_state_rel H ctx func cenv cx es s0 /\
-  storage_well_formed_on cx es (FST H) ==>
-  vv_post H ctx func cenv cx (TopLevelName ann (src,id)) es sa sa s0
-    (es with gas_obs := []) (PlaceR (ImmutablePlace src id []))
-    (LocatedValue ann (mk_ptr (Lit (n2w off)) LocCode)) s0
-Proof
-  cheat
 QED
 
 Theorem compile_toplevel_immutable_sim:
