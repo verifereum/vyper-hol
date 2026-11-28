@@ -32,10 +32,10 @@ Proof
        bodyActiveStmtCallsModsTheory.active_stmt_calls_resolve_mods >>
      metis_tac[]) >>
   `supported_expr tops e` by
-    (Cases_on `e` >> gvs[supported_string_reason_def, supportedExprsTheory.supported_expr_def,
-                             supportedExprsTheory.supported_pure_expr_def] >>
-     Cases_on `l` >> gvs[supported_string_reason_def, supportedExprsTheory.supported_expr_def,
-                             supportedExprsTheory.supported_pure_expr_def]) >>
+    (Cases_on `e` >>
+     gvs[supported_string_reason_def, supportedExprsTheory.supported_expr_def] >>
+     rename1 `Literal _ lit` >> Cases_on `lit` >>
+     gvs[supported_string_reason_def, supportedExprsTheory.supported_pure_expr_def]) >>
   `~expr_has_evm_run e` by metis_tac[supported_expr_no_evm_run] >>
   drule_then assume_tac contract_inv_cenv_modules >>
   drule_then assume_tac contract_inv_type_env >>
