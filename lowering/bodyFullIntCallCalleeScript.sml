@@ -1569,21 +1569,17 @@ Proof
   simp[bodyPtrDefsTheory.return_buf_ptr_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  Cases_on `dest` >- (simp[bodyPtrDefsTheory.ghost_inv_at_def,
-    bodyPtrDefsTheory.return_buf_ptr_def] >> metis_tac[]) >>
-  rename1 `SOME ret_range` >> PairCases_on `ret_range` >>
-  simp[bodyPtrDefsTheory.ghost_inv_at_def, bodyPtrDefsTheory.return_buf_ptr_def] >> metis_tac[]
-QED
-*)
 Theorem intcall_callee_ghost_imm[local]:
   ghost_inv_at D lo dest (ce with <|ce_imm_alloca := imm; ce_alloca_locals := flag|>) cx es G tn s <=>
   ghost_inv_at D lo dest (ce with ce_imm_alloca := NONE) cx es G tn s /\
   (!x. lo <> 0 /\ imm = SOME (Var x) ==> FLOOKUP G x = NONE /\ op_taint tn (Var x) = {})
 Proof
-  cheat
+  Cases_on `dest`
+  >- simp[bodyPtrDefsTheory.ghost_inv_at_def, bodyPtrDefsTheory.return_buf_ptr_def,
+          immSectionDeadTheory.imm_section_dead_mods_def, AC CONJ_ASSOC CONJ_COMM] >>
+  rename1 `SOME ret_range` >> PairCases_on `ret_range` >>
+  simp[bodyPtrDefsTheory.ghost_inv_at_def, bodyPtrDefsTheory.return_buf_ptr_def,
+       immSectionDeadTheory.imm_section_dead_mods_def, AC CONJ_ASSOC CONJ_COMM]
 QED
 
 Theorem intcall_callee_alloca_room[local]:
@@ -2132,36 +2128,6 @@ Proof
       listTheory.LAST_CONS_cond, listTheory.LAST_APPEND_CONS]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> simp[LET_THM, blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
-  drule_all intcall_callee_lock_concrete_fields >>
-  simp[LET_THM, blockPrefixEquivTheory.lookup_var_set_inst_idx, NoAsms] >> strip_tac >>
-  drule_then assume_tac transientLockFramePropsTheory.compile_nonreentrant_lock_transient_counter >>
-  drule_then strip_assume_tac intcall_callee_lock_shape >>
-  drule_then assume_tac intcall_callee_lock_open >>
-  `stmt_state_rel H ctx fn ce cx locked u` by
-    (fs[stmt_state_rel_def] >>
-     rpt conj_tac
-     >- (irule localPtrsPropsTheory.alloca_inv_fields >> qexists_tac `s` >> simp[])
-     >- (irule alloca_room_fields >> qexists_tac `s` >> simp[])
-     >- (irule fmp_room_fields >> qexists_tac `s` >> simp[])
-     >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`,`es`] >> simp[] >>
-         rpt strip_tac >> qexists_tac `id` >>
-         metis_tac[exprSimCopyTheory.copy_buffer_local_region_frame])
-     >- (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
-         metis_tac[local_ptrs_reserved_imm_base]) >>
-     metis_tac[]) >>
-  simp[stmt_state_rel_inst_idx] >> rpt conj_tac
-  >- (irule local_ptrs_reserved_next_var >> qexists_tac `pro` >> simp[])
-  >- (irule ret_pc_ok_frame >> qexistsl_tac [`ce`,`s`,`pro`] >>
-      simp[blockPrefixEquivTheory.lookup_var_set_inst_idx] >> metis_tac[])
-  >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_ADD] >>
-  irule bodyMemoryDefsTheory.return_buf_frame_frame >> qexistsl_tac [`ce`,`s`,`pro`] >>
-  simp[blockPrefixEquivTheory.lookup_var_set_inst_idx] >> metis_tac[]
-QED
-*)
 Theorem intcall_callee_lock_landing_concrete[local]:
   compile_nonreentrant_lock key T view pro = ((),a) /\
   run_inst_seq (emitted_insts pro a) s = OK u /\
@@ -2179,7 +2145,36 @@ Theorem intcall_callee_lock_landing_concrete[local]:
     (u with vs_inst_idx := LENGTH a.cs_current_insts).vs_inst_idx = LENGTH a.cs_current_insts /\
     (!x. not_fresh_at pro x ==> lookup_var x (u with vs_inst_idx := LENGTH a.cs_current_insts) = lookup_var x s)
 Proof
-  cheat
+  strip_tac >> simp[stmt_state_rel_inst_idx, blockPrefixEquivTheory.lookup_var_set_inst_idx] >>
+  drule_all intcall_callee_lock_concrete_fields >>
+  simp[blockPrefixEquivTheory.lookup_var_set_inst_idx, NoAsms] >> strip_tac >>
+  drule_then assume_tac transientLockFramePropsTheory.compile_nonreentrant_lock_transient_counter >>
+  drule_then strip_assume_tac intcall_callee_lock_shape >>
+  drule_then assume_tac intcall_callee_lock_open >>
+  `immutable_alloca_sep fn ce cx es s /\
+   (!src tops. ALOOKUP ce.ce_modules src = SOME tops ==>
+      immutable_alloca_sep fn (ce with ce_module := src) cx es s)` by
+    (qpat_assum `stmt_state_rel _ _ _ _ _ es s`
+       (mp_tac o REWRITE_RULE [stmt_state_rel_def]) >> simp[]) >>
+  `!c. c.ce_vars = ce.ce_vars /\ immutable_alloca_sep fn c cx es s ==>
+       immutable_alloca_sep fn c cx locked u` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >> simp[] >>
+     qexistsl_tac [`s`,`es`] >> simp[] >> rpt strip_tac >> qexists_tac `id` >>
+     fs[loweringStateRelDefsTheory.local_region_def] >>
+     metis_tac[loweringStateRelDefsTheory.local_ptrs_reserved_def]) >>
+  `immutable_base_zero ce u` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >> simp[] >>
+     metis_tac[stmt_state_rel_immutable_base_zero, local_ptrs_reserved_imm_base]) >>
+  `stmt_state_rel H ctx fn ce cx locked u` by
+    (irule stmt_state_rel_allocas_frame >> simp[] >>
+     qexistsl_tac [`es`,`s`] >> simp[]) >>
+  simp[] >> rpt conj_tac
+  >- (irule local_ptrs_reserved_next_var >> qexists_tac `pro` >> simp[])
+  >- (irule ret_pc_ok_frame >> qexistsl_tac [`ce`,`s`,`pro`] >>
+      simp[blockPrefixEquivTheory.lookup_var_set_inst_idx] >> metis_tac[])
+  >- metis_tac[loweringShapeDefsTheory.not_fresh_at_mono, arithmeticTheory.LESS_EQ_ADD] >>
+  irule bodyMemoryDefsTheory.return_buf_frame_frame >> qexistsl_tac [`ce`,`s`,`pro`] >>
+  simp[blockPrefixEquivTheory.lookup_var_set_inst_idx] >> metis_tac[]
 QED
 
 Theorem intcall_callee_lock_path[local]:
