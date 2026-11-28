@@ -18,7 +18,7 @@ they should. Four theorems state this for a single-module contract:
   the call's own hypotheses hold; and, when it is the only frame running
   and the contract isn't scheduled for deletion, the contract is still
   deployed for the next call, and its storage still meets the storage
-  hypothesis unless the source stopped with one of a few listed errors.
+  hypothesis.
 - **Gas sufficiency for deployment and for calls**
   ([`e2e_deploy_gas_sufficient`](#thm-e2eGasSufficientTop-e2e_deploy_gas_sufficient),
   [`vyper_call_gas_sufficient_deployed`](#thm-e2eDeployed-vyper_call_gas_sufficient_deployed)):
@@ -183,11 +183,9 @@ still `deployed` in the world the call leaves
 after a successful call, the state before it with the EVM run's accounts
 after deletions and with transient storage, logs and pending deletions
 cleared; after a failed one, the state before the call. The storage
-hypothesis carries over to every later call to the contract in that
-world, unless the selected function's source run stops with one of the
-listed errors ([`source_exempt`](#def-e2eDefs-source_exempt)) for every
-filling of the gas readings consistent with this run. So the call theorems
-apply again to the next call, whose other hypotheses still have to hold.
+hypothesis holds there for every later call to the contract. So the call
+theorems apply again to the next call, whose other hypotheses still have
+to hold.
 
 <!-- dossier: thm-e2eDeployed-vyper_call_correct_deployed -->
 
@@ -210,10 +208,12 @@ frame, it does not run out of gas.
   trace is bounded, and, for every gas filling, that source run does not
   stop with one of the errors listed in
   [`gas_source_exempt`](#def-e2eGasSufficient-gas_source_exempt):
-  an error the correctness theorems already exempt (below), a contract
-  creation whose init code exceeds the EVM's size limit (no amount of gas
-  helps there), or, in a static call, `UNREACHABLE` or a runtime error
-  other than a missing gas reading.
+  a value transfer that would overflow the recipient's balance
+  ([`unspecified_behaviour_exempt`](#def-e2eDefs-unspecified_behaviour_exempt)),
+  a contract creation whose init code exceeds the EVM's size limit (no
+  amount of gas helps there), or, in a static call, `UNREACHABLE` or a
+  runtime error other than a missing gas reading. A failed `abi_decode` is
+  not among them.
 - For deployment, under the same three conditions on the larger-gas
   constructor run (with `deploy_gas_source_exempt` in place of
   `gas_source_exempt`), running out of gas with that much gas implies
@@ -239,12 +239,6 @@ frame, it does not run out of gas.
 - **Revert data and exact gas.** A revert is matched by a revert, but its
   data isn't compared (beyond the empty revert on unmatched calldata). Gas
   sufficiency says some amount of gas is enough; it gives no bound.
-- **Some source errors.** Where the source semantics stops with a failed
-  `abi_decode`, in a contract that applies `abi_decode` to some
-  dynamically sized type, or with a value transfer that would overflow
-  the recipient's balance
-  ([`unspecified_behaviour_exempt`](#def-e2eDefs-unspecified_behaviour_exempt)),
-  the compiled code's outcome is not constrained.
 - **Calls into the contract's code from elsewhere.** Frames running the
   contract's code under another address (`DELEGATECALL` from a proxy, an
   EIP-7702 delegation) and creation frames started by another contract's
