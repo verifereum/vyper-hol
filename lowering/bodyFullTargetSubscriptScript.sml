@@ -1074,7 +1074,10 @@ Resume immutable_target_subscript_sim_full[run_tail]:
 QED
 
 Resume immutable_target_subscript_sim_full[tail_post]:
-  conj_tac >- fs[] >>
+  conj_tac >-
+    (qpat_assum `cenv.ce_is_ctor` (fn ctor =>
+       qpat_assum `compile_array_subscript _ _ _ _ 32 (type_memory_size etv) _ _ _ = _`
+         (ACCEPT_TAC o REWRITE_RULE [EQT_INTRO ctor]))) >>
   conj_tac >-
     (gen_tac >> strip_tac >>
      qpat_assum `!H. valid_horizon cx st0 H mid2.storage_trace ==>
