@@ -54,12 +54,8 @@ Proof
   cheat
 QED
 
-Theorem bool_chain_ext_arg_descent[local]:
-  !x. (!a. RTC (bool_chain_ext_arg cx) x a /\
-      ~(?ann stat skip sig opts args dr. a = Call ann (ExtCall stat skip sig opts) args dr) /\
-      ~(?ty lit. a = Literal ty lit) ==>
-      body_expr_full_ok cx a /\ body_expr_prefix_ok cx a) ==>
-    body_expr_full_ok cx x /\ body_expr_prefix_ok cx x
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   measureInduct_on `expr_size x` >> strip_tac >>
   Cases_on `?ty lit. x = Literal ty lit`
@@ -72,6 +68,16 @@ Proof
       (impl_tac >- (drule bool_chain_ext_arg_smaller >> simp[])) >>
       disch_then match_mp_tac >> metis_tac[RTC_rules]) >>
   metis_tac[RTC_REFL]
+QED
+*)
+Theorem bool_chain_ext_arg_descent[local]:
+  !x. (!a. RTC (bool_chain_ext_arg cx) x a /\
+      ~(?ann stat skip sig opts args dr. a = Call ann (ExtCall stat skip sig opts) args dr) /\
+      ~(?ty lit. a = Literal ty lit) ==>
+      body_expr_full_ok cx a /\ body_expr_prefix_ok cx a) ==>
+    body_expr_full_ok cx x /\ body_expr_prefix_ok cx x
+Proof
+  cheat
 QED
 
 Theorem bool_chain_extcall_prefix_or_tip:

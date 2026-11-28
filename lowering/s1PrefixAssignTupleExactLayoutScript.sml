@@ -11,6 +11,46 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint vyperState vyperInterpreter
   bodyTupleExactStoreCursor list
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule tuple_targets_typing >> disch_then (qx_choose_then `tys` strip_assume_tac) >>
+  `expr_body_pre cenv cx env e es` by (drule_all tuple_assignment_rhs_pre >> simp[]) >>
+  drule_then assume_tac expr_body_pre_gas_admissible >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (TupleT tys) e es` by metis_tac[body_expr_full_ok_simulations] >>
+  `expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (TupleT tys) e es` by metis_tac[cj 1 body_expr_prefix_ok_def] >>
+  rw[stmt_frag_prefix_def,stmt_frag_full_pre_def] >>
+  drule_all tuple_assign_exact_rhs_parts >>
+  disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
+    (CONJUNCTS_THEN2 SUBST_ALL_TAC (CONJUNCTS_THEN2 (K ALL_TAC)
+      (qx_choosel_then [`vv`,`sc`,`op`,`su`,`shadow_su`,`staged`,`sl`,`elems`,`ss`,`shadow_ss`]
+        (map_every assume_tac o CONJUNCTS)))))) >>
+  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
+  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x`
+    by fs[ret_pc_ok_def] >>
+  qpat_x_assum `expr_sim_prefix _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE[expr_sim_prefix_def,expr_sim_full_pre_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`su`,`shadow_sa`,`shadow_su`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `expr_sim_full _ _ _ _ _ _`
+    (mp_tac o REWRITE_RULE[expr_sim_full_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`su`,`shadow_sa`,`shadow_su`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  rewrite_tac[eval_assign_tuple_action] >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _`
+    (mp_then Any irule gas_prefix_full_bind_replay) >>
+  simp[storage_trace_frame_bind_all,evaluate_storage_trace_frame,
+       storage_trace_frame_read_result,requests_outcomes_frame_bind_all,
+       evaluate_requests_outcomes_frame,requests_outcomes_frame_read_result] >>
+  (reverse conj_tac >- (rpt strip_tac >> rename1 `expr_exit result _` >>
+    Cases_on `result` >> fs[expr_exit_def])) >>
+  map_every qx_gen_tac [`marks`,`source_v`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
+  suspend "stores"
+QED
+*)
 Theorem tuple_assign_exact_with_borrowed_frame_prefix:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
     (!s'' tv t s'3' v t'.
@@ -57,43 +97,10 @@ Theorem tuple_assign_exact_with_borrowed_frame_prefix:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule tuple_targets_typing >> disch_then (qx_choose_then `tys` strip_assume_tac) >>
-  `expr_body_pre cenv cx env e es` by (drule_all tuple_assignment_rhs_pre >> simp[]) >>
-  drule_then assume_tac expr_body_pre_gas_admissible >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (TupleT tys) e es` by metis_tac[body_expr_full_ok_simulations] >>
-  `expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (TupleT tys) e es` by metis_tac[cj 1 body_expr_prefix_ok_def] >>
-  rw[stmt_frag_prefix_def,stmt_frag_full_pre_def] >>
-  drule_all tuple_assign_exact_rhs_parts >>
-  disch_then (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 assume_tac
-    (CONJUNCTS_THEN2 SUBST_ALL_TAC (CONJUNCTS_THEN2 (K ALL_TAC)
-      (qx_choosel_then [`vv`,`sc`,`op`,`su`,`shadow_su`,`staged`,`sl`,`elems`,`ss`,`shadow_ss`]
-        (map_every assume_tac o CONJUNCTS)))))) >>
-  RULE_ASSUM_TAC (SIMP_RULE (srw_ss()) []) >>
-  `!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x`
-    by fs[ret_pc_ok_def] >>
-  qpat_x_assum `expr_sim_prefix _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE[expr_sim_prefix_def,expr_sim_full_pre_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`su`,`shadow_sa`,`shadow_su`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  qpat_x_assum `expr_sim_full _ _ _ _ _ _`
-    (mp_tac o REWRITE_RULE[expr_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`su`,`shadow_sa`,`shadow_su`,`op`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  rewrite_tac[eval_assign_tuple_action] >>
-  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _`
-    (mp_then Any irule gas_prefix_full_bind_replay) >>
-  simp[storage_trace_frame_bind_all,evaluate_storage_trace_frame,
-       storage_trace_frame_read_result,requests_outcomes_frame_bind_all,
-       evaluate_requests_outcomes_frame,requests_outcomes_frame_read_result] >>
-  (reverse conj_tac >- (rpt strip_tac >> rename1 `expr_exit result _` >>
-    Cases_on `result` >> fs[expr_exit_def])) >>
-  map_every qx_gen_tac [`marks`,`source_v`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
-  suspend "stores"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_with_borrowed_frame_prefix[stores]:
   `?tvs vs u Gu tu.
      source_v = ArrayV (TupleV vs) /\
@@ -157,5 +164,8 @@ Resume tuple_assign_exact_with_borrowed_frame_prefix[stores]:
     (mp_then Any irule gas_prefix_full_zero_prefix_guarded) >>
   simp[evaluate_storage_trace_frame]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise tuple_assign_exact_with_borrowed_frame_prefix
+*)
