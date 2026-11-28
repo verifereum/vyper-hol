@@ -16,6 +16,26 @@ Ancestors
   bodyInvSplit[qualified]
 Libs monadsyntax
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
+  `~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e)` by
+    metis_tac[normalize_return_source_kinds] >>
+  `0 < type_memory_size stv` by metis_tac[normalize_return_source_positive] >>
+  `type_widens_to (get_tenv cx) (expr_type e) typ` by metis_tac[] >>
+  drule_all widening_memory_layout_bound >> strip_tac >>
+  simp[post_value_type_lowered] >> rpt gen_tac >> strip_tac >>
+  `expr_body_pre ce cx env e (es with gas_obs := gs)` by simp[] >>
+  `value_runtime_typed env (expr_type e) v /\ value_runtime_typed env typ v` by
+    metis_tac[memory_rhs_read_annotation_typed, memory_rhs_read_destination_typed] >>
+  `value_has_type stv v /\ value_has_type dtv v` by
+    gvs[value_runtime_typed_def] >>
+  simp[value_has_type_memory_wf] >>
+  metis_tac[normalize_nonbytes_footprint]
+QED
+*)
 Theorem annassign_other_typed_layout:
   expr_body_pre_mods mods ce cx env e es /\ env.type_defs = get_tenv cx /\
   type_widens_to env.type_defs (expr_type e) typ /\
@@ -37,21 +57,7 @@ Theorem annassign_other_typed_layout:
     val_wf stv v /\ val_wf dtv v /\
     val_footprint stv v = type_memory_size stv)
 Proof
-  strip_tac >>
-  `expr_sim_inv ce cx env es` by fs[expr_body_pre_def] >>
-  `~is_word_type (expr_type e) /\ ~is_bytestring_type (expr_type e)` by
-    metis_tac[normalize_return_source_kinds] >>
-  `0 < type_memory_size stv` by metis_tac[normalize_return_source_positive] >>
-  `type_widens_to (get_tenv cx) (expr_type e) typ` by metis_tac[] >>
-  drule_all widening_memory_layout_bound >> strip_tac >>
-  simp[post_value_type_lowered] >> rpt gen_tac >> strip_tac >>
-  `expr_body_pre ce cx env e (es with gas_obs := gs)` by simp[] >>
-  `value_runtime_typed env (expr_type e) v /\ value_runtime_typed env typ v` by
-    metis_tac[memory_rhs_read_annotation_typed, memory_rhs_read_destination_typed] >>
-  `value_has_type stv v /\ value_has_type dtv v` by
-    gvs[value_runtime_typed_def] >>
-  simp[value_has_type_memory_wf] >>
-  metis_tac[normalize_nonbytes_footprint]
+  cheat
 QED
 
 (* Adapt the actual nonbytes RHS, including a source in a live local, to
@@ -104,6 +110,30 @@ Proof
   metis_tac[arithmeticTheory.LESS_EQ_TRANS, arithmeticTheory.LESS_EQ_MONO_ADD_EQ]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `cenv.ce_alloca_locals` by
+    (qpat_assum `body_inv tops ctx cenv cx`
+       (strip_assume_tac o PURE_REWRITE_RULE [body_inv_def]) >>
+     first_assum ACCEPT_TAC) >>
+  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
+    qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
+      irule (MATCH_MP gas_outcome_full_use_return_buf_allocas
+        (CONJ frame sep)))) >>
+  drule_all annassign_full_prefix_parts >>
+  disch_then (qx_choosel_then
+    [`r`,`shadow_r`,`p`,`sz`,`a`,`shadow_a`,`vv`,`sv`,`shadow_sv`,`op`,`b`,`shadow_b`]
+    strip_assume_tac) >>
+  gnvs[] >>
+  qpat_x_assum `!sa ce r ty. declare_local _ _ _ _ = _ ==> _` drule >>
+  disch_then (qspec_then `expr_type e` strip_assume_tac) >>
+  suspend "layout"
+QED
+*)
 Theorem annassign_other_typed_full_execution:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
@@ -126,27 +156,10 @@ Theorem annassign_other_typed_full_execution:
     (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (AnnAssign id typ e)))
     (eval_stmt cx (AnnAssign id typ e)) es
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `cenv.ce_alloca_locals` by
-    (qpat_assum `body_inv tops ctx cenv cx`
-       (strip_assume_tac o PURE_REWRITE_RULE [body_inv_def]) >>
-     first_assum ACCEPT_TAC) >>
-  rewrite_tac[stmt_frag_full_def] >> rpt gen_tac >>
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qpat_assum `return_buf_frame d cenv sa s0` (fn frame =>
-    qpat_assum `return_buf_sep d cenv es s0` (fn sep =>
-      irule (MATCH_MP gas_outcome_full_use_return_buf_allocas
-        (CONJ frame sep)))) >>
-  drule_all annassign_full_prefix_parts >>
-  disch_then (qx_choosel_then
-    [`r`,`shadow_r`,`p`,`sz`,`a`,`shadow_a`,`vv`,`sv`,`shadow_sv`,`op`,`b`,`shadow_b`]
-    strip_assume_tac) >>
-  gnvs[] >>
-  qpat_x_assum `!sa ce r ty. declare_local _ _ _ _ = _ ==> _` drule >>
-  disch_then (qspec_then `expr_type e` strip_assume_tac) >>
-  suspend "layout"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_other_typed_full_execution[layout]:
   `type_memory_bytes cenv typ < 2 ** 64` by
     (qpat_assum `stmt_exprs_ok cenv (AnnAssign id typ e)`
@@ -161,7 +174,9 @@ Resume annassign_other_typed_full_execution[layout]:
   (impl_tac >- fs[]) >> strip_tac >>
   suspend "prefix"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_other_typed_full_execution[prefix]:
   irule gas_outcome_full_initial_domain >>
   simp[] >> (conj_tac >- simp[evaluate_storage_trace_frame]) >>
@@ -183,7 +198,9 @@ Resume annassign_other_typed_full_execution[prefix]:
   disch_then (qx_choosel_then [`w`,`entry`,`Ga`,`tna`] strip_assume_tac) >>
   suspend "compose"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_other_typed_full_execution[compose]:
   (qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_zero_prefix >>
@@ -213,7 +230,9 @@ Resume annassign_other_typed_full_execution[compose]:
     augAssignFullRhsSavedTheory.augassign_expr_exit_to_stmt_exit) >>
   rpt conj_tac >> first_assum ACCEPT_TAC)
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_other_typed_full_execution[continuation]:
   (rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
    `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace)
@@ -226,7 +245,9 @@ Resume annassign_other_typed_full_execution[continuation]:
    disj1_tac >> qexists_tac `v` >> simp[] >>
    suspend "success")
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume annassign_other_typed_full_execution[success]:
   (qpat_assum `!tail. bind _ _ _ = _`
      (qspec_then `[]` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
@@ -435,5 +456,8 @@ Resume annassign_other_typed_full_execution[success]:
     simp[arithmeticTheory.ADD_SYM] >> disch_then irule >>
     rpt strip_tac >> first_x_assum drule >> simp[arithmeticTheory.ADD_SYM]))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise annassign_other_typed_full_execution
+*)

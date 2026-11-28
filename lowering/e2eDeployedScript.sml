@@ -9,6 +9,7 @@ Ancestors
   vyperInterpreter vyperStorageFootprint stackBoundSoundness stackBoundDefs
   vfmConstants vfmExecutionProp frameRunRaises guardSourceAlignment
   e2eTransactionWorld e2eProducers asmOptNonemptyFinalizer
+  totalBalanceOverflowCore
 
 (* Deployment installs the code and establishes the source facts at a.
    The transaction quantifier lets us reuse the existing source relations. *)
@@ -582,6 +583,15 @@ Proof
   metis_tac[]
 QED
 
+Triviality list_rel_option_fill:
+  !slots. LIST_REL (\slot w. slot = NONE \/ slot = SOME w) slots
+    (MAP (\slot. case slot of NONE => 0w | SOME w => w) slots)
+Proof
+  Induct_on `slots`
+  >- simp[]
+  >- (Cases_on `h` >> simp[] >> first_assum ACCEPT_TAC)
+QED
+
 Triviality call_success_storage_ok:
   storage_ok H am tx /\
   source_typing_ok tops am tx /\
@@ -589,14 +599,8 @@ Triviality call_success_storage_ok:
   call_within H tops am tx es /\
   calldata_result_rel H tops am tx es (INR NONE) es' /\
   LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete ==>
-  gas_readings_rel (gas_readings es)
-    (\gs. (!f vals.
-        calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
-        ~source_exempt tops
-          (call_external (SOME (MAP SND (call_trace es))) gs am
-            (tx with <| function_name := f; args := vals |>))) ==>
-      !tx'. tx'.target = tx.target ==>
-        storage_ok H (next_source_machine am es') tx')
+  !tx'. tx'.target = tx.target ==>
+    storage_ok H (next_source_machine am es') tx'
 Proof
   strip_tac >> Cases_on `calldata_dispatch tops tx.calldata`
   >- (qpat_x_assum `calldata_result_rel H tops am tx es (INR NONE) es'`
@@ -612,10 +616,12 @@ Proof
     (strip_assume_tac o BETA_RULE o
      REWRITE_RULE [call_result_rel_def, LET_THM]) >>
   qpat_x_assum `gas_readings_rel _ _`
-    (fn bridge =>
-      match_mp_tac (MATCH_MP
-        (REWRITE_RULE [GSYM AND_IMP_INTRO] gas_readings_rel_mono) bridge)) >>
-  qx_gen_tac `gs` >> BETA_TAC >> strip_tac >>
+    (strip_assume_tac o REWRITE_RULE [gas_readings_rel_def]) >>
+  qabbrev_tac `gs = MAP (\slot. case slot of NONE => 0w | SOME w => w) slots` >>
+  `LIST_REL (\slot w. slot = NONE \/ slot = SOME w) slots gs` by (
+    simp[Abbr `gs`] >>
+    irule list_rel_option_fill
+  ) >>
   Cases_on `call_external (SOME (MAP SND (call_trace es))) gs am
       (tx with <| function_name := f; args := vals |>)` >>
   rename1 `call_external (SOME (MAP SND (call_trace es))) gs am
@@ -637,9 +643,25 @@ Proof
   `next_source_machine am' es' = next_source_machine am es'` by
     (irule call_external_next_source_machine >> metis_tac[]) >>
   gvs[] >>
+  `source_result_ok res` by
+    metis_tac[call_state_rel_no_recipient_overflow_public] >>
+  `~source_exempt tops (res,am',rqs)` by
+    (Cases_on `res`
+     >- gvs[source_exempt_def]
+     >- (Cases_on `y` >>
+         gvs[source_exempt_def, unspecified_behaviour_exempt_def,
+             vyperBalanceOverflowTheory.source_result_ok_def] >>
+         Cases_on `e` >>
+         gvs[source_exempt_def, unspecified_behaviour_exempt_def,
+             vyperBalanceOverflowTheory.source_result_ok_def])) >>
+  qpat_x_assum `!gobs tail. _`
+    (qspecl_then [`gs`, `[]`] mp_tac) >>
+  impl_tac >- first_assum ACCEPT_TAC >>
+  strip_tac >>
+  gvs[] >>
   qpat_x_assum `call_result_rel_at _ _ _ _ _ _ _` assume_tac >>
   qpat_x_assum `storage_ok H _ _` assume_tac >>
-  strip_tac >> qx_gen_tac `tx'` >> strip_tac >>
+  qx_gen_tac `tx'` >> strip_tac >>
   qpat_x_assum `next_source_machine am' es' = next_source_machine am es'`
     (fn h => PURE_REWRITE_TAC [GSYM h]) >>
   irule call_next_storage_ok >>
@@ -658,7 +680,7 @@ Proof
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
   >- simp[]
-  >- first_assum ACCEPT_TAC
+  >- (simp[] >> first_assum ACCEPT_TAC)
   >- first_assum ACCEPT_TAC
   >- first_assum ACCEPT_TAC
 QED
@@ -678,16 +700,12 @@ Theorem vyper_call_correct_deployed:
       run_call es = SOME (r, es') /\
       (frame_starved es r es' \/
        calldata_result_rel H tops am tx es r es') /\
-      (LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete ==>
-       deployed tops runtime_bc (transaction_world am r es') tx.target /\
-       gas_readings_rel (gas_readings es)
-         (\gs. (!f vals.
-             calldata_dispatch tops tx.calldata = SOME (f, vals) ==>
-             ~source_exempt tops
-               (call_external (SOME (MAP SND (call_trace es))) gs am
-                 (tx with <| function_name := f; args := vals |>))) ==>
-           !tx'. tx'.target = tx.target ==>
-             storage_ok H (transaction_world am r es') tx'))
+      !tx'.
+        LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete /\
+        tx'.target = tx.target
+        ==>
+        deployed tops runtime_bc (transaction_world am r es') tx.target /\
+        storage_ok H (transaction_world am r es') tx'
 Proof
   rpt gen_tac >> strip_tac >>
   `runtime_bc <> []` by
@@ -702,7 +720,7 @@ Proof
     (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
   qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>
   reverse conj_tac
-  >- (strip_tac >> Cases_on `r = INR NONE`
+  >- (qx_gen_tac `tx'` >> strip_tac >> Cases_on `r = INR NONE`
       >- (simp[transaction_world_def] >>
           qpat_x_assum `frame_resource_starved es r es' \/
              calldata_result_rel H tops am tx es r es'`
@@ -719,22 +737,10 @@ Proof
             (drule_all call_preserves_deployed >> simp[]) >>
           conj_tac
           >- first_assum ACCEPT_TAC
-          >- (irule call_success_storage_ok >> rpt conj_tac
-              >- first_assum ACCEPT_TAC
-              >- first_assum ACCEPT_TAC
-              >- first_assum ACCEPT_TAC
-              >- first_assum ACCEPT_TAC
-              >- (qexists_tac `runtime_bc` >> first_assum ACCEPT_TAC)
-              >- first_assum ACCEPT_TAC
-              >- first_assum ACCEPT_TAC))
+          >- metis_tac[call_success_storage_ok])
       >- (simp[transaction_world_def] >>
           qpat_x_assum `storage_ok H am tx` assume_tac >>
-          rw[gas_readings_rel_def] >>
-          qexistsl_tac [`[]`, `gas_readings es`] >> simp[] >>
-          rpt gen_tac >> strip_tac >>
-          rpt gen_tac >> strip_tac >>
-          irule storage_ok_target >>
-          qexists_tac `tx` >> simp[])) >>
+          metis_tac[storage_ok_target])) >>
   qpat_x_assum `frame_resource_starved _ _ _ \/ _` strip_assume_tac >>
   asm_rewrite_tac[] >>
   DISJ1_TAC >>

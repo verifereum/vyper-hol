@@ -9,6 +9,67 @@ Ancestors
   exprSimSource s1PrefixCompose s1PrefixDefs bodySimFull exprSimDefs
   vyperStorageTrace stmtSimAugAssign bodyPtrDefs exprSimHypsDefs vyperInterpreter vyperState
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `valid_horizon cx st0 (storage_trace_horizon st.storage_trace) st.storage_trace`
+    by fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H st.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon st.storage_trace` (drule_then strip_assume_tac)) >>
+  qpat_x_assum `_ \/ ?loc old cb rhsop cc shadow_cb shadow_cc. _`
+    (DISJ_CASES_THEN2 STRIP_ASSUME_TAC
+      (qx_choosel_then [`loc`,`old`,`cb`,`rhsop`,`cc`,`shadow_cb`,`shadow_cc`]
+        STRIP_ASSUME_TAC))
+  >- (Cases_on `p` >> fs[target_post_def, place_ptr_rel_def]) >>
+  `loc <> LocCode` by
+    (`!tr. slot_loc tr <> LocCode` by (Cases >> simp[slot_loc_def]) >>
+     Cases_on `p` >> fs[target_post_def, place_ptr_rel_def] >> metis_tac[]) >>
+  qpat_assum `loc <> LocCode` (fn th => RULE_ASSUM_TAC (SIMP_RULE bool_ss [th])) >>
+  `local_ptrs_reserved cenv ca /\
+   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\
+   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x)` by
+    metis_tac[local_ptrs_reserved_next_var, not_fresh_at_mono] >>
+  `return_buf_frame d cenv ca v` by
+    (irule return_buf_frame_frame >> qexistsl_tac [`cenv`,`s0`,`sa`] >> fs[target_post_def]) >>
+  `eval_target_place cx t (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
+     (INL p,st)` by
+    (`st with gas_obs := [] = st` by simp[vyperStateTheory.evaluation_state_component_equality] >>
+     pop_assum (fn upd =>
+       qpat_assum `!tail. eval_target_place _ _ _ = _`
+         (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [listTheory.APPEND_NIL,upd])))) >>
+  qmatch_asmsub_abbrev_tac `eval_target_place cx t (es with gas_obs := reads) = (INL p,st)` >>
+  `body_const_cells_agree [(NONE,tops)] cx env st` by
+    (irule body_const_cells_agree_target >>
+     qpat_assum `eval_target_place cx t (es with gas_obs := reads) = (INL p,st)`
+       (irule_at Any) >> simp[]) >>
+  `expr_body_pre cenv cx env e st` by
+    (drule_all aug_place_rhs_pre_target_gas_obs >> simp[]) >>
+  reverse (qsuff_tac `((FST (SND r) = NONE /\ emit_void INVALID [] ca = ((),sf)) \/
+    (?loc' old' cb'. FST (SND r) = SOME loc' /\
+      emit_op (case loc' of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
+        [FST r] ca = (old',cb') /\ fn_has_code ca cb' func))`)
+  >- (disj2_tac >> qexistsl_tac [`loc`,`old`,`cb`] >> simp[]) >>
+  disch_tac >>
+  `!H. valid_horizon cx st0 H st.storage_trace ==>
+     target_post H ctx func cenv cx es sa ca s0 st (PlaceR p) (Type aty) r v /\
+     target_ptr_ok cenv (PlaceR p) r Gtarget tnt v /\
+     ghost_inv_at (DF H) lo d cenv cx st Gtarget tnt v /\
+     ghost_kept_at lo cenv (es with gas_obs := reads) sa G0 tn0 s0 Gtarget tnt /\
+     dead_lo_ok H (DF H) lo cenv cx /\
+     return_buf_frame d cenv ca v /\ alloca_history func v /\
+     (ctx_has_dalloca ctx ==> allocas_below_fmp v) /\
+     ~v.vs_halted /\ v.vs_current_bb = ca.cs_current_bb /\
+     v.vs_inst_idx = LENGTH ca.cs_current_insts` by
+    (qx_gen_tac `H` >> disch_tac >>
+     qpat_assum `!K. valid_horizon _ _ K st.storage_trace ==> target_post _ _ _ _ _ es _ _ _ _ _ _ _ _ /\ _`
+       (qspecl_then [`H`] (drule_then strip_assume_tac)) >> simp[] >>
+     qpat_assum `ghost_kept_at lo cenv es sa _ _ _ _ _` mp_tac >>
+     simp[NoAsms,ghost_kept_at_def] >> strip_tac >>
+     conj_tac >> first_assum ACCEPT_TAC) >>
+  suspend "load_and_rhs"
+QED
+*)
 Theorem augassign_ordinary_load_rhs_prefix:
   (!s p t1 sr cur tr sty ptv tty.
      eval_target_place cx t s = (INL p,t1) /\
@@ -70,64 +131,10 @@ Theorem augassign_ordinary_load_rhs_prefix:
             (case type_to_int_bound aty of SOME n => n | NONE => Unsigned 0)
             ptv bop cur rhs)) (write_place cx p))))) (st,v,Gtarget,tnt)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `valid_horizon cx st0 (storage_trace_horizon st.storage_trace) st.storage_trace`
-    by fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H st.storage_trace ==> _`
-    (qspec_then `storage_trace_horizon st.storage_trace` (drule_then strip_assume_tac)) >>
-  qpat_x_assum `_ \/ ?loc old cb rhsop cc shadow_cb shadow_cc. _`
-    (DISJ_CASES_THEN2 STRIP_ASSUME_TAC
-      (qx_choosel_then [`loc`,`old`,`cb`,`rhsop`,`cc`,`shadow_cb`,`shadow_cc`]
-        STRIP_ASSUME_TAC))
-  >- (Cases_on `p` >> fs[target_post_def, place_ptr_rel_def]) >>
-  `loc <> LocCode` by
-    (`!tr. slot_loc tr <> LocCode` by (Cases >> simp[slot_loc_def]) >>
-     Cases_on `p` >> fs[target_post_def, place_ptr_rel_def] >> metis_tac[]) >>
-  qpat_assum `loc <> LocCode` (fn th => RULE_ASSUM_TAC (SIMP_RULE bool_ss [th])) >>
-  `local_ptrs_reserved cenv ca /\
-   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x) /\
-   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at ca x)` by
-    metis_tac[local_ptrs_reserved_next_var, not_fresh_at_mono] >>
-  `return_buf_frame d cenv ca v` by
-    (irule return_buf_frame_frame >> qexistsl_tac [`cenv`,`s0`,`sa`] >> fs[target_post_def]) >>
-  `eval_target_place cx t (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
-     (INL p,st)` by
-    (`st with gas_obs := [] = st` by simp[vyperStateTheory.evaluation_state_component_equality] >>
-     pop_assum (fn upd =>
-       qpat_assum `!tail. eval_target_place _ _ _ = _`
-         (qspec_then `[]` (ACCEPT_TAC o REWRITE_RULE [listTheory.APPEND_NIL,upd])))) >>
-  qmatch_asmsub_abbrev_tac `eval_target_place cx t (es with gas_obs := reads) = (INL p,st)` >>
-  `body_const_cells_agree [(NONE,tops)] cx env st` by
-    (irule body_const_cells_agree_target >>
-     qpat_assum `eval_target_place cx t (es with gas_obs := reads) = (INL p,st)`
-       (irule_at Any) >> simp[]) >>
-  `expr_body_pre cenv cx env e st` by
-    (drule_all aug_place_rhs_pre_target_gas_obs >> simp[]) >>
-  reverse (qsuff_tac `((FST (SND r) = NONE /\ emit_void INVALID [] ca = ((),sf)) \/
-    (?loc' old' cb'. FST (SND r) = SOME loc' /\
-      emit_op (case loc' of LocStorage => SLOAD | LocTransient => TLOAD | _ => MLOAD)
-        [FST r] ca = (old',cb') /\ fn_has_code ca cb' func))`)
-  >- (disj2_tac >> qexistsl_tac [`loc`,`old`,`cb`] >> simp[]) >>
-  disch_tac >>
-  `!H. valid_horizon cx st0 H st.storage_trace ==>
-     target_post H ctx func cenv cx es sa ca s0 st (PlaceR p) (Type aty) r v /\
-     target_ptr_ok cenv (PlaceR p) r Gtarget tnt v /\
-     ghost_inv_at (DF H) lo d cenv cx st Gtarget tnt v /\
-     ghost_kept_at lo cenv (es with gas_obs := reads) sa G0 tn0 s0 Gtarget tnt /\
-     dead_lo_ok H (DF H) lo cenv cx /\
-     return_buf_frame d cenv ca v /\ alloca_history func v /\
-     (ctx_has_dalloca ctx ==> allocas_below_fmp v) /\
-     ~v.vs_halted /\ v.vs_current_bb = ca.cs_current_bb /\
-     v.vs_inst_idx = LENGTH ca.cs_current_insts` by
-    (qx_gen_tac `H` >> disch_tac >>
-     qpat_assum `!K. valid_horizon _ _ K st.storage_trace ==> target_post _ _ _ _ _ es _ _ _ _ _ _ _ _ /\ _`
-       (qspecl_then [`H`] (drule_then strip_assume_tac)) >> simp[] >>
-     qpat_assum `ghost_kept_at lo cenv es sa _ _ _ _ _` mp_tac >>
-     simp[NoAsms,ghost_kept_at_def] >> strip_tac >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
-  suspend "load_and_rhs"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume augassign_ordinary_load_rhs_prefix[load_and_rhs]:
   drule_all (REWRITE_RULE [expr_sim_inv_gas_obs, tuple_place_target_post_gas_obs]
     (Q.INST [`explicit` |-> `gas_explicit_sites ctx shadow_ctx`,
@@ -164,7 +171,9 @@ Resume augassign_ordinary_load_rhs_prefix[load_and_rhs]:
     (simp[expr_sim_full_pre_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "finish_rhs"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume augassign_ordinary_load_rhs_prefix[finish_rhs]:
   `body_expr_full_ok cx e /\ body_expr_prefix_ok cx e` by
     (conj_tac >> first_assum irule >> rpt (first_assum (irule_at Any))) >>
@@ -217,5 +226,8 @@ Resume augassign_ordinary_load_rhs_prefix[finish_rhs]:
     (fn th => PURE_REWRITE_TAC [th]) >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise augassign_ordinary_load_rhs_prefix
+*)

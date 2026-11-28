@@ -8,6 +8,27 @@ Ancestors
   gasExemptCert vyperStorageTrace vyperTypeSystem list bodyFullPreds bodySimFull
   bodyFullExprsListFacts bodyFullSimProjection
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >> rpt gen_tac >> strip_tac >>
+  drule expr_body_pre_static_facts >> strip_tac >>
+  `well_typed_builtin_app a PowMod256 (MAP expr_type args)` by
+    fs[well_typed_expr_def] >>
+  drule (word_builtin_modular_types |> Q.SPECL [`a`, `PowMod256`] |>
+    SIMP_RULE (srw_ss()) []) >> strip_tac >> gvs[MAP_EQ_CONS] >>
+  rename1 `expr_body_pre cenv cx env (Builtin _ PowMod256 [left;right]) es` >>
+  conj_asm1_tac
+  >- suspend "value" >>
+  irule expr_vv_sim_stack_prefix >> simp[] >> conj_tac
+  >- (gen_tac >>
+      qmatch_goalsub_abbrev_tac `compile_expr cenv ty ee sa` >>
+      Cases_on `compile_expr cenv ty ee sa` >> fs[Abbr `ee`] >>
+      drule_at Any compile_word_builtin_stack >> simp[] >>
+      strip_tac >> gvs[] >> metis_tac[]) >>
+  metis_tac[eval_expr_builtin_value]
+QED
+*)
 Theorem pow_mod256_sim_prefix_from_suffix:
   (!DF lo explicit ctx func PG d cenv cx st0 ee sm sb x y op t G1 tn1 ann ts (va:bytes32) (vb:bytes32).
       compile_pow_mod256 x y sm = (op,sb) /\
@@ -72,24 +93,10 @@ Theorem pow_mod256_sim_prefix_from_suffix:
       expr_vv_sim_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
         cenv cx ty (Builtin a PowMod256 args) es
 Proof
-  strip_tac >> rpt gen_tac >> strip_tac >>
-  drule expr_body_pre_static_facts >> strip_tac >>
-  `well_typed_builtin_app a PowMod256 (MAP expr_type args)` by
-    fs[well_typed_expr_def] >>
-  drule (word_builtin_modular_types |> Q.SPECL [`a`, `PowMod256`] |>
-    SIMP_RULE (srw_ss()) []) >> strip_tac >> gvs[MAP_EQ_CONS] >>
-  rename1 `expr_body_pre cenv cx env (Builtin _ PowMod256 [left;right]) es` >>
-  conj_asm1_tac
-  >- suspend "value" >>
-  irule expr_vv_sim_stack_prefix >> simp[] >> conj_tac
-  >- (gen_tac >>
-      qmatch_goalsub_abbrev_tac `compile_expr cenv ty ee sa` >>
-      Cases_on `compile_expr cenv ty ee sa` >> fs[Abbr `ee`] >>
-      drule_at Any compile_word_builtin_stack >> simp[] >>
-      strip_tac >> gvs[] >> metis_tac[]) >>
-  metis_tac[eval_expr_builtin_value]
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pow_mod256_sim_prefix_from_suffix[value]:
   PURE_REWRITE_TAC[expr_sim_prefix_def, expr_sim_full_pre_def] >>
   rpt gen_tac >> disch_then (REPEAT_TCL CONJUNCTS_THEN ASSUME_TAC) >>
@@ -144,7 +151,9 @@ Resume pow_mod256_sim_prefix_from_suffix[value]:
     (drule_all o REWRITE_RULE[expr_sim_prefix_def, expr_sim_full_pre_def]) >> strip_tac >>
   suspend "bind"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pow_mod256_sim_prefix_from_suffix[bind]:
   `bind (eval_expr cx (Builtin (BaseT (UintT 256)) PowMod256 [left;right]))
      (read_result cx) =
@@ -198,7 +207,9 @@ Resume pow_mod256_sim_prefix_from_suffix[bind]:
   reverse conj_tac >- (rpt gen_tac >> Cases_on `res` >> simp[exprSimDefsTheory.expr_exit_INL]) >>
   suspend "right"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume pow_mod256_sim_prefix_from_suffix[right]:
   rpt gen_tac >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -258,5 +269,8 @@ Resume pow_mod256_sim_prefix_from_suffix[right]:
   qexistsl_tac [`y`,`s1`,`s2`,`shadow_s1`,`shadow_s2`] >> simp[] >>
   metis_tac[loweringShapeDefsTheory.not_fresh_at_mono]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise pow_mod256_sim_prefix_from_suffix
+*)

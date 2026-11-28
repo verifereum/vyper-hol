@@ -1088,18 +1088,6 @@ Proof
   simp[lookup_scopes_def] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  gen_tac >>
-  rw[stmt_state_rel_def]
-  >- (irule state_rel_pop_scope >> metis_tac[])
-  >- (irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
-      simp[] >> rpt strip_tac >> qexists_tac `id` >>
-      gvs[] >> irule local_region_pop_scope >> metis_tac[]) >>
-  metis_tac[]
-QED
-*)
 Theorem stmt_state_rel_pop_scope:
   !H.
   !func cenv cx es s sc rest ctx.
@@ -1107,7 +1095,14 @@ Theorem stmt_state_rel_pop_scope:
     (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
     stmt_state_rel H ctx func cenv cx (es with scopes := rest) s
 Proof
-  cheat
+  rpt gen_tac >> rewrite_tac[stmt_state_rel_def] >> strip_tac >>
+  conj_tac >- (irule state_rel_pop_scope >> metis_tac[]) >>
+  `!ce. immutable_alloca_sep func ce cx es s ==>
+        immutable_alloca_sep func ce cx (es with scopes := rest) s` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`, `es`] >> simp[] >> rpt strip_tac >>
+     qexists_tac `id` >> simp[] >> irule local_region_pop_scope >> simp[]) >>
+  simp[] >> metis_tac[]
 QED
 
 Theorem local_ptrs_rel_cenv_cong:
@@ -1131,8 +1126,20 @@ Proof
   simp[immutables_rel_def, LET_THM] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem state_rel_cenv_cong:
+  !H.
+  !func cenv cenv' cx vs ss.
+    state_rel H func cenv' cx vs ss /\
+    (!n e. lookup_scopes n vs.scopes = SOME e ==>
+           FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
+    (!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv'.ce_module_vars n = SOME l) /\
+    (!n l. FLOOKUP cenv'.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
+           FLOOKUP cenv.ce_module_vars n = SOME l) /\
+    (!src. IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+       src = cenv'.ce_module \/ IS_SOME (ALOOKUP cenv'.ce_modules src)) /\
+    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
+    state_rel H func cenv cx vs ss
 Proof
   gen_tac >>
   rw[state_rel_def]
@@ -1171,24 +1178,6 @@ Proof
         (qspec_then `src` mp_tac) >>
       simp[optionTheory.IS_SOME_EXISTS] >> metis_tac[]) >>
   fs[logs_rel_def, listTheory.LIST_REL_EL_EQN, log_entry_equiv_def]
-QED
-*)
-Theorem state_rel_cenv_cong:
-  !H.
-  !func cenv cenv' cx vs ss.
-    state_rel H func cenv' cx vs ss /\
-    (!n e. lookup_scopes n vs.scopes = SOME e ==>
-           FLOOKUP cenv.ce_vars n = FLOOKUP cenv'.ce_vars n) /\
-    (!n l. FLOOKUP cenv.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
-           FLOOKUP cenv'.ce_module_vars n = SOME l) /\
-    (!n l. FLOOKUP cenv'.ce_module_vars n = SOME l /\ (!p sz. l <> PtrVar p sz) ==>
-           FLOOKUP cenv.ce_module_vars n = SOME l) /\
-    (!src. IS_SOME (ALOOKUP cenv.ce_modules src) ==>
-       src = cenv'.ce_module \/ IS_SOME (ALOOKUP cenv'.ce_modules src)) /\
-    cenv'.ce_module = cenv.ce_module /\ cenv'.ce_is_ctor = cenv.ce_is_ctor ==>
-    state_rel H func cenv cx vs ss
-Proof
-  cheat
 QED
 
 (* stmt_state_rel reads the compile environment through the locals in
@@ -1234,8 +1223,12 @@ Proof
 QED
 
 (* Assigning a variable that is no live local's pointer. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+
+Theorem stmt_state_rel_update_var:
+  !H.
+  !func cenv cx es s x w ctx.
+    stmt_state_rel H ctx func cenv cx es s /\ not_local_ptr cenv es.scopes x ==>
+    stmt_state_rel H ctx func cenv cx es (update_var x w s)
 Proof
   gen_tac >>
   rpt strip_tac >> fs[stmt_state_rel_def] >> rpt conj_tac
@@ -1249,17 +1242,13 @@ Proof
          finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[])
   >- (irule immutable_base_zero_frame >> qexists_tac `s` >>
       fs[not_local_ptr_def, update_var_def, lookup_var_def,
-         finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[]) >>
-  simp[update_var_def] >> metis_tac[]
-QED
-*)
-Theorem stmt_state_rel_update_var:
-  !H.
-  !func cenv cx es s x w ctx.
-    stmt_state_rel H ctx func cenv cx es s /\ not_local_ptr cenv es.scopes x ==>
-    stmt_state_rel H ctx func cenv cx es (update_var x w s)
-Proof
-  cheat
+         finite_mapTheory.FLOOKUP_UPDATE] >> rw[] >> gvs[])
+  >- (rpt strip_tac >>
+      irule immutable_alloca_sep_fields >> qexistsl_tac [`s`, `es`] >>
+      simp[update_var_def] >> rpt strip_tac >> qexists_tac `id` >>
+      fs[local_region_def, lookup_var_def, not_local_ptr_def,
+         finite_mapTheory.FLOOKUP_UPDATE] >> metis_tac[])
+  >- (simp[update_var_def] >> metis_tac[])
 QED
 
 Theorem local_ptrs_reserved_next_var:

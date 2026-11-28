@@ -1,5 +1,5 @@
 (* PLAN §8.1 composition helpers. No stage theorem is used here.
- * TOP-LEVEL: raw-result termination/transport, source exemption,
+ * TOP-LEVEL: raw-result termination/transport,
  *   successful and failed frame composition, unconditional run_call totality.
  *   external_call_dead_wf (external_call_dead is in vyperLoweringCorrect),
  *   external_call_result_rel_dead_transport — the source result's dead
@@ -22,24 +22,13 @@ Proof
   rw[gas_readings_rel_def] >> metis_tac[]
 QED
 
-(* ===== Actual EVM run, including exempt source failures ===== *)
+(* ===== Actual EVM run ===== *)
 
 Theorem run_call_total:
   !es. ?r es'. run_call es = SOME (r, es')
 Proof
   gen_tac >> simp[run_call_eq_tr] >>
   Cases_on `run_call_tr (LENGTH es.contexts) (step es)` >> simp[]
-QED
-
-Theorem source_exempt_call_result_rel:
-  source_exempt tops (call_external (SOME (MAP SND (call_trace es))) gobs am tx) ==>
-  call_result_rel_at gobs tops am tx es r es'
-Proof
-  simp[source_exempt_def, call_result_rel_at_def, effects_agree_def, exception_outcome_rel_def, LET_THM] >>
-  Cases_on `call_external (SOME (MAP SND (call_trace es))) gobs am tx` >>
-  rename1 `call_external _ _ am tx = (res, tail)` >>
-  Cases_on `tail` >> Cases_on `res` >> simp[] >>
-  rename1 `INR exc` >> Cases_on `exc` >> simp[]
 QED
 
 (* ===== Raw termination and pipeline transport ===== *)

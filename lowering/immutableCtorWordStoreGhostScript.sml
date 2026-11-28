@@ -4,11 +4,16 @@ Ancestors exprSimProps bodyPtrBytestringBuiltinsWindowGhost
   memoryValueEncoding valueEncodingDefs valueEncodingProps ptrDiscipline
   venomState bodySim exprSimHypsDefs stmtSimDefs bodyPtrDefs
   exprLoweringProps loweringStateRelDefs stateRelProj rich_list pred_set
+  bodyInvCodeProps gasContext immSectionDead
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
+  drule body_inv_contract >> strip_tac >>
+  drule contract_inv_cenv_modules >> strip_tac >>
+  `cx_tops cx = tops` by
+    (irule cx_tops_module >> drule contract_inv_module_codes >> simp[]) >>
   `local_ptrs_rel func ce es.scopes s` by
     metis_tac[stmt_state_rel_local_ptrs_alloca] >>
   `!name b len. local_region ce es.scopes s name b len ==>
@@ -28,12 +33,44 @@ Proof
        vs_immutables := _; vs_prev_bb := _; vs_current_bb := _;
        vs_inst_idx := _|> = s` mp_tac >>
      simp[venom_state_component_equality] >> metis_tac[]) >>
-  fs[ghost_inv_at_def] >> rpt conj_tac
-  >- suspend "locals"
-  >- suspend "return"
-  >- fs[stor_taint_ok_at_def, dead_lo_ok_def]
-  >- metis_tac[local_ptrs_reserved_def]
-  >> gvs[allocas_from_def] >> metis_tac[]
+  qpat_x_assum `ghost_inv_at _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [ghost_inv_at_def]) >>
+  simp[ghost_inv_at_def, allocas_from_def] >>
+  rpt conj_tac
+  >- (rpt gen_tac >> strip_tac >>
+      `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
+      conj_tac >- metis_tac[] >>
+      rpt gen_tac >> strip_tac >>
+      `lookup_var p s = SOME w` by metis_tac[] >>
+      `val_wf entry.type entry.value /\ type_memory_size entry.type <= sz` by
+        (fs[local_ptrs_rel_def] >> metis_tac[]) >>
+      `val_footprint entry.type entry.value <= sz` by
+        (drule val_footprint_le >> decide_tac) >>
+      `local_region ce es.scopes s name (w2n w) sz` by
+        (simp[local_region_def] >> metis_tac[]) >>
+      `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
+        val_in_memory entry.type entry.value (w2n w) m` by metis_tac[] >>
+      `mem_bytes_at (w2n w) sz q.vs_memory =
+       mem_bytes_at (w2n w) sz s.vs_memory` by metis_tac[] >>
+      `!i. w2n w <= i /\ i < w2n w+sz /\ i IN tf.t_mem ==>
+           i IN tn.t_mem` by (fs[SUBSET_DEF] >> metis_tac[]) >>
+      irule robust_val_in_memory_window_transport >>
+      conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl_tac [`tn.t_mem`,`tf.t_mem`,`sz`,`s.vs_memory`,`q.vs_memory`] >>
+      gvs[] >> metis_tac[])
+  >- (Cases_on `d` >> fs[return_buf_ptr_def] >>
+      rename1 `return_buf_ptr (SOME bc)` >> PairCases_on `bc` >>
+      fs[return_buf_ptr_def] >> metis_tac[])
+  >- (`!im. D.d_imm im = UNIV` by fs[dead_lo_ok_def] >>
+      qpat_x_assum `stor_taint_ok_at D tn s` mp_tac >>
+      simp[stor_taint_ok_at_def])
+  >- (rpt strip_tac >>
+      drule imm_section_dead_mods_singleton >>
+      disch_then (fn th => simp[th]) >>
+      qpat_x_assum `!i. _ ==> imm_section_dead _ _ _`
+        (qspec_then `i` mp_tac) >> simp[])
+  >- (rpt strip_tac >> fs[local_ptrs_reserved_def] >> metis_tac[])
+  >> fs[allocas_from_def]
 QED
 *)
 Theorem immutable_ctor_word_store_ghost:
@@ -62,43 +99,3 @@ Theorem immutable_ctor_word_store_ghost:
 Proof
   cheat
 QED
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume immutable_ctor_word_store_ghost[locals]:
-  rpt gen_tac >> strip_tac >>
-  `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
-  conj_tac >- metis_tac[] >>
-  rpt gen_tac >> strip_tac >>
-  `ptr_covers G tn p s sz` by metis_tac[] >>
-  `?w0. lookup_var p s = SOME w0` by fs[ptr_covers_def] >>
-  `lookup_var p s = SOME w` by metis_tac[] >>
-  `val_wf entry.type entry.value /\ type_memory_size entry.type <= sz` by
-    (fs[local_ptrs_rel_def] >> metis_tac[]) >>
-  `val_footprint entry.type entry.value <= sz` by
-    (drule val_footprint_le >> decide_tac) >>
-  `local_region ce es.scopes s name (w2n w) sz` by
-    (simp[local_region_def] >> metis_tac[]) >>
-  `!m. mem_agree_outside tn.t_mem s.vs_memory m ==>
-    val_in_memory entry.type entry.value (w2n w) m` by metis_tac[] >>
-  `mem_bytes_at (w2n w) sz q.vs_memory =
-   mem_bytes_at (w2n w) sz s.vs_memory` by metis_tac[] >>
-  `!i. w2n w <= i /\ i < w2n w+sz /\ i IN tf.t_mem ==>
-       i IN tn.t_mem` by (fs[SUBSET_DEF] >> metis_tac[]) >>
-  irule robust_val_in_memory_window_transport >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`tn.t_mem`,`tf.t_mem`,`sz`,`s.vs_memory`,`q.vs_memory`] >>
-  gvs[] >> metis_tac[]
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Resume immutable_ctor_word_store_ghost[return]:
-  Cases_on `d` >> fs[return_buf_ptr_def] >>
-  rename1 `return_buf_ptr (SOME bc)` >> PairCases_on `bc` >>
-  fs[return_buf_ptr_def] >> metis_tac[]
-QED
-*)
-
-(* SCRATCH MEASUREMENT: original continuation.
-Finalise immutable_ctor_word_store_ghost
-*)

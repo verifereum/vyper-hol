@@ -142,10 +142,8 @@ requires a `Reverted` frame outcome and `frame_raises es Reverted`, with any
 failed frame outcome allowed for `s = "UNREACHABLE"`. A source
 `Error (RevertData d)`, such as a bubbled `extcall` failure, also requires a
 `Reverted` frame outcome raised by the frame itself. For other source errors,
-both relations accept any failed frame outcome. When
-`unspecified_behaviour_exempt tops e` holds (see the exemption under
-[Observations, resources and limits](#observations-resources-and-limits)),
-any frame outcome is allowed. These relations quantify existentially over the
+both relations accept any failed frame outcome. These relations quantify
+existentially over the
 output bytes of `frame_outcome`. This leaves reason strings, custom error
 payloads and bubbled revert data unspecified. The one exception is
 calldata for which `calldata_dispatch tops tx.calldata = NONE`
@@ -345,12 +343,11 @@ The result relation ties source gas observations to the frame's EVM gas readings
   escaped Break/Continue/Return control has no corresponding result clause.
   The pipeline is a forward simulation with deliberately weaker failure
   observations.
-- The sole exemption is exact `RuntimeError "abi_decode invalid"` when a function
-  body contains a dynamic ABI decode target. It is not arbitrary ReturnReject,
-  every decoder error, static-only decoding or `"abi_decode conversion"`.
-  Callee-return rejection can be exempt only when it produces that same message
-  in such a program. Exempt runs still have an actual EVM run but no result/effect
-  correspondence obligation.
+- The sole source exemption is exact `RuntimeError "transfer_value recipient overflow"`.
+  The call and deployment state corollaries rule this error out under their
+  well-formed state hypotheses, so the headline relations retain their full
+  failure obligations. `"abi_decode invalid"`, `"abi_decode conversion"` and
+  static-only decoder failures are not exempt.
 - The shared `frame_starved` alternative requires the frame to raise
   `OutOfGas` or `StackOverflow`. In the published call and deploy correctness theorems, StackOverflow
   requires that no fuel makes `bytecode_stack_check` pass at `stack_limit`

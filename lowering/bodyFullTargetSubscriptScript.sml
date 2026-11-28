@@ -534,7 +534,7 @@ Finalise target_subscript_sim_full
 *)
 
 
-Theorem immutable_target_index_word[local]:
+Theorem target_subscript_index_word:
   is_int_type (expr_type e) /\ evaluate_type (get_tenv cx) (expr_type e) = SOME tv /\
   value_has_type tv v /\
   expr_post H ctx func cenv cx e es sm sn t1 mid2 v iop t2 ==>
@@ -864,7 +864,7 @@ Resume immutable_target_subscript_sim_full[tail]:
     (qspec_then `storage_trace_horizon mid2.storage_trace` (drule_then strip_assume_tac)) >>
   `?i iw. v = IntV i /\ eval_operand iop t2 = SOME iw /\
      i = (if is_signed_type (expr_type e) then w2i iw else &(w2n iw))` by
-    (irule (INST_TYPE [alpha |-> ``:256``] immutable_target_index_word) >> simp[] >>
+    (irule (INST_TYPE [alpha |-> ``:256``] target_subscript_index_word) >> simp[] >>
      qexistsl [`storage_trace_horizon mid2.storage_trace`,`cenv`,`ctx`,`cx`,
        `mid1`,`func`,`mid2`,`sm`,`sn`,`t1`,`tyv`] >> simp[]) >>
   gvs[] >>

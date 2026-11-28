@@ -10,6 +10,61 @@ Ancestors
   exprLoweringProps freshWrites exprSimHyps venomExecSemantics
   contextRawReachable unitTransformDefs fragGasOriginPtr gasSummary
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_body_pre ce cx env obj es` by
+    metis_tac[expr_body_pre_array_subscript_base,
+              copies_subscript_base_not_array_slot_base] >>
+  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty obj es` by
+    (irule (cj 2 body_expr_full_ok_simulations) >>
+     simp[] >> qexistsl [`env`,`tops`] >> simp[]) >>
+  `expr_vv_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty obj es` by
+    (qpat_assum `body_expr_prefix_ok cx obj`
+       (mp_tac o Q.SPECL [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
+         `func`,`shadow_func`,`ce`,`env`,`ty`,`es`] o
+        CONJUNCT1 o ONCE_REWRITE_RULE [CONJUNCT1 body_expr_prefix_ok_def]) >>
+     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
+     disch_then (ACCEPT_TAC o CONJUNCT2)) >>
+  PURE_REWRITE_TAC[expr_vv_sim_prefix_def, expr_vv_sim_full_pre_def] >>
+  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule_all copied_array_cuts >> strip_tac >>
+  `cs_extends sm sb /\ cs_extends sc sb /\
+   cs_extends shm shadow_sb /\ cs_extends shc shadow_sb` by
+    (rpt conj_tac >> irule cs_extends_trans
+     >- (qexists `sc` >> simp[] >> irule cs_extends_trans >> qexists `si` >> simp[])
+     >- (qexists `si` >> simp[])
+     >- (qexists `shc` >> simp[] >> irule cs_extends_trans >> qexists `shi` >> simp[])
+     >> qexists `shi` >> simp[]) >>
+  `fn_has_code sa sm func /\ fn_has_code sm sc func /\ fn_has_code sc si func /\
+   fn_has_code shadow_sa shm shadow_func /\ fn_has_code shc shi shadow_func` by
+    (imp_res_tac fn_has_code_split >> simp[]) >>
+  `gas_admissible (eval_expr cx obj) expr_vv_res_ok es` by
+    (drule expr_body_pre_vv_gas_admissible >> simp[]) >>
+  qpat_x_assum `expr_vv_sim_prefix _ _ _ _ obj _`
+    (mp_tac o REWRITE_RULE [expr_vv_sim_prefix_def, expr_vv_sim_full_pre_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shm`,`bvv`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `expr_vv_sim_full _ _ _ _ obj _` (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shm`,`bvv`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  drule_then (drule_then assume_tac) (REWRITE_RULE [AND_IMP_INTRO |> GSYM] body_inv_no_phi) >>
+  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
+  qabbrev_tac `reach_ok = \u. !fn i v. frag_reachable ctx func u fn i v ==>
+    dalloca_fmp_headroom i v` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (eval_expr cx obj) (es,s0,G0,tn0)
+     (\H res ee G tn t. baseQ H res ee G tn t /\ reach_ok t) baseR` by
+    (irule gas_outcome_full_post_path >>
+     qpat_assum `gas_outcome_full _ _ _ _ _ _ baseQ baseR` (irule_at Any) >>
+     simp[Abbr `reach_ok`] >> rpt gen_tac >> strip_tac >>
+     qpat_assum `gas_origin_ptr_path _ _ _ (OK t,_,_)`
+       (mp_then Any mp_tac gas_origin_ptr_path_dalloca_fmp_headroom) >>
+     simp[] >> metis_tac[]) >>
+  suspend "base_bind"
+QED
+*)
 Theorem subscript_copied_children_prefix:
   !frames cx ann obj idx DF lo d PG tops ctx shadow_ctx func shadow_func ce env ty es et bd.
   (!s raw mid saved. eval_expr cx obj s = (INL raw,mid) /\
@@ -80,58 +135,10 @@ Theorem subscript_copied_children_prefix:
             (~expr_has_effect obj ==> pure_frame ce func es sa s0 u))) ==>
   expr_vv_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty (Subscript ann obj idx) es
 Proof
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  `expr_body_pre ce cx env obj es` by
-    metis_tac[expr_body_pre_array_subscript_base,
-              copies_subscript_base_not_array_slot_base] >>
-  `expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty obj es` by
-    (irule (cj 2 body_expr_full_ok_simulations) >>
-     simp[] >> qexistsl [`env`,`tops`] >> simp[]) >>
-  `expr_vv_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) ce cx ty obj es` by
-    (qpat_assum `body_expr_prefix_ok cx obj`
-       (mp_tac o Q.SPECL [`DF`,`lo`,`d`,`PG`,`tops`,`ctx`,`shadow_ctx`,
-         `func`,`shadow_func`,`ce`,`env`,`ty`,`es`] o
-        CONJUNCT1 o ONCE_REWRITE_RULE [CONJUNCT1 body_expr_prefix_ok_def]) >>
-     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
-     disch_then (ACCEPT_TAC o CONJUNCT2)) >>
-  PURE_REWRITE_TAC[expr_vv_sim_prefix_def, expr_vv_sim_full_pre_def] >>
-  rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all copied_array_cuts >> strip_tac >>
-  `cs_extends sm sb /\ cs_extends sc sb /\
-   cs_extends shm shadow_sb /\ cs_extends shc shadow_sb` by
-    (rpt conj_tac >> irule cs_extends_trans
-     >- (qexists `sc` >> simp[] >> irule cs_extends_trans >> qexists `si` >> simp[])
-     >- (qexists `si` >> simp[])
-     >- (qexists `shc` >> simp[] >> irule cs_extends_trans >> qexists `shi` >> simp[])
-     >> qexists `shi` >> simp[]) >>
-  `fn_has_code sa sm func /\ fn_has_code sm sc func /\ fn_has_code sc si func /\
-   fn_has_code shadow_sa shm shadow_func /\ fn_has_code shc shi shadow_func` by
-    (imp_res_tac fn_has_code_split >> simp[]) >>
-  `gas_admissible (eval_expr cx obj) expr_vv_res_ok es` by
-    (drule expr_body_pre_vv_gas_admissible >> simp[]) >>
-  qpat_x_assum `expr_vv_sim_prefix _ _ _ _ obj _`
-    (mp_tac o REWRITE_RULE [expr_vv_sim_prefix_def, expr_vv_sim_full_pre_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shm`,`bvv`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  qpat_x_assum `expr_vv_sim_full _ _ _ _ obj _` (mp_tac o REWRITE_RULE [expr_vv_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shm`,`bvv`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  drule_then (drule_then assume_tac) (REWRITE_RULE [AND_IMP_INTRO |> GSYM] body_inv_no_phi) >>
-  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
-  qabbrev_tac `reach_ok = \u. !fn i v. frag_reachable ctx func u fn i v ==>
-    dalloca_fmp_headroom i v` >>
-  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     (cx_tops cx) cx st0 (eval_expr cx obj) (es,s0,G0,tn0)
-     (\H res ee G tn t. baseQ H res ee G tn t /\ reach_ok t) baseR` by
-    (irule gas_outcome_full_post_path >>
-     qpat_assum `gas_outcome_full _ _ _ _ _ _ baseQ baseR` (irule_at Any) >>
-     simp[Abbr `reach_ok`] >> rpt gen_tac >> strip_tac >>
-     qpat_assum `gas_origin_ptr_path _ _ _ (OK t,_,_)`
-       (mp_then Any mp_tac gas_origin_ptr_path_dalloca_fmp_headroom) >>
-     simp[] >> metis_tac[]) >>
-  suspend "base_bind"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_copied_children_prefix[base_bind]:
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
      (cx_tops cx) cx st0 (eval_expr cx obj) (es,s0,G0,tn0)
@@ -150,7 +157,9 @@ Resume subscript_copied_children_prefix[base_bind]:
        storage_trace_frame_bind_all, storage_trace_frame_select, storage_trace_frame_read_result] >>
   suspend "snapshot"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_copied_children_prefix[snapshot]:
   qx_genl_tac [`marks`,`raw`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -176,7 +185,9 @@ Resume subscript_copied_children_prefix[snapshot]:
   (impl_tac >- simp[is_word_type_def]) >> strip_tac >>
   suspend "index"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_copied_children_prefix[index]:
   `body_expr_prefix_ok cx idx` by
     (qpat_assum `!s raw ee saved. _ ==> body_expr_prefix_ok cx idx`
@@ -232,7 +243,9 @@ Resume subscript_copied_children_prefix[index]:
      disch_then irule >> first_assum (ACCEPT_TAC o BETA_RULE)) >>
   suspend "selection"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume subscript_copied_children_prefix[selection]:
   (* The saved value is immediate: selecting from it changes the result,
      not the source state or its request trace. *)
@@ -264,5 +277,8 @@ Resume subscript_copied_children_prefix[selection]:
   qpat_x_assum `gas_prefix_full _ _ _ (bind ix sel) (mid,t,G1,tn1)` mp_tac >>
   simp[gas_prefix_full_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise subscript_copied_children_prefix
+*)

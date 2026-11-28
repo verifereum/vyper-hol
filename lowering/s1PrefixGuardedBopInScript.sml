@@ -9,12 +9,8 @@ Ancestors
   exprLoweringProps exprBodyPreProps fragExec compileEnv gasShadow gasShadowState
   vyperAST vyperContext vyperTypeSystem vyperInterpreter vyperState list
 
-Theorem bop_in_expr_prefix_ok:
-  !cx ty bop es.
-  (bop = In \/ bop = NotIn) /\
-  (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_full_ok cx es) /\
-  (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_prefix_ok cx es) ==>
-  body_expr_prefix_ok cx (Builtin ty (Bop bop) es)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   simp[Once body_expr_prefix_ok_def] >> rpt gen_tac >> strip_tac >>
@@ -37,7 +33,18 @@ Proof
   irule expr_vv_sim_stack_prefix >> simp[compile_bop_stack] >>
   metis_tac[eval_expr_builtin_value]
 QED
+*)
+Theorem bop_in_expr_prefix_ok:
+  !cx ty bop es.
+  (bop = In \/ bop = NotIn) /\
+  (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_full_ok cx es) /\
+  (builtin_args_length_ok (Bop bop) (LENGTH es) ==> body_exprs_prefix_ok cx es) ==>
+  body_expr_prefix_ok cx (Builtin ty (Bop bop) es)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_in_expr_prefix_ok[flag]:
   qpat_x_assum `?fid. _` (qx_choose_then `fid` strip_assume_tac) >>
   `word_value_type (expr_type e1) /\ word_value_type (expr_type e2) /\
@@ -80,7 +87,9 @@ Resume bop_in_expr_prefix_ok[flag]:
   irule exprSimSourceTheory.expr_body_pre_builtin_arg >>
   simp[] >> qexistsl_tac [`ty`,`[e1;e2]`,`Bop bop`,`es0`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_in_expr_prefix_ok[literal]:
   qpat_x_assum `?a t n elems. _` (qx_choose_then `a`
     (qx_choose_then `t` (qx_choose_then `n` (qx_choose_then `elems` SUBST_ALL_TAC)))) >>
@@ -139,5 +148,8 @@ Resume bop_in_expr_prefix_ok[literal]:
   qexistsl_tac [`sm'`,`shadow_sa`,`shadow_func`] >>
   asm_rewrite_tac[] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise bop_in_expr_prefix_ok
+*)

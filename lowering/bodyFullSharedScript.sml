@@ -4,7 +4,7 @@
    its scope is popped. *)
 Theory bodyFullShared
 Ancestors
-  bodySimFull gasOutcomeFull fragGasOriginPtr
+  bodySimFull gasOutcomeFull gasOutcomeFullMods fragGasOriginPtr
   ptrSafetyTransport ptrDiscipline loweringStateRelDefs
   fragGasEmitCtrl gasShadowState gasShadowUnit gasShadow bodyDeclMemoryCompose
   bodyPtrDefs bodyMemoryDefs stmtSimIfProps stmtSimProps stmtSimDefs
@@ -32,12 +32,21 @@ Proof
   simp[ghost_inv_at_def, lookup_scopes_def] >> metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem ghost_inv_at_pop:
+  !D lo d cenv cenv' cx ee G tn s sc rest.
+  ghost_inv_at D lo d cenv' cx ee G tn s /\
+  cenv_top_ext cenv cenv' ee.scopes /\
+  ee.scopes = sc :: rest /\
+  (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
+  ghost_inv_at D lo d cenv cx (ee with scopes := rest) G tn s
 Proof
   rpt gen_tac >>
   simp[ghost_inv_at_def, cenv_top_ext_def, compile_env_component_equality] >>
-  strip_tac >> gvs[] >> conj_tac
+  strip_tac >>
+  `!i. imm_section_dead_mods cenv (mem_bytes_at 0 lo s.vs_memory) i <=>
+       imm_section_dead_mods cenv' (mem_bytes_at 0 lo s.vs_memory) i` by
+    simp[immSectionDeadTheory.imm_section_dead_mods_def] >>
+  gvs[] >> conj_tac
   >- (rpt strip_tac >>
       `name NOTIN FDOM sc` by metis_tac[optionTheory.NOT_NONE_SOME] >>
       `FLOOKUP sc name = NONE` by simp[FLOOKUP_DEF] >>
@@ -48,17 +57,6 @@ Proof
   gvs[] >> Cases_on `d` >> simp[return_buf_ptr_def] >>
   rename1 `SOME ds` >> PairCases_on `ds` >>
   gvs[return_buf_ptr_def]
-QED
-*)
-Theorem ghost_inv_at_pop:
-  !D lo d cenv cenv' cx ee G tn s sc rest.
-  ghost_inv_at D lo d cenv' cx ee G tn s /\
-  cenv_top_ext cenv cenv' ee.scopes /\
-  ee.scopes = sc :: rest /\
-  (!n. n IN FDOM sc ==> lookup_scopes n rest = NONE) ==>
-  ghost_inv_at D lo d cenv cx (ee with scopes := rest) G tn s
-Proof
-  cheat
 QED
 
 (* local_ptrs_reserved reads only ce_vars, which the shadow env keeps, and
@@ -189,13 +187,13 @@ QED
 
 (* Attach the allocation half of return_buf_sep to an existing outcome,
    using its own successful path. *)
-Theorem gas_outcome_full_return_buf_allocas_from:
-  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+Theorem gas_outcome_full_mods_return_buf_allocas_from:
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
     (es, s, G, tn) Q R /\
   return_buf_frame d cenv sa s /\
   (!bw capacity. d = SOME (bw, capacity) ==>
      allocas_from (w2n bw + capacity) s) ==>
-  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
     (es, s, G, tn)
     (\H res ee G' tn' t.
       Q H res ee G' tn' t /\
@@ -203,9 +201,9 @@ Theorem gas_outcome_full_return_buf_allocas_from:
          allocas_from (w2n bw + capacity) t)) R
 Proof
   strip_tac >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _`
-    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def]) >>
-  rewrite_tac[gas_outcome_full_def] >> qexists_tac `marks`
+  qpat_x_assum `gas_outcome_full_mods _ _ _ _ _ _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_mods_def]) >>
+  rewrite_tac[gas_outcome_full_mods_def] >> qexists_tac `marks`
   >- (disj1_tac >> metis_tac[])
   >- (disj2_tac >> disj1_tac >>
       qexistsl_tac [`res`, `ee`, `r`, `G'`, `tn'`] >> simp[] >>
@@ -220,6 +218,40 @@ Proof
   disj2_tac >> disj2_tac >> metis_tac[]
 QED
 
+Theorem gas_outcome_full_mods_return_buf_allocas:
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
+    (es, s, G, tn) Q R /\
+  return_buf_frame d cenv sa s /\ return_buf_sep d cenv es s ==>
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
+    (es, s, G, tn)
+    (\H res ee G' tn' t.
+      Q H res ee G' tn' t /\
+      (!bw capacity. d = SOME (bw, capacity) ==>
+         allocas_from (w2n bw + capacity) t)) R
+Proof
+  strip_tac >> match_mp_tac gas_outcome_full_mods_return_buf_allocas_from >> simp[] >>
+  Cases_on `d` >- simp[] >>
+  rename1 `return_buf_sep (SOME buf) _ _ _` >> PairCases_on `buf` >>
+  fs[return_buf_sep_def]
+QED
+
+Theorem gas_outcome_full_return_buf_allocas_from:
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s, G, tn) Q R /\
+  return_buf_frame d cenv sa s /\
+  (!bw capacity. d = SOME (bw, capacity) ==>
+     allocas_from (w2n bw + capacity) s) ==>
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s, G, tn)
+    (\H res ee G' tn' t.
+      Q H res ee G' tn' t /\
+      (!bw capacity. d = SOME (bw, capacity) ==>
+         allocas_from (w2n bw + capacity) t)) R
+Proof
+  rewrite_tac[gas_outcome_full_singleton_def] >>
+  MATCH_ACCEPT_TAC gas_outcome_full_mods_return_buf_allocas_from
+QED
+
 Theorem gas_outcome_full_return_buf_allocas:
   gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
     (es, s, G, tn) Q R /\
@@ -231,10 +263,8 @@ Theorem gas_outcome_full_return_buf_allocas:
       (!bw capacity. d = SOME (bw, capacity) ==>
          allocas_from (w2n bw + capacity) t)) R
 Proof
-  strip_tac >> match_mp_tac gas_outcome_full_return_buf_allocas_from >> simp[] >>
-  Cases_on `d` >- simp[] >>
-  rename1 `return_buf_sep (SOME buf) _ _ _` >> PairCases_on `buf` >>
-  fs[return_buf_sep_def]
+  rewrite_tac[gas_outcome_full_singleton_def] >>
+  MATCH_ACCEPT_TAC gas_outcome_full_mods_return_buf_allocas
 QED
 
 (* A consumer may use the final allocation floor in its regular post. *)

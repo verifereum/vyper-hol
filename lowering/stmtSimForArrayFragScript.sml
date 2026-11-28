@@ -605,8 +605,9 @@ Proof
   metis_tac[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem stmt_frag_start_gas_obs:
+  stmt_frag ctx func cx lctx RetQ cenv m source es ==>
+  !gs. stmt_frag ctx func cx lctx RetQ cenv m source (es with gas_obs := gs)
 Proof
   rw[stmt_frag_def, stmt_framed_frag_def] >>
   `(\(H:(bool # bytes32 # type_value) list # num list).
@@ -617,20 +618,13 @@ Proof
   irule gas_outcome_start_gas_obs >> first_x_assum irule >> simp[] >>
   rpt strip_tac >> first_x_assum drule >> strip_tac >> fs[] >>
   qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
-  simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms] >>
-  strip_tac >> asm_rewrite_tac[] >>
+  simp[stmt_state_rel_start_gas_obs] >>
+  strip_tac >>
   qpat_x_assum `storage_well_formed_on _ (_ with gas_obs := _) _` mp_tac >>
   match_mp_tac (METIS_PROVE [] ``(A <=> B) ==> A ==> B``) >>
-  irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]
+  irule vyperStorageFootprintTheory.storage_well_formed_on_backends >>
+  simp[]
 QED
-*)
-Theorem stmt_frag_start_gas_obs:
-  stmt_frag ctx func cx lctx RetQ cenv m source es ==>
-  !gs. stmt_frag ctx func cx lctx RetQ cenv m source (es with gas_obs := gs)
-Proof
-  cheat
-QED
-
 Theorem array_code_return_pc[local]:
   array_for_code func cenv bc ty stmts id et tv n stride saved_base
     p sz ainst idx dv ov ep nv cond exit bod incr
@@ -885,70 +879,6 @@ Proof
   qexists_tac `marks` >> disj2_tac >> disj2_tac >> first_assum (irule_at Any)
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  simp[stmt_frag_def, stmt_framed_frag_def] >>
-  map_every qx_gen_tac [`st0`, `st`, `st'`, `s0`, `cenv'`] >> strip_tac >>
-  reverse (Cases_on `?H. valid_horizon cx st0 H es.storage_trace`)
-  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
-      irule gasStorageTheory.gas_bad_storage_at_initial >>
-      fs[vyperStorageFootprintTheory.storage_trace_domain_def,
-         vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
-  qpat_x_assum `?H. _` strip_assume_tac >>
-  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
-  simp[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_ignore_bind_def,
-       comp_return_def] >>
-  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
-  `type_memory_bytes cenv et + 64 < dimword (:256)` by simp[] >>
-  `valid_horizon cx st0 H (es with gas_obs := []).storage_trace` by simp[] >>
-  `!H. valid_horizon cx st0 H (es with gas_obs := []).storage_trace ==>
-     stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0 /\
-     storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
-    (rpt gen_tac >> strip_tac >> fs[] >>
-     qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
-       drule >> strip_tac >> simp[] >>
-     qpat_x_assum `stmt_state_rel _ _ _ _ _ _ s0` mp_tac >>
-     simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms] >>
-     strip_tac >> asm_rewrite_tac[] >>
-     qpat_x_assum `storage_well_formed_on _ es _` mp_tac >>
-     match_mp_tac (METIS_PROVE [] ``(A <=> B) ==> A ==> B``) >>
-     irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
-  `lookup_scopes id (es with gas_obs := []).scopes = NONE` by simp[] >>
-  drule_all array_public_entry_ready >> strip_tac >>
-  `gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx)
-     (es with gas_obs := [])` by
-    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
-     simp[gas_admissible_def, Once evaluate_def, lift_option_type_def,
-       lift_option_def, bind_return, bind_def, compatible_bound_def,
-       check_def, vyperStateTheory.assert_def, ignore_bind_def, return_def]) >>
-  drule array_for_code_stmts >> strip_tac >>
-  `cs_extends sb0 sb1` by metis_tac[] >>
-  `!ei k. P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs ==>
-    stmt_frag ctx func cx (InLoop exit incr) RetQ bc
-      (stmts_env bc (InLoop exit incr) ty stmts) (eval_stmts cx stmts)
-      (ei with scopes := (FEMPTY |+ (id,
-        <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes)` by
-    (rpt strip_tac >> qpat_assum `!st0 bc sd ex inc ei k. _` drule_all >> simp[]) >>
-  `!l. Var arr_ptr <> Label l` by simp[] >>
-  `!(H:(bool # bytes32 # type_value) list # num list) ei t. P ei /\ stmt_state_rel H ctx func cenv cx ei t ==>
-    ?addr. eval_operand (Var arr_ptr) t = SOME addr /\
-      (!k. k < LENGTH vs ==>
-        val_in_memory tv (EL k vs) (w2n addr + k * type_memory_bytes cenv et) t.vs_memory /\
-        w2n addr + k * type_memory_bytes cenv et < dimword (:256))` by
-    (rpt strip_tac >> qpat_assum `!H ei s. _` drule_all >> simp[]) >>
-  `st.cs_next_id <= ainst.inst_id` by simp[] >>
-  drule_all array_code_loop_counted >> strip_tac >>
-  drule_all stmtSimDeclComposeTheory.gas_outcome_zero_prefix >> strip_tac >>
-  drule_all (SRULE [] (INST [``n:num`` |-> ``LENGTH (vs0:value list)``,
-                              ``vs:eval_result list`` |-> ``MAP Value (vs0:value list)``]
-                          array_for_source_prefix)) >> strip_tac >>
-  irule array_outcome_stmt_post >> simp[] >>
-  qpat_x_assum `gas_outcome _ _ _ _ _ (eval_stmt _ _) _ _ _` mp_tac >>
-  simp[alloca_frame_def]
-QED
-*)
 Theorem compile_for_array_frag_zero[local]:
   !ctx func cx cenv lctx RetQ ty id et n name arr_ptr arr_sz stmts tv vs es P.
   (!gs. eval_iterator cx (Array (Name (ArrayT et (Fixed n)) name))
@@ -991,36 +921,65 @@ Theorem compile_for_array_frag_zero[local]:
     (stmt_env cenv lctx ty (For id et (Array (Name (ArrayT et (Fixed n)) name)) n stmts))
     (eval_stmt cx (For id et (Array (Name (ArrayT et (Fixed n)) name)) n stmts)) es
 Proof
-  cheat
-QED
-
-
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
   rpt gen_tac >> strip_tac >>
-  irule (Q.SPEC `\ei. ?gs. P (ei with gas_obs := gs)`
-           (Q.GEN `P` (SPEC_ALL compile_for_array_frag_zero))) >>
-  simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  qexistsl [`P`, `vs`] >> simp[] >> rpt conj_tac
-  >- (rpt strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
-      first_x_assum (qspecl_then [`st0`, `bc`, `sd`, `ex`, `inc`,
-        `ei with gas_obs := g0`, `k`] mp_tac) >> simp[] >>
-      disch_then (qspec_then `ei.gas_obs` mp_tac o
-        MATCH_MP stmt_frag_start_gas_obs) >> simp[])
-  >- (rpt gen_tac >> strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
-      first_x_assum (qspecl_then [`ei with gas_obs := g0`, `k`, `gs`, `r`, `es2`]
-        mp_tac) >> simp[] >> strip_tac >> simp[] >>
-      strip_tac >> gvs[] >> qexists `es2.gas_obs` >> simp[])
-  >- (rpt strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
-      first_x_assum (qspecl_then [`H`, `ei with gas_obs := g0`, `s`] mp_tac) >>
-      simp[] >> disch_then irule >>
-      qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
-      simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms] >>
-      strip_tac >> asm_rewrite_tac[])
-  >> qexists `es.gas_obs` >> simp[]
+  simp[stmt_frag_def, stmt_framed_frag_def] >>
+  map_every qx_gen_tac [`st0`, `st`, `st'`, `s0`, `cenv'`] >> strip_tac >>
+  reverse (Cases_on `?H. valid_horizon cx st0 H es.storage_trace`)
+  >- (rewrite_tac[gas_outcome_def] >> qexists_tac `[]` >> disj1_tac >>
+      irule gasStorageTheory.gas_bad_storage_at_initial >>
+      fs[vyperStorageFootprintTheory.storage_trace_domain_def,
+         vyperStorageTraceTheory.evaluate_storage_trace_frame]) >>
+  qpat_x_assum `?H. _` strip_assume_tac >>
+  qpat_x_assum `stmt_env _ _ _ _ _ = _` mp_tac >>
+  simp[stmt_env_def, declare_stmt_local_def, comp_bind_def, comp_ignore_bind_def,
+       comp_return_def] >>
+  pairarg_tac >> simp[] >> strip_tac >> gvs[] >>
+  `type_memory_bytes cenv et + 64 < dimword (:256)` by simp[] >>
+  `valid_horizon cx st0 H (es with gas_obs := []).storage_trace` by simp[] >>
+  `!H. valid_horizon cx st0 H (es with gas_obs := []).storage_trace ==>
+     stmt_state_rel H ctx func cenv cx (es with gas_obs := []) s0 /\
+     storage_well_formed_on cx (es with gas_obs := []) (FST H)` by
+    (rpt gen_tac >> strip_tac >> fs[] >>
+     qpat_x_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel _ _ _ _ _ _ _ /\ _`
+       drule >> strip_tac >> simp[stmt_state_rel_start_gas_obs] >>
+     qpat_x_assum `storage_well_formed_on _ es _` mp_tac >>
+     match_mp_tac (METIS_PROVE [] ``(A <=> B) ==> A ==> B``) >>
+     irule vyperStorageFootprintTheory.storage_well_formed_on_backends >> simp[]) >>
+  `lookup_scopes id (es with gas_obs := []).scopes = NONE` by simp[] >>
+  drule_all array_public_entry_ready >> strip_tac >>
+  `gas_admissible (eval_for cx tv id stmts (MAP Value vs)) (stmt_res_ok lctx)
+     (es with gas_obs := [])` by
+    (qpat_x_assum `gas_admissible _ _ _` mp_tac >>
+     simp[gas_admissible_def, Once evaluate_def, lift_option_type_def,
+       lift_option_def, bind_return, bind_def, compatible_bound_def,
+       check_def, vyperStateTheory.assert_def, ignore_bind_def, return_def]) >>
+  drule array_for_code_stmts >> strip_tac >>
+  `cs_extends sb0 sb1` by metis_tac[] >>
+  `!ei k. P ei /\ lookup_scopes id ei.scopes = NONE /\ k < LENGTH vs ==>
+    stmt_frag ctx func cx (InLoop exit incr) RetQ bc
+      (stmts_env bc (InLoop exit incr) ty stmts) (eval_stmts cx stmts)
+      (ei with scopes := (FEMPTY |+ (id,
+        <|assignable := F; type := tv; value := EL k vs; popped := []|>)) :: ei.scopes)` by
+    (rpt strip_tac >> qpat_assum `!st0 bc sd ex inc ei k. _` drule_all >> simp[]) >>
+  `!l. Var arr_ptr <> Label l` by simp[] >>
+  `!(H:(bool # bytes32 # type_value) list # num list) ei t. P ei /\ stmt_state_rel H ctx func cenv cx ei t ==>
+    ?addr. eval_operand (Var arr_ptr) t = SOME addr /\
+      (!k. k < LENGTH vs ==>
+        val_in_memory tv (EL k vs) (w2n addr + k * type_memory_bytes cenv et) t.vs_memory /\
+        w2n addr + k * type_memory_bytes cenv et < dimword (:256))` by
+    (rpt strip_tac >> qpat_assum `!H ei s. _` drule_all >> simp[]) >>
+  `st.cs_next_id <= ainst.inst_id` by simp[] >>
+  drule_all array_code_loop_counted >> strip_tac >>
+  drule_all stmtSimDeclComposeTheory.gas_outcome_zero_prefix >> strip_tac >>
+  drule_all (SRULE [] (INST [``n:num`` |-> ``LENGTH (vs0:value list)``,
+                              ``vs:eval_result list`` |-> ``MAP Value (vs0:value list)``]
+                          array_for_source_prefix)) >> strip_tac >>
+  irule array_outcome_stmt_post >> simp[] >>
+  qpat_x_assum `gas_outcome _ _ _ _ _ (eval_stmt _ _) _ _ _` mp_tac >>
+  simp[alloca_frame_def]
 QED
-*)
+
+
 Theorem compile_for_array_frag:
   !ctx func cx cenv lctx RetQ ty id et n name arr_ptr arr_sz stmts tv vs es P.
   (!gs. eval_iterator cx (Array (Name (ArrayT et (Fixed n)) name))
@@ -1063,5 +1022,25 @@ Theorem compile_for_array_frag:
     (stmt_env cenv lctx ty (For id et (Array (Name (ArrayT et (Fixed n)) name)) n stmts))
     (eval_stmt cx (For id et (Array (Name (ArrayT et (Fixed n)) name)) n stmts)) es
 Proof
-  cheat
+  rpt gen_tac >> strip_tac >>
+  irule (Q.SPEC `\ei. ?gs. P (ei with gas_obs := gs)`
+           (Q.GEN `P` (SPEC_ALL compile_for_array_frag_zero))) >>
+  simp[] >> rpt conj_tac >- metis_tac[] >>
+  qexistsl [`P`, `vs`] >> simp[] >> rpt conj_tac
+  >- (rpt strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
+      first_x_assum (qspecl_then [`st0`, `bc`, `sd`, `ex`, `inc`,
+        `ei with gas_obs := g0`, `k`] mp_tac) >> simp[] >>
+      disch_then (qspec_then `ei.gas_obs` mp_tac o
+        MATCH_MP stmt_frag_start_gas_obs) >> simp[])
+  >- (rpt gen_tac >> strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
+      first_x_assum (qspecl_then [`ei with gas_obs := g0`, `k`, `gs`, `r`, `es2`]
+        mp_tac) >> simp[] >> strip_tac >> simp[] >>
+      strip_tac >> gvs[] >> qexists `es2.gas_obs` >> simp[])
+  >- ((rpt strip_tac >> rename1 `P (ei with gas_obs := g0)` >>
+      first_x_assum (qspecl_then [`H`, `ei with gas_obs := g0`, `s`] mp_tac) >>
+      simp[] >> disch_then irule >>
+      qpat_x_assum `stmt_state_rel _ _ _ _ _ _ _` mp_tac >>
+      simp[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms] >>
+      strip_tac >> asm_rewrite_tac[] >> (metis_tac[stmt_state_rel_def, state_rel_gas_obs, immutable_alloca_sep_def, NoAsms])))
+  >> qexists `es.gas_obs` >> simp[]
 QED

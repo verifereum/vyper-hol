@@ -336,18 +336,13 @@ End
 
 Theorem decoding_exemption_exact:
   (unspecified_behaviour_exempt dynamic_decode_program e <=>
-    e = RuntimeError "abi_decode invalid" \/
     e = RuntimeError "transfer_value recipient overflow") /\
-  ~unspecified_behaviour_exempt [] (RuntimeError "abi_decode invalid") /\
+  unspecified_behaviour_exempt [] (RuntimeError "transfer_value recipient overflow") /\
+  ~unspecified_behaviour_exempt dynamic_decode_program (RuntimeError "abi_decode invalid") /\
   ~unspecified_behaviour_exempt dynamic_decode_program (RuntimeError "abi_decode conversion") /\
   ~unspecified_behaviour_exempt dynamic_decode_program (TypeError "abi_decode invalid")
 Proof
-  simp[unspecified_behaviour_exempt_def, occurs_abi_decode_target_def,
-    declaration_abi_decode_target_def, dynamic_decode_program_def,
-    supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
-    supportedExprTraverseTheory.supported_expr_exists_def,
-    expr_abi_decode_target_root_def] >>
-  qexists_tac `BaseT (StringT 16)` >> simp[]
+  simp[unspecified_behaviour_exempt_def]
 QED
 
 Theorem static_decode_does_not_exempt_invalid:
@@ -427,7 +422,6 @@ QED
 Theorem error_result_only_exact_exemption_or_failure:
   call_external (SOME (MAP SND (call_trace es))) [] am tx = (INR (Error e),am',rqs) ==>
   (call_result_rel_at [] tops am tx es r es' <=>
-    unspecified_behaviour_exempt tops e \/
     ?exc out lgs. frame_outcome es r es' (SOME exc) out lgs /\
                   (!d. e = RevertData d ==> exc = Reverted /\ frame_raises es Reverted))
 Proof

@@ -230,8 +230,7 @@ End
 (* A successful constructor halts returning the runtime code followed by its
    immutables section, with the source's accounts (the target modulo code,
    its storage modulo storage_dead), transient storage (modulo storage_dead)
-   and logs. Failures abort; a source Error may also halt
-   only when it is exempt. *)
+   and logs. Failures abort; source Error/Halt pairs are rejected by this relation. *)
 Definition deploy_venom_result_rel_def:
   deploy_venom_result_rel H tops runtime_bc tx
     (src : (abstract_machine # call_request list) + exception) vres <=>
@@ -267,7 +266,6 @@ Definition deploy_venom_result_rel_def:
     | (INR (AssertException s), Abort Revert_abort _) => T
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
     | (INR (Error e), Abort a _) => (!d. e = RevertData d ==> a = Revert_abort)
-    | (INR (Error e), Halt _) => unspecified_behaviour_exempt tops e
     | _ => F
 End
 

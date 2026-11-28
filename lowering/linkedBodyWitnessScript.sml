@@ -96,6 +96,8 @@ QED
 Theorem linked_witness_contract_inv:
   ALOOKUP cx.sources cx.txn.target = SOME linked_witness_mods /\
   cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
+  check_linked_state_ownership cx.layouts cx.txn.target linked_witness_mods
+    (linked_live_functions linked_witness_mods linked_witness_exports) /\
   layouts_agree_mods linked_witness_mods linked_witness_exports am tx ==>
   !src. ?ctx ce. contract_inv linked_witness_mods linked_witness_exports ctx ce cx /\
     ce.ce_module = src
@@ -151,6 +153,8 @@ Theorem linked_witness_entry_support:
   ALOOKUP cx.sources cx.txn.target = SOME linked_witness_mods /\
   cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
   layouts_agree_mods linked_witness_mods linked_witness_exports am tx /\
+  check_linked_state_ownership cx.layouts cx.txn.target linked_witness_mods
+    (linked_live_functions linked_witness_mods linked_witness_exports) /\
   cx.stk = [(src,name)] /\
   context_function_live cx (src,name) /\
   check_contract cx.in_deploy cx.layouts cx.txn.target linked_witness_mods =

@@ -22,6 +22,7 @@ Ancestors
   codegenLabelDisciplined fnPlanPlaceRevertPostamble finite_map
   ownSymSrcUnit gasFocusOptLabelFlow[qualified,ignore_grammar] codegenSymOwnRel ctorDeployRawEntryFacts
   e2eDeployDefs e2eDefs ctorDeployDefs deployUnitExecution deployUnitExitSafe
+  totalBalanceOverflowCore
   ctorDeployMemoryFrontier ctorDeployImmBudget ctorDeployInitcode
   ctorDeployEntry ctorDeployShape ctorDeployDefsReach ctorDeployDead
   ctorDeployLoweringSource
@@ -165,16 +166,6 @@ Proof
       simp[deploy_result_rel_def, e2eDefsTheory.effects_agree_def,
            initial_evaluation_context_def]) >>
   rename1 `INR exc` >> Cases_on `exc` >> simp[deploy_result_rel_def]
-QED
-
-Theorem deploy_exempt_result_rel[local]:
-  deploy_source_exempt tops src ==>
-  deploy_result_rel H tops runtime_bc tx es r es' src
-Proof
-  Cases_on `src` >> simp[deploy_source_exempt_def] >>
-  rename1 `INR exc` >> Cases_on `exc` >>
-  simp[deploy_source_exempt_def, deploy_result_rel_def,
-       e2eDefsTheory.exception_outcome_rel_def]
 QED
 
 (* The bridges at the deployment entry: the S4 memory facts of vs from its
@@ -391,12 +382,31 @@ Proof
      `fin = asm_opt_finalizer` by fs[accepted_finalizers_def] >>
      metis_tac[compile_vyper_runtime_nonempty_asm_opt]) >>
   drule_all deploy_entry_facts >> strip_tac >>
+  `txp = tx` by metis_tac[deploy_own_txp_identity] >>
+  `~deploy_source_exempt tops
+       (load_contract (SOME vs.vs_outcomes)
+          (gas_explicit marks vs.vs_gas_readings ++ tail) am txp
+          [(NONE, tops)] [])` by (
+    qpat_assum `deploy_unit_execution_correct_at _ _ _ _ _ _ _`
+      (strip_assume_tac o REWRITE_RULE [deploy_unit_execution_correct_at_def])
+    >- (qpat_assum `!tail. ~deploy_storage_ok _ _ _ _ _`
+          (qspec_then `tail` mp_tac) >> gvs[]) >>
+    qpat_assum `!tail. load_contract_trace _ _ _ _ _ _ = _`
+      (qspec_then `tail` assume_tac) >>
+    `source_result_ok src` by
+      metis_tac[deploy_state_rel_no_recipient_overflow_core] >>
+    `~deploy_source_exempt tops src` by
+      (Cases_on `src`
+       >- gvs[deploy_source_exempt_def]
+       >- (Cases_on `y` >>
+           gvs[deploy_source_exempt_def, unspecified_behaviour_exempt_def,
+               vyperBalanceOverflowTheory.source_result_ok_def] >>
+           Cases_on `e` >>
+           gvs[deploy_source_exempt_def, unspecified_behaviour_exempt_def,
+               vyperBalanceOverflowTheory.source_result_ok_def])) >>
+    simp[load_contract_def] >> metis_tac[]
+  ) >>
   `txp.function_name = "__init__"` by gvs[deploy_state_rel_def] >>
-  Cases_on `deploy_source_exempt tops
-              (load_contract (SOME vs.vs_outcomes)
-                 (gas_explicit marks vs.vs_gas_readings ++ tail) am txp
-                 [(NONE, tops)] [])`
-  >- (disj2_tac >> irule deploy_exempt_result_rel >> first_assum ACCEPT_TAC) >>
   qpat_x_assum `~deploy_source_exempt _ _ ==> _` drule >> strip_tac >>
   `lower_vyper_deploy_unit tops rpolicy runtime_bc = SOME dunit` by
     fs[deploy_phases_def] >>

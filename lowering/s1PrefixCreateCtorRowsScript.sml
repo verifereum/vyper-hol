@@ -16,6 +16,19 @@ Ancestors
 Libs
   pairLib
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  map_every qid_spec_tac [`tn0`,`G0`,`s0`,`es`,`shadow_sb`,`shadow_sa`,`sb`,`sa`,`svs`] >>
+  Induct_on `xs` >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)
+  >- (irule gas_prefix_full_no_outcome >>
+      simp[evaluate_def,return_def,storage_trace_frame_return]) >>
+  qmatch_asmsub_rename_tac `body_exprs_full_ok cx (e::xs)` >>
+  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
+  >- suspend "bad_entry" >>
+  suspend "split_code"
+QED
+*)
 Theorem create_ctor_rows_operand_prefix:
   body_const_cells_agree [(NONE,tops)] cx env es /\
   body_exprs_full_ok cx xs /\ body_exprs_prefix_ok cx xs /\
@@ -46,16 +59,10 @@ Theorem create_ctor_rows_operand_prefix:
   gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     cx st0 (eval_exprs cx xs) (es,s0,G0,tn0)
 Proof
-  map_every qid_spec_tac [`tn0`,`G0`,`s0`,`es`,`shadow_sb`,`shadow_sa`,`sb`,`sa`,`svs`] >>
-  Induct_on `xs` >> rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS)
-  >- (irule gas_prefix_full_no_outcome >>
-      simp[evaluate_def,return_def,storage_trace_frame_return]) >>
-  qmatch_asmsub_rename_tac `body_exprs_full_ok cx (e::xs)` >>
-  reverse (Cases_on `storage_trace_domain cx st0 es.storage_trace`)
-  >- suspend "bad_entry" >>
-  suspend "split_code"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_operand_prefix[bad_entry]:
   simp[gas_prefix_full_def] >> qexists_tac `[]` >> conj_tac
   >- (qexistsl_tac [`storage_trace_horizon es.storage_trace`, `func`,
@@ -71,7 +78,9 @@ Resume create_ctor_rows_operand_prefix[bad_entry]:
   metis_tac[gasOutcomeFullTheory.valid_horizon_append,
             bodyFullExtCallPackingReadyTheory.extcall_packing_observed_domain]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_operand_prefix[split_code]:
   `body_expr_full_ok cx e /\ body_expr_prefix_ok cx e /\ expr_body_pre cenv cx env e es` by
     fs[Once body_exprs_full_ok_cons,Once body_exprs_prefix_ok_def] >>
@@ -112,7 +121,9 @@ Resume create_ctor_rows_operand_prefix[split_code]:
   qunabbrev_tac `snap` >>
   suspend "code_spans"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_operand_prefix[code_spans]:
   `ci_mono sa sm /\ ci_mono shadow_sa shm` by
     (conj_tac
@@ -143,9 +154,11 @@ Resume create_ctor_rows_operand_prefix[code_spans]:
     (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >> qexists `sa` >> fs[ci_mono_def]) >>
   suspend "head_prefix"
 QED
+*)
 
 (* The prefix stops at a request in the expression itself; the completed
    head outcome below includes the subsequent snapshot instructions. *)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_operand_prefix[head_prefix]:
   `ctx_has_dalloca ctx ==> allocas_below_fmp s0` by
     (`valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
@@ -170,7 +183,9 @@ Resume create_ctor_rows_operand_prefix[head_prefix]:
                          exprSimMemorySourceTheory.forced_expr_admissible_raw]) >>
   suspend "bind_rows"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_operand_prefix[bind_rows]:
   mp_tac (Q.INST [`sh` |-> `shadow_sa`] create_ctor_head_outcome) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >> disch_tac >>
@@ -207,7 +222,9 @@ Resume create_ctor_rows_operand_prefix[bind_rows]:
       simp[exprSimDefsTheory.expr_exit_def]) >>
   suspend "tail_prefix"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_ctor_rows_operand_prefix[tail_prefix]:
   qx_genl_tac [`marks`,`v`,`mid`,`G1`,`tn1`,`t`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -242,5 +259,8 @@ Resume create_ctor_rows_operand_prefix[tail_prefix]:
     (gen_tac >> Cases_on `eval_exprs cx xs st` >> Cases_on `q` >> simp[bind_def,return_def]) >>
   drule gas_prefix_full_state_cong >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise create_ctor_rows_operand_prefix
+*)

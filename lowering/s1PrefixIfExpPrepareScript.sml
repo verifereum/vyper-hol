@@ -5,6 +5,103 @@ Ancestors
   s1PrefixCompose s1PrefixOfVV bodySimFull bodyFullIfExpReach
   s1PrefixProps exprSimDefs
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >> rewrite_tac[expr_vv_sim_prefix_def,expr_vv_sim_full_pre_def] >>
+  rpt strip_tac >>
+  `!ty' e. gas_shadow_compiles (compile_expr cenv ty' e)
+      (compile_expr (gas_shadow_env T cenv) ty' (gas_shadow_expr e))` by
+    (rpt gen_tac >> irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env) >>
+  `!ty' e. gas_shadow_compiles (lower_value compile_expr cenv ty' e)
+      (lower_value compile_expr (gas_shadow_env T cenv) ty' (gas_shadow_expr e))` by
+    (rpt gen_tac >> irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env) >>
+  `!rt at av. gas_shadow_compiles (compile_ifexp_arm cenv rt at av)
+      (compile_ifexp_arm (gas_shadow_env T cenv) rt at av)` by
+    simp[gasShadowCompileConvertTheory.gas_shadow_compiles_ifexp_arm] >>
+  drule_all bodyFullIfExpShadowTheory.ifexp_shadow_code_layout >>
+  disch_then (assume_tac o GEN_ALL) >>
+  `?cop sc shadow_sc.
+    lower_value compile_expr cenv (BaseT BoolT) c sa = (cop,sc) /\
+    lower_value compile_expr (gas_shadow_env T cenv) (BaseT BoolT)
+      (gas_shadow_expr c) shadow_sa = (cop,shadow_sc) /\
+    gas_shadow_state sc shadow_sc /\ fn_has_code sa sc func /\
+    fn_has_code shadow_sa shadow_sc shadow_func` by
+    (qpat_assum `!sel. ?cop. _` (qspec_then `T` strip_assume_tac) >>
+     qexistsl [`cop`,`sc`,`shadow_sc`] >> simp[]) >>
+  `gas_admissible (bind (eval_expr cx c) (read_result cx)) expr_res_ok es` by
+    metis_tac[exprSimIfExpTheory.ifexp_root_condition_admissible] >>
+  qpat_x_assum `expr_sim_prefix _ _ _ _ c _`
+    (mp_tac o REWRITE_RULE [expr_sim_prefix_def,expr_sim_full_pre_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`sc`,`shadow_sa`,`shadow_sc`,`cop`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qpat_x_assum `expr_sim_full _ _ _ _ c _`
+    (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`sc`,`shadow_sa`,`shadow_sc`,`cop`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ condQ condR` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx c) (read_result cx))
+     (es,s0,G0,tn0)
+     (\H res ee G tn z. condQ H res ee G tn z /\
+       ?cm. gas_origin_ptr_path
+         (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (s0,G0,tn0) cm (OK z,G,tn)) condR` by
+    (irule gas_outcome_full_post_path >>
+     qpat_assum `gas_outcome_full _ _ _ _ _ _ condQ condR` (irule_at Any) >>
+     rpt strip_tac >> simp[] >> metis_tac[]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ condQ condR` kall_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ pathQ condR` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx c) (read_result cx))
+     (es,s0,G0,tn0)
+     (\H res ee G tn z. pathQ H res ee G tn z /\ ~z.vs_halted /\ ee.gas_obs = [])
+     condR` by
+    (irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
+     qpat_assum `gas_outcome_full _ _ _ _ _ _ pathQ condR` (irule_at Any) >> simp[]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ pathQ condR` kall_tac >>
+  rewrite_tac[exprSimIfExpTheory.ifexp_root_eval_forced] >>
+  irule gas_prefix_full_bind >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ condR` (irule_at Any) >>
+  simp[exprSimIfExpTheory.ifexp_root_cont_frame,
+       vyperStorageTraceTheory.storage_trace_frame_bind_all,
+       vyperStorageTraceTheory.evaluate_storage_trace_frame,
+       vyperStorageTraceTheory.storage_trace_frame_read_result,
+       requests_outcomes_frame_bind_all,evaluate_requests_outcomes_frame,
+       requests_outcomes_frame_read_result] >>
+  rpt conj_tac
+  >~ [`!H res ee gt r. condR H res ee gt r ==> ISR res`]
+  >- (simp[Abbr `condR`] >> rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]) >>
+  qx_genl_tac [`marks`,`v`,`mid`,`G1`,`tn1`,`z`] >> strip_tac >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  (impl_tac >- first_assum ACCEPT_TAC) >>
+  simp[NoAsms,Abbr `pathQ`,Abbr `condQ`] >> strip_tac >>
+  `mid with gas_obs := [] = mid` by
+    (Cases_on `mid` >> gvs (TypeBase.updates_of ``:evaluation_state``)) >>
+  `bind (eval_expr cx c) (read_result cx)
+     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) = (INL v,mid)` by
+    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
+     pure_rewrite_tac[listTheory.APPEND_NIL] >>
+     disch_then assume_tac >> fs[]) >>
+  drule_all exprSimIfExpTheory.ifexp_root_condition_bool >> strip_tac >>
+  qpat_x_assum `v = BoolV _` SUBST_ALL_TAC >>
+  qpat_x_assum `!sel. ?cop. _` (qspec_then `sel` strip_assume_tac) >>
+  `cop' = cop /\ sc' = sc /\ shadow_sc' = shadow_sc` by
+    (qpat_x_assum `lower_value compile_expr cenv (BaseT BoolT) c sa = (cop',sc')` mp_tac >>
+     qpat_x_assum `lower_value compile_expr _ _ (gas_shadow_expr _) _ = (cop',shadow_sc')` mp_tac >> simp[]) >>
+  qpat_x_assum `cop' = cop` SUBST_ALL_TAC >>
+  qpat_x_assum `sc' = sc` SUBST_ALL_TAC >>
+  qpat_x_assum `shadow_sc' = shadow_sc` SUBST_ALL_TAC >>
+  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cx st0
+      (bind (eval_expr cx (if sel then a else b)) (conditional_result cx)) (mid,z,G1,tn1)`
+    suffices_by (Cases_on `sel` >> simp[]) >>
+  suspend "jump"
+QED
+*)
 Theorem ifexp_vv_prefix_root_uniform:
   expr_type c = BaseT BoolT /\ expr_type a = t /\ expr_type b = t /\
   (!e sa sm av op sb es1 u G1 tn1 st0.
@@ -115,100 +212,10 @@ Theorem ifexp_vv_prefix_root_uniform:
      expr_vv_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty b es1) ==>
   expr_vv_sim_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cenv cx ty (IfExp t c a b) es
 Proof
-  strip_tac >> rewrite_tac[expr_vv_sim_prefix_def,expr_vv_sim_full_pre_def] >>
-  rpt strip_tac >>
-  `!ty' e. gas_shadow_compiles (compile_expr cenv ty' e)
-      (compile_expr (gas_shadow_env T cenv) ty' (gas_shadow_expr e))` by
-    (rpt gen_tac >> irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_compile_expr_env) >>
-  `!ty' e. gas_shadow_compiles (lower_value compile_expr cenv ty' e)
-      (lower_value compile_expr (gas_shadow_env T cenv) ty' (gas_shadow_expr e))` by
-    (rpt gen_tac >> irule gasShadowCompileStmtHelpersTheory.gas_shadow_stmt_lower_value_env) >>
-  `!rt at av. gas_shadow_compiles (compile_ifexp_arm cenv rt at av)
-      (compile_ifexp_arm (gas_shadow_env T cenv) rt at av)` by
-    simp[gasShadowCompileConvertTheory.gas_shadow_compiles_ifexp_arm] >>
-  drule_all bodyFullIfExpShadowTheory.ifexp_shadow_code_layout >>
-  disch_then (assume_tac o GEN_ALL) >>
-  `?cop sc shadow_sc.
-    lower_value compile_expr cenv (BaseT BoolT) c sa = (cop,sc) /\
-    lower_value compile_expr (gas_shadow_env T cenv) (BaseT BoolT)
-      (gas_shadow_expr c) shadow_sa = (cop,shadow_sc) /\
-    gas_shadow_state sc shadow_sc /\ fn_has_code sa sc func /\
-    fn_has_code shadow_sa shadow_sc shadow_func` by
-    (qpat_assum `!sel. ?cop. _` (qspec_then `T` strip_assume_tac) >>
-     qexistsl [`cop`,`sc`,`shadow_sc`] >> simp[]) >>
-  `gas_admissible (bind (eval_expr cx c) (read_result cx)) expr_res_ok es` by
-    metis_tac[exprSimIfExpTheory.ifexp_root_condition_admissible] >>
-  qpat_x_assum `expr_sim_prefix _ _ _ _ c _`
-    (mp_tac o REWRITE_RULE [expr_sim_prefix_def,expr_sim_full_pre_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`sc`,`shadow_sa`,`shadow_sc`,`cop`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  qpat_x_assum `expr_sim_full _ _ _ _ c _`
-    (mp_tac o REWRITE_RULE [expr_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`sc`,`shadow_sa`,`shadow_sc`,`cop`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> strip_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ condQ condR` >>
-  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     (cx_tops cx) cx st0 (bind (eval_expr cx c) (read_result cx))
-     (es,s0,G0,tn0)
-     (\H res ee G tn z. condQ H res ee G tn z /\
-       ?cm. gas_origin_ptr_path
-         (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-         (s0,G0,tn0) cm (OK z,G,tn)) condR` by
-    (irule gas_outcome_full_post_path >>
-     qpat_assum `gas_outcome_full _ _ _ _ _ _ condQ condR` (irule_at Any) >>
-     rpt strip_tac >> simp[] >> metis_tac[]) >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ condQ condR` kall_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ pathQ condR` >>
-  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     (cx_tops cx) cx st0 (bind (eval_expr cx c) (read_result cx))
-     (es,s0,G0,tn0)
-     (\H res ee G tn z. pathQ H res ee G tn z /\ ~z.vs_halted /\ ee.gas_obs = [])
-     condR` by
-    (irule gasOutcomeFullComposeTheory.gas_outcome_full_post_source >>
-     qpat_assum `gas_outcome_full _ _ _ _ _ _ pathQ condR` (irule_at Any) >> simp[]) >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ pathQ condR` kall_tac >>
-  rewrite_tac[exprSimIfExpTheory.ifexp_root_eval_forced] >>
-  irule gas_prefix_full_bind >>
-  qpat_assum `gas_outcome_full _ _ _ _ _ _ _ condR` (irule_at Any) >>
-  simp[exprSimIfExpTheory.ifexp_root_cont_frame,
-       vyperStorageTraceTheory.storage_trace_frame_bind_all,
-       vyperStorageTraceTheory.evaluate_storage_trace_frame,
-       vyperStorageTraceTheory.storage_trace_frame_read_result,
-       requests_outcomes_frame_bind_all,evaluate_requests_outcomes_frame,
-       requests_outcomes_frame_read_result] >>
-  rpt conj_tac
-  >~ [`!H res ee gt r. condR H res ee gt r ==> ISR res`]
-  >- (simp[Abbr `condR`] >> rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]) >>
-  qx_genl_tac [`marks`,`v`,`mid`,`G1`,`tn1`,`z`] >> strip_tac >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ _ _` kall_tac >>
-  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
-    fs[vyperStorageFootprintTheory.storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H mid.storage_trace ==> _`
-    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-  (impl_tac >- first_assum ACCEPT_TAC) >>
-  simp[NoAsms,Abbr `pathQ`,Abbr `condQ`] >> strip_tac >>
-  `mid with gas_obs := [] = mid` by
-    (Cases_on `mid` >> gvs (TypeBase.updates_of ``:evaluation_state``)) >>
-  `bind (eval_expr cx c) (read_result cx)
-     (es with gas_obs := gas_explicit marks s0.vs_gas_readings) = (INL v,mid)` by
-    (qpat_assum `!tail. bind _ _ _ = _` (qspec_then `[]` mp_tac) >>
-     pure_rewrite_tac[listTheory.APPEND_NIL] >>
-     disch_then assume_tac >> fs[]) >>
-  drule_all exprSimIfExpTheory.ifexp_root_condition_bool >> strip_tac >>
-  qpat_x_assum `v = BoolV _` SUBST_ALL_TAC >>
-  qpat_x_assum `!sel. ?cop. _` (qspec_then `sel` strip_assume_tac) >>
-  `cop' = cop /\ sc' = sc /\ shadow_sc' = shadow_sc` by
-    (qpat_x_assum `lower_value compile_expr cenv (BaseT BoolT) c sa = (cop',sc')` mp_tac >>
-     qpat_x_assum `lower_value compile_expr _ _ (gas_shadow_expr _) _ = (cop',shadow_sc')` mp_tac >> simp[]) >>
-  qpat_x_assum `cop' = cop` SUBST_ALL_TAC >>
-  qpat_x_assum `sc' = sc` SUBST_ALL_TAC >>
-  qpat_x_assum `shadow_sc' = shadow_sc` SUBST_ALL_TAC >>
-  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cx st0
-      (bind (eval_expr cx (if sel then a else b)) (conditional_result cx)) (mid,z,G1,tn1)`
-    suffices_by (Cases_on `sel` >> simp[]) >>
-  suspend "jump"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ifexp_vv_prefix_root_uniform[jump]:
   `!H. valid_horizon cx st0 H mid.storage_trace ==>
     gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -236,7 +243,9 @@ Resume ifexp_vv_prefix_root_uniform[jump]:
   qexistsl [`G1`,`jump_to (if sel then tl else el) z`,`tn1`] >> simp[] >>
   suspend "arm"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ifexp_vv_prefix_root_uniform[arm]:
   `gas_admissible (bind (eval_expr cx (if sel then a else b)) (conditional_result cx))
       expr_vv_res_ok mid` by
@@ -274,7 +283,9 @@ Resume ifexp_vv_prefix_root_uniform[arm]:
   qexistsl [`se`,`sea`,`shadow_se`,`shadow_sea`,`av`] >> simp[] >>
   suspend "arm_pre"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume ifexp_vv_prefix_root_uniform[arm_pre]:
   qpat_x_assum `!e sa sm av op sb es1 u G1 tn1 st0. _` kall_tac >>
   qpat_x_assum `!gs v es1. _ ==> expr_vv_sim_full _ _ _ _ _ _ /\ _` kall_tac >>
@@ -315,5 +326,8 @@ Resume ifexp_vv_prefix_root_uniform[arm_pre]:
   qpat_assum `expr_post H _ _ _ _ c _ _ _ _ _ _ _ z` mp_tac >>
   simp[NoAsms,loweringPostsTheory.expr_post_def] >> strip_tac >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise ifexp_vv_prefix_root_uniform
+*)

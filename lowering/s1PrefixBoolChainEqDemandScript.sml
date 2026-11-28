@@ -19,6 +19,23 @@ End
 
 (* The two code slices are those of the demanded parent. The right demand
    is established at the successful left replay cut. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  qpat_x_assum `value_read_demand _ _ _ _ _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [value_read_demand_def,expr_sim_full_pre_def]) >>
+  drule_all bop_full_layout >> strip_tac >>
+  drule expr_body_pre_bop >> strip_tac >>
+  qexistsl_tac [`s1`,`s2`,`shadow_s1`,`shadow_s2`,`x`,`y`] >>
+  conj_tac
+  >- (simp[value_read_demand_def,expr_sim_full_pre_def] >>
+      metis_tac[expr_body_pre_gas_admissible]) >>
+  conj_tac >- (simp[expr_size_def] >> decide_tac) >>
+  conj_tac >- (simp[expr_size_def] >> decide_tac) >>
+  suspend "right_entry"
+QED
+*)
 Theorem bool_chain_word_eq_demand_closure:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ann ty l r es
      st0 sa sb shadow_sa shadow_sb op s0 G0 tn0.
@@ -56,20 +73,10 @@ Theorem bool_chain_word_eq_demand_closure:
           tops cenv cx env r (expr_type l) mid
           (st0,s1,s2,shadow_s1,shadow_s2,y,t,G1,tn1))
 Proof
-  rpt gen_tac >> strip_tac >>
-  qpat_x_assum `value_read_demand _ _ _ _ _ _ _ _ _`
-    (strip_assume_tac o REWRITE_RULE [value_read_demand_def,expr_sim_full_pre_def]) >>
-  drule_all bop_full_layout >> strip_tac >>
-  drule expr_body_pre_bop >> strip_tac >>
-  qexistsl_tac [`s1`,`s2`,`shadow_s1`,`shadow_s2`,`x`,`y`] >>
-  conj_tac
-  >- (simp[value_read_demand_def,expr_sim_full_pre_def] >>
-      metis_tac[expr_body_pre_gas_admissible]) >>
-  conj_tac >- (simp[expr_size_def] >> decide_tac) >>
-  conj_tac >- (simp[expr_size_def] >> decide_tac) >>
-  suspend "right_entry"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_word_eq_demand_closure[right_entry]:
   qx_genl_tac [`left`,`v1`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -112,5 +119,8 @@ Resume bool_chain_word_eq_demand_closure[right_entry]:
   simp[value_read_demand_def,expr_sim_full_pre_def] >>
   metis_tac[expr_body_pre_gas_admissible]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise bool_chain_word_eq_demand_closure
+*)

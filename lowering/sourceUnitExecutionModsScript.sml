@@ -50,7 +50,6 @@ Definition external_call_result_rel_mods_def:
     | (INR (AssertException s), Abort ExHalt_abort _) => (s = "UNREACHABLE")
     | (INR (Error (RevertData _)), Abort Revert_abort _) => T
     | (INR (Error (RuntimeError m)), Abort _ _) => T
-    | (INR (Error e), Halt _) => unspecified_behaviour_exempt_mods mods e
     | _ => F
 End
 

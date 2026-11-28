@@ -383,14 +383,14 @@ Proof
 QED
 
 Definition exception_outcome_rel_mods_def:
-  exception_outcome_rel_mods mods exc es r es' <=>
+  exception_outcome_rel_mods
+    (mods : (num option # toplevel list) list) exc es r es' <=>
     case exc of
       AssertException s =>
         ?failure out lgs.
           frame_outcome es r es' (SOME failure) out lgs /\
           ((failure = Reverted /\ frame_raises es Reverted) \/ s = "UNREACHABLE")
     | Error e =>
-        unspecified_behaviour_exempt_mods mods e \/
         ?failure out lgs.
           frame_outcome es r es' (SOME failure) out lgs /\
           (!d. e = RevertData d ==> failure = Reverted /\ frame_raises es Reverted)

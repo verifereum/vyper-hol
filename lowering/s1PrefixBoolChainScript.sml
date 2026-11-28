@@ -4,6 +4,9 @@ Ancestors
 
 Theorem bool_chain_expr_prefix_ok:
   !cx ann p n args.
+    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+      EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+        (vyperTypeCallGraph$int_calls_expr (Builtin ann (BoolChain p n) args))) /\
     (!s'' x t.
        type_check (builtin_args_length_ok (BoolChain p n) (LENGTH args))
          "Builtin args" s'' = (INL x,t) /\

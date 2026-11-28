@@ -71,6 +71,8 @@ Proof
   qexists_tac `unit.cu_context` >>
   qexists_tac `build_compile_env_unit ^dead_mods NONE External NonPayable
     "" [] NoneT [] T with ce_target := p.rpol_target` >>
+  `check_linked_state_ownership cx.layouts cx.txn.target ^dead_mods
+     (linked_live_functions ^dead_mods [])` by EVAL_TAC >>
   PURE_REWRITE_TAC [contract_inv_def] >>
   simp[get_tenv_def, LET_THM] >>
   rpt conj_tac

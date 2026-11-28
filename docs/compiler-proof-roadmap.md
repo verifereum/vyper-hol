@@ -68,8 +68,8 @@ inventory](compiler-proof-dependencies.md#s1s7-stage-producers).
 | S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` (same owner) | Actual O1 success + `o1_source_unit_ok` + `unit_entry_no_params` + `unit_defs_reach_uses` + `unit_fmp_unsealed` -> `unit_shape_ok` | 3 |
 | S7 | `codegenCorrectness.codegen_correct` ([source](../venom/codegen/codegenCorrectnessScript.sml)) | Generated plan/assembly + shape + context/reachability + initial frame relation -> actual `run_call`, resource alternatives or `venom_frame_rel` | 2.1 / 4 |
 
-The top uses S1 even on exempt source executions. Only its non-exempt branch
-needs S3/S4/S7 and memory/reachability facts at the concrete `Inv`
+The top uses S1 on every source execution. It needs S3/S4/S7 and
+memory/reachability facts at the concrete `Inv`
 `raw_reachable vs0` (`vs0` the O1 output's entry state) rather than one the
 caller supplies. On the ordinary path they have S5's form and come from
 `e2eProducers.o1_pipeline_memory_obligations_raw`; on the static-abort path they
@@ -275,10 +275,10 @@ computed precompiles included) via `request_agree`. A source halt relates the
 same logs, accounts, transient storage and requests (`effects_agree`) with empty output.
 Failed-run requests, leftover terminal outcomes, revert data/reason and general
 abort kind are not compared, except that calldata with `calldata_dispatch` `NONE`
-requires a raised `Reverted` outcome with empty output outside resource starvation. `unspecified_behaviour_exempt` covers exact
-`RuntimeError "abi_decode invalid"` with a dynamic ABI target occurring in a
-function body; it may also cover a callee-return rejection with that exact
-message, not arbitrary ReturnReject/conversion/static decode failure.
+requires a raised `Reverted` outcome with empty output outside resource starvation. `unspecified_behaviour_exempt` covers only exact
+`RuntimeError "transfer_value recipient overflow"`; the call and deployment
+state corollaries rule it out under their well-formed state hypotheses. Dynamic
+ABI decoder failures are not exempt.
 Callee/reentrant execution is absorbed into an outcome, not certified as
 source-equivalent. Full nested-run decomposition and repeated-entry/transaction
 corollaries remain Milestone 7.
@@ -303,7 +303,7 @@ planned. Source owners below are durable; private PLAN line numbers are not.
 | D6 | SOME send requests a real call outcome, not pure transfer | Source Send uses empty-data nonstatic request and requires success; NONE retains concrete transfer behavior. | 6 |
 | D7 | Restrict ExtCall syntax, not reorder source evaluation | `supportedExprs`/`supportedExprForms`: effect-free operands, word arguments/returns, exact interface/count, distinct `value=`/`gas=`/`default_return_value=` operands evaluated in source order (#553); SOME code check follows return-kind policy and `skip_contract_check`. `NoneT` ExtCall was **not admitted** at Milestone 1; the current gate admits a `NoneT` external return (`supported_external_return_type`). | 6 |
 | D8 | Runtime failure requires Abort/failing frame, not anything/fuel0 | `external_call_result_rel` rejects OK/IntRet and other Errors, relates a failed external call's `RevertData` to a Revert abort, and requires terminating run; `call_result_rel_at` failure clause. TypeError is excluded by typing, not treated as source success. | 6 |
-| D9 | Exact unspecified-behaviour exemptions, not weakened source checks | `unspecified_behaviour_exempt`, `occurs_abi_decode_target` inspect function bodies for dynamic decoding. Exact decode message also admits matching return rejection in such a program; not arbitrary ReturnReject. | 6 |
+| D9 | Exact unspecified-behaviour exemption, not weakened source checks | `unspecified_behaviour_exempt` names only `RuntimeError "transfer_value recipient overflow"`; call and deployment balance corollaries rule it out under their well-formed state hypotheses. Dynamic decoder failures are not exempt. | 6 |
 | D10 | Typing separate from plain-EVAL syntax | `source_typing_ok` contains checker acceptance, typed constant cells, machine and tx typing; `supported_program` depends on tops alone and is no longer a premise: the tops derive it from the checker acceptance and `layouts_agree` (`check_contract_supported_program`), which `source_deployment_rel` supplies for calls and `deploy_state_rel` for deployment; for the deploy pair `deploy_typing_ok` supplies `check_contract T` and `check_contract_deploy_implies_runtime` derives runtime acceptance (`deploy_typing_ok_supported_programs`). Partial readiness producers are not the whole premise. | 7 |
 | D11 | Whitelist, not open-ended exclusions | `supportedProgram` combines headers/names/body predicates; 101 named fixture membership proofs. The whitelist has since been widened to what `check_contract` accepts and is derived, not assumed, by the tops. The gas companions use the proved entry creation-size bounds. No universal compile-success witness. | 6 / 7 |
 | D12 | Ten source/type corrections, not remove fixtures | Invalid EC RuntimeError; Pop length-only storage update; empty codehash zero; decimal bound-before-truncate; bytes->address/decimal/narrow-zero-tail conversions; UnsafeDiv0 zero; minimum decimal Mul; abi_encode size rule. Actual owners `vyperContext`, `vyperState`, `vyperValueOperation`, `vyperTypeSystem`; historical source checkpoint retained. | 6 comparison proof |
@@ -354,8 +354,8 @@ the source run is the same for every tail and source-exempt (it gives a focus
 witness then), the raw run must reach an exit related to the source result at
 every valid storage horizon; runtime
 failure is Abort, not Error/fuel0. Success relates canonical return bytes and
-whole effects/requests. UNREACHABLE permits ExHalt; dynamic strict decoding
-has the precise D9 exemption. Proving this
+whole effects/requests. UNREACHABLE permits ExHalt; the recipient-overflow
+source exemption is ruled out by the balance corollary. Proving this
 contract belongs to Milestone 6.
 
 ### 1.4 Pipeline statement
@@ -467,7 +467,7 @@ of the same kind:
 - supported calls to other contracts, creation included (CREATE/CREATE2 are
   inside `unit_shape_ok`; the created callee's correctness stays deferred);
 - trace-aware GAS and assembly steps;
-- ABI values of variable size, respecting the exact decoding exemption.
+- ABI values of variable size, with ordinary result obligations for decoder failures.
 
 Deployment stays out of this step.
 
@@ -626,7 +626,7 @@ was a `cheat`, and it would not have established S3's raw-unit contract.
 | Handoff | Input/contract at Milestone 1 | Proof planned at Milestone 1 |
 |---|---|---|
 | H5-S2 | Lowering success + `check_contract` + `raw_shape_free_program` -> `o1_source_unit_ok` | Inspect raw emission: only ALLOCA among allocation/FMP forms, no ASSERT_UNREACHABLE; RET only internal, STOP/RETURN only entry; fresh legal labels, read0 empty operands, first block no predecessor, restricted RETPC uses. This supplies S4/S6 raw shape, not a compile-success theorem. |
-| H5-S3 | S1 boundary + `~source_exempt` -> `raw_unit_memory_ok` | Alloca-aware buffer/layout induction, checked `unit_alloca_budget`, memory accesses below frontier and frontier <2**256. Fresh empty memory alone proves nothing about later accesses. Exemption exclusion is essential: dynamic decoding may read unchecked wrapping offsets. |
+| H5-S3 | S1 boundary + `~source_exempt` -> `raw_unit_memory_ok` | Alloca-aware buffer/layout induction, checked `unit_alloca_budget`, memory accesses below frontier and frontier <2**256. Fresh empty memory alone proves nothing about later accesses. The source result relation now covers dynamic decoding, whose pointer proof still tracks wrapping offsets. |
 | H5-S5 | Actual O1/output plan, S2/raw entry/S3 and matching initial FMP -> exists `Inv` with output memory + reachability | Transport frontier/allocation safety through dispatched passes, including early SimplifyCFG/DretDesugar/MakeSSA/LowerDload and ConcretizeMemLoc; prove generated spill-region non-overlap, safe reads/writes and successful-step spill preservation, including aggregate INVOKE returns. Deliver **one shared invariant witness** to L5/S7. |
 
 `raw_unit_memory_ok ctx vs` means **exists `Inv`** with
@@ -700,13 +700,13 @@ unit simulation by themselves.
 | Not/Neg/Abs | Simple builtin/literal op paths | Not bool/uint256, Neg signed/decimal, Abs int256; excluded narrow/unsigned cases stay excluded. |
 | AddMod/MulMod/PowMod256/AsWeiValue | Math/misc builtins | Same modular/scaled results and matched checks for admitted forms. |
 | IfExp/literals, Empty/MaxValue/MinValue/Epsilon | Branch/literals/`typed_val_to_w256` | Word Empty only; correct typed byte literal encoding, fixed evaluation order. |
-| `evaluate_convert` | `compile_type_convert` | Conversions admitted by `valid_conversion`; compare integer/decimal clamps and scaling, bound-before-truncate, bytes->address/decimal/narrow-zero-tail D12d–g, and bytestring length/shift paths. Empty-byte signed integer/decimal conversion has the exact D9 exemption. |
+| `evaluate_convert` | `compile_type_convert` | Conversions admitted by `valid_conversion`; compare integer/decimal clamps and scaling, bound-before-truncate, bytes->address/decimal/narrow-zero-tail D12d–g, and bytestring length/shift paths. Empty-byte signed integer/decimal conversion follows the ordinary result relation. |
 | Env, account, BlockHash/BlobHash | `compile_env_var`, BALANCE/EXTCODEHASH/size, builtin block paths | Full env/typed-account ties, corrected empty-account codehash; real nonzero block/window bounds D22. |
 | ECRecover/SHA256/ECAdd/ECMul | Value-zero STATICCALL1/2/6/7 + ASSERT/buffer read | H21-pure bridge; success from the call's oracle outcome on both sides; invalid EC now source RuntimeError D12a, invalid recovery succeeds empty. Not pure: they consume an outcome. |
 | Tuple/struct/aggregate args/tuple locals | Aggregate expression and buffer paths | Same evaluation order and value-memory layout; fixed-memory/name/internal-call restrictions matter. |
 | `evaluate_abi_encode_bytes` | Builtin encode/ABI buffer path | Supported single-argument/flag form and corrected typed size rule D12j; same bytes incl dynamic multiblock encoding. |
 | Static `evaluate_abi_decode` | `lower_abi_decode`/clamps | Prove exactly same acceptance/value for static targets; conversion errors **not exempt**. |
-| Dynamic ABI tuple String/Bytes | Dynamic decoder offsets/end/padding | For source-accepted bytes same value. Source rejects nonzero padding that lowering accepts; raw Venom wraparound reads can survive where EVM starves. Test overlapping/out-of-order/head/trailing/short/overbound tails; exact D9 exemption, no blanket decoder correctness. |
+| Dynamic ABI tuple String/Bytes | Dynamic decoder offsets/end/padding | For source-accepted bytes same value. Source rejects nonzero padding that lowering accepts; raw Venom wraparound reads can survive where EVM starves. Test overlapping/out-of-order/head/trailing/short/overbound tails; decoder failures have ordinary result obligations, with no blanket decoder correctness claim. |
 | Storage scalar read/write | SLOAD/SSTORE/TLOAD/TSTORE | Full-word types only; actual initial/outcome storage validity. Narrow stored masking differs outside subset. |
 | Fixed/dynamic arrays, Append/Pop | `compile_array_subscript`, dynamic append/pop | Signed/unsigned bounds, effect-free index/RHS; storage length invariant and corrected length-only Pop D12b. |
 | Hashmap / `hashmap_slot` | `compile_mapping_subscript`/SHA3 | Admitted integer/bool/address key forms; no byte/nested/transient hashmap write claim; carry layout/hash separation. |
@@ -728,7 +728,7 @@ unit simulation by themselves.
 | Storage decode / block hash / nonreentrant lock | Actual storage/outcome guards, `tx_env_ok`; nonreentrant excluded. |
 | Arithmetic/conversion/bounds/runtime checks | Each H6-compare path must end in Abort on non-exempt RuntimeError, never Error/fuel exhaustion/OK/IntRet. |
 | Oracle exhausted/failed/ill-typed successful accounts | Failed call -> ASSERT/REVERT; ill-typed accounts excluded by `call_outcomes_ok`, whose storage guard remains separate. |
-| Exact `"abi_decode invalid"` | Dynamic target occurrence in **function bodies** gives D9 program-wide exemption; includes identical return-decode rejection. Static-only decoding, arbitrary ReturnReject and `"abi_decode conversion"` do not. Even exemption needs an actual EVM run; S3 safety is not claimed there. |
+| Exact `"transfer_value recipient overflow"` | The only source exemption. Call and deployment balance corollaries rule it out under their well-formed state hypotheses, so dynamic decoder failures carry the ordinary result obligations. |
 
 Comparison work of the 2026-10-01 plan (including finite8-bit arithmetic and
 boundary samples) is not a kernel stage proof. Future owners must recheck
@@ -790,7 +790,8 @@ checkpoint receipts are historical evidence, not a fresh comparison rerun here.
    satisfying `immutables_section_rel`. The result relation compares accounts
    and transient storage at the run's storage horizon, ordered logs and call
    requests. The theorem includes a resource-exhaustion alternative. The result
-   relation handles failure and source exemptions.
+   relation handles failure. Recipient-overflow is classified by the separate
+   source-exemption predicate, and the well-formed deployment state rules it out.
    Nested creation frames and general runtime immutables remain generalizations.
 
 ## Milestone 7: Full theorem
