@@ -114,7 +114,7 @@ Resume compile_for_frag_prefix[nested]:
                            vyperTypeContractTheory.loop_iterator_place_def,
                            targetPlaceSimTheory.target_root_def]) >>
   drule_all_then (DISJ_CASES_THEN2 assume_tac assume_tac)
-    bodyFullForIteratorRootTheory.supported_nested_iterator_root_kind
+    bodyFullForIteratorRootTheory.singleton_supported_nested_iterator_root_kind
   >- suspend "immutable"
   >> suspend "storage_subplace"
 QED

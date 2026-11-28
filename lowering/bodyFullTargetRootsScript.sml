@@ -19,6 +19,7 @@ Ancestors
   bodyAugPlaceTarget constSubstCorrect targetPlaceSimCasesBase
   vyperTypeConstantCells bodyInvSplit finite_map option alist
   immutableDeployAssignFacts vyperFixedShapePath allocLimits stmtSimAssignAttr
+  vyperTypeContractContext[qualified] supportedNameRoot[qualified]
 
 (* The ghost invariant does not read the gas observations. *)
 Theorem ghost_inv_at_gas_obs[local]:
@@ -173,58 +174,56 @@ Proof
   simp[base_target_root_def, target_root_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem typed_immutable_target_root:
+  (contract_inv mods exps ctx cenv cx /\
+     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
+  immutable_root cx bt /\ IS_SOME (type_place_target env bt) ==>
+  ?src id root_ty. target_root bt = TopLevelNameTarget (src,id) /\
+    FLOOKUP env.bare_globals (src,id) = SOME root_ty /\
+    FLOOKUP env.bare_global_assignable (src,id) = SOME root_ty /\
+    cx.in_deploy /\ cenv.ce_is_ctor /\ ~cx_const_name_mods mods (src,id)
 Proof
-  strip_tac >> drule type_place_target_root >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  drule type_place_target_root >>
   simp[base_target_root_eq_target_root] >> strip_tac >>
   qpat_x_assum `immutable_root _ _`
-    (strip_assume_tac o REWRITE_RULE[immutable_root_def]) >>
-  drule_then (assume_tac o Q.SPEC `src` o
-              MATCH_MP contract_inv_module_codes) body_inv_contract >>
-  Cases_on `src` >> gvs[ALOOKUP_def] >>
-  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
-  `?ty. FLOOKUP env.bare_global_assignable (NONE,id) = SOME ty` by
-    (Cases_on `type_place_target env (TopLevelNameTarget (NONE,id))` >>
+    (strip_assume_tac o REWRITE_RULE [immutable_root_def]) >>
+  `env_context_consistent env cx` by
+    fs[expr_sim_inv_mods_def, env_consistent_def] >>
+  `?ty. FLOOKUP env.bare_global_assignable (src,id) = SOME ty` by
+    (Cases_on `type_place_target env (TopLevelNameTarget (src,id))` >>
      gvs[] >> rename1 `type_place_target _ _ = SOME vt` >>
      Cases_on `vt` >> gvs[type_place_target_TopLevelNameTarget] >>
-     fs[env_consistent_def, env_context_consistent_def]
+     fs[env_context_consistent_def]
      >- (qpat_assum `!src id ty. _ /\ _ ==> ?ts tr id_str.
              _ /\ find_var_decl_by_name _ _ = SOME (StorageVarDecl _ _,_) /\ _`
            (drule_all_then strip_assume_tac) >> gvs[]) >>
      qpat_assum `!src id kt vt. _ ==> ?ts tr id_str.
           _ /\ find_var_decl_by_name _ _ = SOME (HashMapVarDecl _ _ _,_) /\ _`
        (drule_all_then strip_assume_tac) >> gvs[]) >>
-  `FLOOKUP env.bare_globals (NONE,id) = SOME ty` by
-    (fs[env_consistent_def, env_context_consistent_def] >>
+  `FLOOKUP env.bare_globals (src,id) = SOME ty /\
+   is_immutable_decl id ts` by
+    (fs[env_context_consistent_def] >>
      qpat_assum `!src id ty. FLOOKUP env.bare_global_assignable _ = SOME _ ==> _`
-       (drule_all_then strip_assume_tac) >> simp[]) >>
+       (drule_then strip_assume_tac) >> gvs[]) >>
   `cx.in_deploy` by
-    (Cases_on `cx.in_deploy` >> gs[env_consistent_def, env_context_consistent_def,
-                                  bare_global_assignable_complete_def]) >>
-  `cenv.ce_is_ctor` by metis_tac[body_inv_contract, contract_inv_constructor] >>
-  qexists_tac `ty` >> simp[] >> strip_tac >>
-  drule_all_then strip_assume_tac body_inv_const_name_decl >>
-  drule_then strip_assume_tac supported_variable_decl_mem >>
-  drule_all_then strip_assume_tac env_consistent_bare_global_find_NONE >>
+    (Cases_on `cx.in_deploy` >>
+     gs[env_context_consistent_def, bare_global_assignable_complete_def]) >>
+  `cenv.ce_is_ctor` by metis_tac[contract_inv_constructor] >>
+  qexistsl_tac [`src`, `id`, `ty`] >> simp[] >>
+  drule_then (assume_tac o Q.SPEC `src`) contract_inv_module_codes >>
+  `ALL_DISTINCT (FLAT (MAP (toplevel_vtype_keys_toplevel src) ts))` by
+    (fs[contract_inv_def] >> metis_tac[]) >>
+  `?vis ity slot. MEM (VariableDecl vis Immutable id ity slot) ts` by
+    metis_tac[vyperTypeContractContextTheory.is_immutable_decl_MEM_Immutable_exists] >>
+  fs[cx_const_name_mods_def] >>
+  strip_tac >>
+  drule_then strip_assume_tac supportedNameRootTheory.module_consts_env_names_MEM >>
   gvs[] >>
-  `?vis ty slot. MEM (VariableDecl vis Immutable id ty slot) tops` by
-    (irule bare_global_clause_immutable >> simp[] >>
-     qexistsl [`cx`,`env`,`es`] >> simp[]) >>
-  drule body_inv_modules_aligned >>
-  metis_tac[module_immutable_constant_names_distinct]
-QED
-*)
-Theorem typed_immutable_target_root:
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
-  immutable_root cx bt /\ IS_SOME (type_place_target env bt) ==>
-  ?id root_ty. target_root bt = TopLevelNameTarget (NONE,id) /\
-    FLOOKUP env.bare_globals (NONE,id) = SOME root_ty /\
-    FLOOKUP env.bare_global_assignable (NONE,id) = SOME root_ty /\
-    cx.in_deploy /\ cenv.ce_is_ctor /\ ~cx_const_name cx (NONE,id)
-Proof
-  cheat
+  qpat_assum `ALL_DISTINCT _` mp_tac >>
+  qpat_assum `MEM (VariableDecl _ Immutable id _ _) ts` mp_tac >>
+  qpat_assum `MEM (VariableDecl _ (Constant _) id _ _) ts` mp_tac >>
+  POP_ASSUM_LIST kall_tac >> metis_tac[module_immutable_constant_names_distinct]
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
