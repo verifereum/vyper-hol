@@ -132,29 +132,6 @@ Proof
   drule_all target_subscript_index_word >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  drule_all array_tail_packet_source_index >> strip_tac >>
-  drule_all array_tail_packet_base_at_index >> strip_tac >>
-  gvs[] >>
-  `target_root bt = NameTarget id` by
-    (fs[array_tail_packet_def] >>
-     metis_tac[targetPlaceSimTheory.target_base_memory_root_ptr]) >>
-  `?entry live. lookup_scopes id mid2.scopes = SOME entry /\
-    evaluate_subscripts entry.type entry.value path = INL live` by
-    (fs[array_tail_packet_def] >>
-     drule_all target_array_source_cases >> simp[]) >>
-  `?etv. evaluate_type (get_tenv cx) et = SOME etv /\
-    evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd)` by
-    (fs[place_ptr_rel_def, evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
-  drule_all place_ptr_rel_memory_current >> strip_tac >>
-  Cases_on `live` >> gvs[value_has_type_def] >>
-  rename1 `value_has_type (ArrayTV etv bd) (ArrayV av)` >>
-  drule_all target_memory_array_length_bound >> simp[wordsTheory.dimword_def]
-QED
-*)
 Theorem array_tail_packet_memory_source[local]:
   array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
@@ -170,7 +147,26 @@ Theorem array_tail_packet_memory_source[local]:
     well_formed_type_value (ArrayTV etv bd) /\
     array_length (ArrayTV etv bd) av < dimword (:256)
 Proof
-  cheat
+  strip_tac >>
+  drule_all array_tail_packet_source_index >> strip_tac >>
+  drule_all array_tail_packet_base_at_index >> strip_tac >>
+  gvs[] >>
+  `target_root bt = NameTarget id` by
+    (fs[array_tail_packet_def] >>
+     metis_tac[targetPlaceSimTheory.target_base_memory_root_ptr]) >>
+  `?entry live. lookup_scopes id mid2.scopes = SOME entry /\
+    evaluate_subscripts entry.type entry.value path = INL live` by
+    (fs[array_tail_packet_def] >>
+     `target_pre_mods mods cenv cx env (SubscriptTarget bt e) (es with gas_obs := base_gas)` by
+       fs[targetPlaceSimTheory.target_pre_mods_def] >>
+     drule_all targetLocalLiveTheory.local_subscript_index_live_mods >> simp[]) >>
+  `?etv. evaluate_type (get_tenv cx) et = SOME etv /\
+    evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd)` by
+    (fs[place_ptr_rel_def, evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
+  drule_all place_ptr_rel_memory_current >> strip_tac >>
+  Cases_on `live` >> gvs[value_has_type_def] >>
+  rename1 `value_has_type (ArrayTV etv bd) (ArrayV av)` >>
+  drule_all target_memory_array_length_bound >> simp[wordsTheory.dimword_def]
 QED
 
 Theorem array_tail_packet_storage_source[local]:

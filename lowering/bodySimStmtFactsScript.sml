@@ -34,7 +34,7 @@ Proof
   metis_tac[exprSimSourceTheory.expr_body_pre_eval_result]
 QED
 
-Theorem expr_sim_inv_mods_eval_result[local]:
+Theorem expr_sim_inv_mods_eval_result:
   expr_sim_inv_mods mods cenv cx env es /\ well_typed_expr env e /\
   call_evaluation_safe cx (int_calls_expr e) /\
   eval_expr cx e es = (res,es') ==>

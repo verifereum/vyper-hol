@@ -36,8 +36,12 @@ Proof
   `body_exprs_prefix_ok cx xs` by (irule prefix_list_from_members >> simp[]) >>
   `body_exprs_prefix_ok cx (TL xs)` by
     (irule prefix_list_from_members >> Cases_on `xs` >> fs[] >> metis_tac[]) >>
+  `body_exprs_full_ok cx xs /\ body_exprs_full_ok cx (TL xs)` by
+    (conj_tac >>
+     qpat_assum `!ys. EVERY _ _ ==> body_exprs_full_ok cx ys` irule >>
+     Cases_on `xs` >> fs[int_calls_expr_def, EVERY_APPEND]) >>
   irule body_builtin_ordinary_case_prefix >>
-  simp[] >> rpt conj_tac >> rpt strip_tac >> TRY (metis_tac[] >> NO_TAC) >>
+  simp[] >> rpt conj_tac >> rpt strip_tac >>
   TRY (qpat_assum `!x. EVERY _ _ ==> body_expr_full_ok cx x` irule) >>
   TRY (qpat_assum `!ys. EVERY _ _ ==> body_exprs_full_ok cx ys` irule) >>
   TRY (irule prefix_list_from_members >> simp[] >> rpt strip_tac >>

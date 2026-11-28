@@ -768,54 +768,6 @@ Proof
   runtimeBodyEndpointPrepareLib.lock_inv_tac ()
 QED
 
-Theorem runtime_bound_lock_outside_domain[local]:
-  cx = initial_evaluation_context am.sources am.layouts tx NONE /\
-  source_deployment_rel tops am tx /\
-  lookup_function NONE tx.function_name External tops =
-    SOME (mut,nr,args,dflts,ret,fbody) /\
-  (!gx. external_entry_bound tops am tx os (prefix ++ gx) mut args dflts
-    (es0 with gas_obs := gx)) /\
-  lock_if_nr cx nr (is_view_mut mut) es0 = (INL (),es_lock) /\
-  (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot) /\
-  ~storage_trace_domain cx (initial_state am []) es_lock.storage_trace ==>
-  !tail. ~call_storage_ok am tx os (prefix ++ tail)
-Proof
-  strip_tac >> gen_tac >> strip_tac >>
-  drule source_storage_guards_domain >>
-  qpat_x_assum `cx = _` (fn eq => PURE_REWRITE_TAC [GSYM eq] >>
-    SUBST_ALL_TAC eq) >>
-  Cases_on `eval_stmts
-    (initial_evaluation_context am.sources am.layouts tx NONE)
-    fbody (es_lock with gas_obs := tail)` >>
-  rename1 `_ = (res,ee)` >>
-  `?eu.
-     unlock_if_nr (initial_evaluation_context am.sources am.layouts tx NONE)
-       nr (is_view_mut mut) ee = (INL (),eu) /\
-     ?extra. eu.storage_trace = ee.storage_trace ++ extra` by
-    (reverse (Cases_on `nr`) >-
-       (qexists_tac `ee` >> simp[unlock_if_nr_def, return_def] >>
-        qexists_tac `[]` >> simp[]) >>
-     mp_tac (Q.INST [`nr` |-> `T`, `iv` |-> `is_view_mut mut`,
-       `cx` |-> `initial_evaluation_context am.sources am.layouts tx NONE`,
-       `es` |-> `ee`, `key` |-> `global_nonreentrant_slot`]
-       (SPEC_ALL unlock_if_nr_success_trace)) >>
-     impl_tac >- fs[] >> strip_tac >> qexists_tac `se` >> simp[] >>
-     qexists_tac `if is_view_mut mut then []
-       else [StorageLock global_nonreentrant_slot]` >> simp[]) >>
-  pop_assum strip_assume_tac >>
-  qpat_assum `!gx. external_entry_bound _ _ _ _ _ _ _ _ _`
-    (qspec_then `tail` assume_tac) >>
-  drule_all selected_call_trace_result_nr >> strip_tac >>
-  `?extra. ee.storage_trace = es_lock.storage_trace ++ extra` by
-    (qpat_assum `eval_stmts _ fbody _ = (res,ee)`
-       (mp_then (Pat `f st = _`) mp_tac storage_trace_frame_prefix) >>
-     simp[evaluate_storage_trace_frame]) >>
-  qpat_assum `call_external_trace _ _ _ _ = _`
-    (fn th => PURE_REWRITE_TAC [GSYM call_external_trace_observations,th,pairTheory.SND]) >>
-  Cases_on `res = INL () \/ (?v. res = INR (ReturnException v))` >>
-  fs[] >> metis_tac[storage_trace_domain_prefix]
-QED
-
 val runtime_locked_eval_tac =
   `eval_stmts cx fbody (es_lock with gas_obs := gx) =
      (res, ee with gas_obs := [])` by

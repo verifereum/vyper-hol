@@ -606,7 +606,9 @@ Proof
          >- calldata_emitter_no_dalloca `abi_decode_array_header _ _ _ _ = _`
               abi_decode_array_header_def
          >> drule calldata_index_init_instructions >> simp[mk_inst_def]) >>
-      calldata_reached_no_wrap) >>
+      qpat_x_assum `EVERY (\i. i.inst_opcode <> DALLOCA) _` mp_tac >>
+      qpat_x_assum `emitted_insts st loop_st = _` mp_tac >>
+      POP_ASSUM_LIST (K all_tac) >> calldata_reached_no_wrap) >>
   reverse conj_tac
   >- suspend "execution" >>
   suspend "safety"
