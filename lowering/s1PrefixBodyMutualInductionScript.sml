@@ -453,7 +453,7 @@ Resume body_sim_prefix_mutual_ranked[intcall]:
        `cx_tops cx = tops` by fs[cx_tops_def, get_module_code_def, ALOOKUP_def] >>
        asm_rewrite_tac[] >> rpt conj_tac >>
        TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-       TRY (drule_all_then ACCEPT_TAC callable_body_loop_calls_ok >> NO_TAC) >>
+       TRY (drule_all_then ACCEPT_TAC callable_body_loop_calls_ok_singleton >> NO_TAC) >>
        Cases_on `src_id_opt` >>
        gvs[get_module_code_def, ALOOKUP_def, optionTheory.IS_SOME_EXISTS] >>
        drule_all_then strip_assume_tac callable_compiled_calls_live >>

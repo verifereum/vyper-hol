@@ -1,11 +1,29 @@
-(* Reachability of calls in checked single-file bodies. *)
+(* Reachability of calls in checked bodies. *)
 Theory bodyCallLiveness
 Ancestors
   linkedBodyLoopCalls constSubstMods vyperTypeContract
   vyperTypeCallGraph vyperTypeCallGraphSoundness vyperTypeContractSoundness
   vyperTypeContractGetter vyperTypeContractStaticMaps vyperInterpreter
   vyperTypeContractModes vyperTypeCallStackSoundness vyperReadOnlyEval
-  bodyFullPreds constSubstCorrect list option
+  bodyFullPreds constSubstCorrect alist list option rich_list
+
+Theorem linked_decl_calls_live[local]:
+  MEM (src,tops) mods /\
+  MEM (FunctionDecl vis mut nr raw name args ds ret ss) tops /\
+  MEM (src,name) (linked_live_functions mods exps) ==>
+  EVERY (\k. MEM k (linked_live_functions mods exps))
+    (function_int_calls ds ss)
+Proof
+  simp[EVERY_MEM] >> rpt strip_tac >>
+  `call_edge_rel (contract_call_edges mods) (src,name) k` by
+    (rewrite_tac[call_edge_rel_def] >>
+     drule_all_then ACCEPT_TAC contract_call_edges_function) >>
+  qpat_x_assum `MEM (src,name) (linked_live_functions _ _)` mp_tac >>
+  PURE_REWRITE_TAC[linked_live_functions_def, linked_live_functions_from_def,
+                   LET_THM] >> BETA_TAC >> strip_tac >>
+  irule (CONJUNCT2 call_closure_from_roots) >>
+  qexists_tac `(src,name)` >> asm_rewrite_tac[]
+QED
 
 Theorem singleton_decl_calls_live:
   MEM (FunctionDecl vis mut nr raw name args ds ret ss) tops /\
@@ -16,17 +34,9 @@ Theorem singleton_decl_calls_live:
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   qsuff_tac `MEM (NONE,name) (linked_live_functions [(NONE,tops)] [])`
-  >- (simp[EVERY_MEM] >> rpt strip_tac >>
-      `call_edge_rel (contract_call_edges [(NONE:num option,tops)]) (NONE,name) k` by
-        (rewrite_tac[call_edge_rel_def] >>
-         irule contract_call_edges_function >>
-         qexistsl [`args`, `ss`, `ds`, `mut`, `nr`, `raw`, `ret`, `tops`, `vis`] >>
-         simp[]) >>
-      qpat_x_assum `MEM (NONE,name) (linked_live_functions _ _)` mp_tac >>
-      PURE_REWRITE_TAC [linked_live_functions_def, linked_live_functions_from_def,
-                        LET_THM] >> BETA_TAC >> strip_tac >>
-      irule (CONJUNCT2 call_closure_from_roots) >>
-      qexists_tac `(NONE:num option,name)` >> asm_rewrite_tac[]) >>
+  >- (strip_tac >> irule linked_decl_calls_live >>
+      qexistsl_tac [`args`,`mut`,`name`,`nr`,`raw`,`ret`,`NONE`,`tops`,`vis`] >>
+      simp[]) >>
   qpat_x_assum `_ \/ _` strip_assume_tac >> gvs[] >>
   PURE_REWRITE_TAC [linked_live_functions_def, linked_live_functions_from_def,
                     LET_THM] >> BETA_TAC >>
@@ -84,6 +94,37 @@ Proof
   simp[consts_env_mods_singleton, subst_consts_mods_singleton]
 QED
 
+Theorem callable_compiled_calls_live_mods:
+  check_contract mode layouts addr mods = SOME art /\
+  ALOOKUP mods src = SOME tops /\
+  lookup_callable_function in_deploy name tops = SOME (mut,nr,args,ds,ret,ss) /\
+  MEM (src,name) (linked_live_functions mods exps) ==>
+  EVERY (\k. MEM k (linked_live_functions mods exps))
+    (int_calls_stmts (subst_consts_stmts_mods (consts_env_mods mods) ss)) /\
+  !n. EVERY (\k. MEM k (linked_live_functions mods exps))
+    (int_calls_exprs (DROP n (subst_consts_exprs_mods (consts_env_mods mods) ds)))
+Proof
+  strip_tac >>
+  `EVERY (\k. MEM k (linked_live_functions mods exps))
+    (function_int_calls ds ss)` by
+    (drule lookup_callable_function_SOME_decompose >> strip_tac
+     >- simp[function_int_calls_def, int_calls_stmt_def, int_calls_expr_def] >>
+     drule_then assume_tac ALOOKUP_MEM >>
+     drule_all_then ACCEPT_TAC linked_decl_calls_live) >>
+  drule_then strip_assume_tac checked_subst_consts_int_calls_mods >>
+  fs[function_int_calls_def, EVERY_APPEND] >>
+  `!es. int_calls_exprs (subst_consts_exprs_mods (consts_env_mods mods) es) =
+        int_calls_exprs es` by
+    (Induct >> simp[subst_consts_expr_mods_def, int_calls_expr_def]) >>
+  gen_tac >>
+  `EVERY (\k. MEM k (linked_live_functions mods exps))
+    (int_calls_exprs (subst_consts_exprs_mods (consts_env_mods mods) ds))` by simp[] >>
+  simp_tac bool_ss [int_calls_exprs_FLAT_MAP, EVERY_FLAT, EVERY_MAP] >>
+  pop_assum (fn live =>
+    MATCH_ACCEPT_TAC (MATCH_MP EVERY_DROP
+      (SIMP_RULE bool_ss [int_calls_exprs_FLAT_MAP, EVERY_FLAT, EVERY_MAP] live)))
+QED
+
 Theorem callable_compiled_calls_live:
   check_contract mode layouts addr [(NONE,tops)] = SOME art /\
   lookup_callable_function in_deploy name tops = SOME (mut,nr,args,ds,ret,ss) /\
@@ -94,15 +135,10 @@ Theorem callable_compiled_calls_live:
     (int_calls_exprs
       (DROP n (subst_consts_exprs (module_consts_env tops []) ds)))
 Proof
-  strip_tac >> drule_all singleton_callable_calls_live >>
-  simp[function_int_calls_def, EVERY_APPEND] >> strip_tac >>
-  drule_then strip_assume_tac checked_singleton_subst_int_calls >>
-  simp[int_calls_exprs_FLAT_MAP, EVERY_FLAT, EVERY_MAP,
-       subst_consts_exprs_map, GSYM MAP_DROP, combinTheory.o_DEF] >>
-  fs[int_calls_exprs_FLAT_MAP, EVERY_FLAT, EVERY_MAP] >>
-  gen_tac >> qspecl_then [`n`, `ds`] mp_tac TAKE_DROP >>
-  disch_then (fn th => qpat_x_assum `EVERY _ ds` (mp_tac o ONCE_REWRITE_RULE [GSYM th])) >>
-  simp[EVERY_APPEND]
+  strip_tac >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `src` |-> `NONE`, `exps` |-> `[]`]
+    callable_compiled_calls_live_mods) >>
+  asm_rewrite_tac[ALOOKUP_def, consts_env_mods_singleton, subst_consts_mods_singleton]
 QED
 
 Theorem body_const_cells_agree_runtime_check:
