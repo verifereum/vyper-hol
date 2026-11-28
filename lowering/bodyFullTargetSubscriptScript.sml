@@ -430,11 +430,13 @@ Resume target_subscript_sim_full[index_run]:
     (irule_at Any) >>
   conj_tac >- simp[] >>
   simp[Abbr `idxR`, Abbr `childR`] >> rpt strip_tac >>
-  Cases_on `res` >> fs[expr_exit_def] >>
+  Cases_on `res`
+  >- (qpat_assum `expr_exit (INL _) _` mp_tac >> simp[expr_exit_INL]) >>
   conj_tac
   >- (qpat_x_assum `expr_exit (INR _) _`
         (MATCH_ACCEPT_TAC o MATCH_MP expr_exit_INR_retype)) >>
-  fs[halt_exit_def]
+  qpat_assum `halt_exit _ _ _ (INR _) _` mp_tac >>
+  simp_tac bool_ss [halt_exit_def]
 QED
 *)
 

@@ -1011,7 +1011,10 @@ Proof
   disch_then (qspecl_then [`st0`,`ty`,`sa`,`sb`,`shadow_sa`,`shadow_sb`,
                            `r`,`s0`,`G0`,`tn0`] mp_tac) >>
   impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  disch_tac >> irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
+  disch_then (qspec_then `[(NONE,cx_tops cx)]`
+      (assume_tac o REWRITE_RULE [GSYM gasOutcomeFullTheory.gas_outcome_full_singleton_def]) o
+    MATCH_MP bodyFullTargetDefsTheory.gas_outcome_full_mods_change_modules) >>
+  irule gasOutcomeFullTheory.gas_outcome_full_post_mono >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ _ _` (irule_at Any) >> simp[] >>
   rpt gen_tac >> disch_then (qx_choose_then `p` (map_every assume_tac o CONJUNCTS)) >>
   qexists_tac `p` >> simp[] >>

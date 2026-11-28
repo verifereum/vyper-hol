@@ -10,11 +10,56 @@
 Theory bodyFullTargetDefs
 Ancestors
   gasOutcomeFullMods[qualified] gasOutcomeFullBindMods[qualified]
+  gasExemptCertMods[qualified] gasExemptOriginMods[qualified] sourceExemptMods[qualified]
   exprSimDefs unitMemInv contextRawReachable
   bodySimFull targetPlaceSimCases targetPlaceSimDefs
   gasShadow gasOutcomeFull loweringPosts exprLowering compileEnv
   ptrDiscipline venomState vyperInterpreter vyperState vyperAST
   allocLimits vyperFixedShapePath
+
+(* The current exemption classifier is independent of the module list. *)
+Theorem gas_exempt_cert_mods_change_modules[local]:
+  !memory mods p source start marks out endpoint.
+    gas_exempt_cert_mods memory mods p source start marks out endpoint ==>
+    !mods'. gas_exempt_cert_mods memory mods' p source start marks out endpoint
+Proof
+  ho_match_mp_tac gasExemptCertModsTheory.gas_exempt_cert_mods_ind >>
+  rpt conj_tac >> rpt strip_tac >|
+  [irule gasExemptCertModsTheory.gas_exempt_cert_mods_origin >>
+     qpat_assum `gas_exempt_origin_mods _ _ _ _ _ _ _ _` mp_tac >>
+     simp_tac bool_ss [gasExemptOriginModsTheory.gas_exempt_origin_mods_def,
+                       sourceExemptModsTheory.unspecified_behaviour_exempt_mods_def],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_unit],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_unit],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_bool],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_bool],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_result],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_result],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_value],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_value],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_place],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_place],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_values],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_values],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_bind_results],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_error_results],
+   irule gasExemptCertModsTheory.gas_exempt_cert_mods_cleanup >> qexists_tac `mid` >> simp[],
+   irule gasExemptCertModsTheory.gas_exempt_cert_mods_handler >> qexists_tac `mid` >> simp[],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_get_scopes],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_invoke],
+   metis_tac[gasExemptCertModsTheory.gas_exempt_cert_mods_unforce_result],
+   irule gasExemptCertModsTheory.gas_exempt_cert_mods_source_cong >>
+     qexists_tac `source` >> simp[]]
+QED
+
+Theorem gas_outcome_full_mods_change_modules:
+  gas_outcome_full_mods cfg mods cx st0 source start Q R ==>
+  !mods'. gas_outcome_full_mods cfg mods' cx st0 source start Q R
+Proof
+  PairCases_on `cfg` >> PairCases_on `start` >>
+  rewrite_tac[gasOutcomeFullModsTheory.gas_outcome_full_mods_def] >>
+  metis_tac[gas_exempt_cert_mods_change_modules]
+QED
 
 (* New definition: target_post H (with ghost_inv) says what the target's
    pointer holds, not where it may point, and a fresh pointer derived
