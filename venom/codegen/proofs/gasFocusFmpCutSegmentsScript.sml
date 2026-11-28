@@ -849,7 +849,8 @@ Proof
   `~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM; PHI; GAS] /\
    ~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM; SETFMP; PHI] /\
    ~is_alloca_op inst.inst_opcode` by
-    (fs[pre_fmp_opcode_def] >> Cases_on `inst.inst_opcode` >> gvs[is_alloca_op_def]) >>
+    (fs[pre_fmp_opcode_def] >> Cases_on `inst.inst_opcode` >>
+     simp[NoAsms, is_alloca_op_def] >> metis_tac[]) >>
   drule_all focus_fmp_selected_root_pin >> strip_tac >>
   `~MEM inst.inst_opcode [INVOKE; DALLOCA; RETPC_PARAM]` by fs[MEM] >>
   drule_all cut_ordinary_kept_fetch >> strip_tac >>

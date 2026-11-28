@@ -1344,7 +1344,8 @@ Proof
       TRY (qexists_tac `H` >> first_assum ACCEPT_TAC >> NO_TAC) >>
       TRY (gvs[contextTheory.mk_ptr_def, vyperASTTheory.expr_type_def,
                type_memory_bytes_def] >> NO_TAC) >>
-      TRY (fs[expr_body_pre_def, expr_sim_inv_def] >> NO_TAC) >>
+      qpat_assum `expr_sim_inv cenv cx env _`
+        (map_every assume_tac o CONJUNCTS o REWRITE_RULE [expr_sim_inv_def]) >>
       TRY (fs[expr_body_pre_def, alloc_limits_expr_def] >> NO_TAC) >>
       TRY (qpat_x_assum `compile_slice_calldata _ _ _ _ = _` mp_tac >>
            simp[contextTheory.mk_ptr_def, type_memory_bytes_def,

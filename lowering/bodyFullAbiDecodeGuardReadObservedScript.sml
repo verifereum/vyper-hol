@@ -36,7 +36,7 @@ Proof
        lookup_var_update_var, eval_operand_update_other,
        ASCIInumbersTheory.toString_inj, word_add_n2w] >>
   Cases_on `src` >> Cases_on `hi` >>
-  gvs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
+  fs[abiDecoderReentryTheory.abi_decoder_operand_live_def,
       abiDecoderReentryTheory.abi_decoder_older_vars_def, eval_operand_def,
       lookup_var_update_var, ASCIInumbersTheory.toString_inj,
       bool_to_word_def] >>

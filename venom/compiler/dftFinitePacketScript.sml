@@ -10772,13 +10772,13 @@ Resume dft_focus_packet_step_retained[call_row_replay]:
          (qspecl_then [`va`,`ve`] (drule_then strip_assume_tac)) >>
        qpat_assum `!a sf tf inc entry order res nrest. FLOOKUP acts a = _ ==> _`
          (qspec_then `va` (drule_then (assume_tac o cj 3))) >>
-       rename [`row.bb_instructions = prefix ++ vx`,
-               `lookup_block row.bb_label source.fn_blocks = SOME row`] >>
+       qpat_assum `eb.bb_instructions = eps ++ vx` assume_tac >>
+       qpat_assum `lookup_block eb.bb_label sf'.fn_blocks = SOME eb` assume_tac >>
        map_every (fn pat => qpat_assum pat mp_tac)
-         [`lookup_block row.bb_label source.fn_blocks = SOME row`,
-          `dft_fn_rel source _`, `row.bb_instructions = prefix ++ vx`] >>
+         [`lookup_block eb.bb_label sf'.fn_blocks = SOME eb`,
+          `dft_fn_rel sf' _`, `eb.bb_instructions = eps ++ vx`] >>
        POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-       `wf_function source /\ MEM row source.fn_blocks` by
+       `wf_function sf' /\ MEM eb sf'.fn_blocks` by
          metis_tac[dft_fn_rel_def,venomExecProofsTheory.lookup_block_MEM] >>
        drule_all dftWfTheory.wf_fn_block_inst_ids_distinct >> simp[ALL_DISTINCT_APPEND]) >>
     `!k. k < plen ==> (va,ve,(EL r vx).inst_id) <>
@@ -10817,6 +10817,12 @@ Resume dft_focus_packet_step_retained[call_row_replay]:
   `N <= fuel` by
     (qpat_assum `N <= N'` mp_tac >> qpat_assum `N' <= fuel` mp_tac >>
      POP_ASSUM_LIST (K all_tac) >> decide_tac) >>
+  `FLOOKUP blocks' (va,ve) =
+       SOME (vb,vt,vp,vx,vy,vr,vi,vh,SOME (vbe,vbh),vc,vf,vclosed,vrest) /\
+   FLOOKUP ms' (va,ve) = SOME vm /\
+   FLOOKUP es' (va,ve) = SOME ves /\
+   FLOOKUP ks' (va,ve) = SOME vk` by
+    (rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qpat_assum `!a e rb rt rp rx ry rr ri rh rbe rbh rc rf rclosed rest rm re rk owner target incoming ent ord res nrest.
     FLOOKUP blocks' (a,e) = _ /\ _ ==> _`
     (qspecl_then [`va`,`ve`] (drule_all_then (qspec_then `tail` ACCEPT_TAC)))

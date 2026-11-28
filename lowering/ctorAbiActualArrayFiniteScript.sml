@@ -54,8 +54,20 @@ Proof
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_compiled_def]) >>
   qpat_assum `abi_decoder_recursive_loop_data _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
     (MAP_EVERY assume_tac o CONJUNCTS o PURE_REWRITE_RULE [abi_decoder_recursive_loop_data_def]) >>
+  `eval_operand src initial = SOME (n2w sb)` by
+    (qpat_assum `abi_decoder_ranges _ _ _ _ _ _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [abi_decoder_ranges_def, Excl "enc_def"]) >>
+     simp[]) >>
   `eval_operand ip s = SOME (n2w slot) /\ eval_operand src s = SOME (n2w sb)` by
-    (fs[abi_decoder_ranges_def, Excl "enc_def"] >>
+    (map_every (fn pat => qpat_assum pat mp_tac)
+       [`ctor_actual_array_observation ctx func site ids D N d outsz next limit_st
+          tv vs slot_id slot initial j j s`,
+        `abi_decoder_operand_live next ip`,
+        `eval_operand ip initial = SOME (n2w slot)`,
+        `abi_decoder_operand_live next src`,
+        `eval_operand src initial = SOME (n2w sb)`] >>
+     POP_ASSUM_LIST (K all_tac) >> rpt disch_tac >>
+     conj_tac >- metis_tac[ctor_actual_array_observation_operand] >>
      metis_tac[ctor_actual_array_observation_operand]) >>
   `mem_bytes_at sb (LENGTH (enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)))
     (abi_decode_source DLOAD s) = enc (Array NONE (vyper_to_abi_type env ty)) (ListV avs)` by

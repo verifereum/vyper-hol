@@ -241,7 +241,9 @@ Proof
   `abi_encoder_window_input AbiPrimWord at av sb cap s.vs_memory` by
     (first_x_assum irule >> simp[mem_agree_outside_def]) >>
   `32 <= cap /\ mem_bytes_at sb 32 s.vs_memory = enc at av` by
-    fs[abi_encoder_window_word_iff] >>
+    (qpat_assum `abi_encoder_window_input AbiPrimWord at av sb cap s.vs_memory`
+       (mp_tac o REWRITE_RULE [abi_encoder_window_word_iff]) >>
+     simp[CONJ_ASSOC]) >>
   `LENGTH (enc at av) = 32` by metis_tac[LENGTH_mem_bytes_at_proof] >>
   `!i. sb <= i /\ i < sb + 32 ==> i NOTIN tn.t_mem` by
     (qspecl_then [`tn.t_mem`, `s.vs_memory`, `sb`, `32`, `enc at av`]

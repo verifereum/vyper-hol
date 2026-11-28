@@ -534,7 +534,7 @@ Proof
   simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
     eval_operand_def, emitHelperPropsTheory.lookup_var_update_var,
     wordsTheory.word_mul_n2w] >>
-  simp[Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
+  simp[NoAsms, Once run_inst_seq_def, Once step_inst_base_def, exec_pure2_def,
     emitHelperPropsTheory.lookup_var_update_var] >>
   simp[run_inst_seq_def, emitHelperPropsTheory.lookup_var_update_var,
     emitHelperPropsTheory.fresh_var_distinct] >>
