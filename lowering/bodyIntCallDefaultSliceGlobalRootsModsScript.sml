@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallDefaultSliceOccurrenceAccessMods
   bodyIntCallDefaultOwnedImmutableLocationMods
   bodyIntCallDefaultSelectedReadsMods
-  bodyFullPredsMods bodyInvSplit exprSimHypsDefs
+  bodyFullPreds bodyFullPredsMods bodyInvSplit exprSimHypsDefs
   constSubst constSubstMods constSubstCorrect
   vyperTypeContract vyperTypeContractStaticMaps vyperAST vyperContext
   finite_map alist list pair option rich_list
