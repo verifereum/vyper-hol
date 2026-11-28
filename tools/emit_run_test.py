@@ -32,13 +32,30 @@ def main():
         for line in (root / "tests/.emit/json-smoke.expected").read_text().splitlines():
             name, passed, encoded_input, encoded_result = line.split("\t")
             expected[name] = (passed == "true", encoded_input, encoded_result)
-        result = subprocess.run(
-            [str(binary), "--dump-input", "tests/fixtures/run_test_json/basic.json"],
-            cwd=root, capture_output=True, text=True,
-        )
-        actual = [json.loads(line) for line in result.stdout.splitlines()]
+        fixtures = [
+            "tests/fixtures/run_test_json/basic.json",
+            "tests/fixtures/run_test_json/checkpoint_source_state.json",
+            "tests/fixtures/run_test_json/checkpoint_message_calls.json",
+            "tests/fixtures/run_test_json/checkpoint_code_provenance.json",
+            "tests/fixtures/run_test_json/checkpoint_raw_init_transient.json",
+            "tests/fixtures/run_test_json/checkpoint_raw_underfunded.json",
+        ]
+        actual = []
+        for fixture_path in fixtures:
+            result = subprocess.run(
+                [str(binary), "--dump-input", fixture_path],
+                cwd=root, capture_output=True, text=True,
+            )
+            cases = [json.loads(line) for line in result.stdout.splitlines()]
+            wanted_exit = 0 if all(expected[case["name"]][0] for case in cases) else 1
+            if result.returncode != wanted_exit or result.stderr:
+                raise SystemExit(
+                    f"Unexpected replay result for {fixture_path}: "
+                    f"exit={result.returncode}\n{result.stderr}"
+                )
+            actual.extend(cases)
         if [case["name"] for case in actual] != list(expected):
-            raise SystemExit(f"Unexpected JSON cases: {actual!r}\n{result.stderr}")
+            raise SystemExit(f"Unexpected JSON cases: {actual!r}")
         for case in actual:
             passed, encoded_input, encoded_result = expected[case["name"]]
             for key, wanted in [
@@ -47,9 +64,6 @@ def main():
             ]:
                 if case.get(key) != wanted:
                     raise SystemExit(f"Compiled/HOL mismatch: {case['name']} {key}")
-        wanted_exit = 0 if all(case[0] for case in expected.values()) else 1
-        if result.returncode != wanted_exit:
-            raise SystemExit(f"Unexpected exit status: {result.returncode}\n{result.stderr}")
         print(f"JSON/HOL input and result parity: {len(expected)} deployment/call cases")
         fixture = json.loads(
             (root / "tests/fixtures/run_test_json/basic.json").read_text()

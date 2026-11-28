@@ -3,7 +3,7 @@ Ancestors
   vyperSmallStepCV
   contractABI vyperABIDecode vyperABI vyperInterpreter vyperSmallStep jsonAST
   jsonToVyper vfmContext vfmExecution vfmTransaction vfmDecreasesGas
-  vyperCalldata
+  vyperStateCheckpoint vyperCalldata
 Libs
   cv_transLib wordsLib
 
@@ -135,6 +135,7 @@ Datatype:
   | Call call_trace
   | SetBalance address num
   | ClearTransientStorage
+  | StateCheckpoint state_checkpoint
 End
 
 Definition compute_vyper_args_def:
@@ -639,40 +640,6 @@ End
 
 val () = cv_auto_trans raw_call_evm_def;
 
-Definition is_transfer_def:
-  is_transfer ct ⇔
-  NULL ct.callData ∧ ¬ct.static ∧
-  ct.expectedOutput = SOME []
-End
-
-val () = cv_auto_trans is_transfer_def;
-
-Definition do_transfer_def:
-  do_transfer ct am = let
-    acc = am.accounts;
-    saddr = ct.sender;
-    taddr = ct.target;
-    sender = lookup_account saddr acc;
-    target = lookup_account taddr acc;
-    value = ct.value;
-    sbal = sender.balance;
-    (* TODO(test-semantics): charge gas for value transfers. *)
-  in
-    if value ≤ sbal then
-      INL $
-      am with accounts updated_by
-        (update_account saddr
-          (sender with <| balance updated_by (flip $- value);
-                          nonce updated_by SUC |>) o
-          (update_account taddr
-            (target with balance updated_by ($+ value))))
-    else INR (Error $ RuntimeError "do_transfer")
-End
-
-val () = do_transfer_def
-  |> SRULE [combinTheory.o_DEF, combinTheory.C_DEF]
-  |> cv_auto_trans;
-
 
 Definition make_create_tx_def:
   make_create_tx sender nonce value data gas_limit gas_price : transaction =
@@ -717,15 +684,99 @@ End
 
 val () = cv_auto_trans make_create_block_def;
 
+(* Keep VFM's CREATE admission, intrinsic gas, nonce, fee accounting and
+   deletion processing, but retain the transient state that run_transaction's
+   result omits.  The pinned py-evm direct CREATE helper neither clears existing
+   transient slots nor discards successful initcode writes.  Seed both the live
+   and saved rollback states so nested calls and failed creates see the same
+   pre-deployment transient world. *)
+Definition raw_create_transaction_def:
+  raw_create_transaction chainId blockHashes blk accounts tStorage tx =
+    case run_create (Collect empty_domain) F chainId blockHashes blk accounts tx of
+    | NONE => NONE
+    | SOME (INL (tr, accounts)) => SOME (tr, accounts, tStorage)
+    | SOME (INR (acc, s, precomp)) =>
+        if IS_SOME precomp then NONE else
+        let s = s with <|
+          rollback updated_by (λrb. rb with tStorage := tStorage);
+          contexts updated_by
+            (MAP (λ(c, rb). (c, rb with tStorage := tStorage))) |> in
+        case vfmExecution$run s of
+        | SOME (INR result, s') =>
+            let (tr, accounts) = post_transaction_accounting blk tx result acc s' in
+            SOME (tr, accounts,
+                  if IS_NONE result then s'.rollback.tStorage else tStorage)
+        | _ => NONE
+End
+
+val () = cv_auto_trans raw_create_transaction_def;
+
+Theorem raw_create_initial_transient[local]:
+  initial_state dom static chainId blockHashes blk accounts tx = SOME s ⇒
+  s.rollback.tStorage = empty_transient_storage ∧
+  MAP (λ(c, rb). (c, rb with tStorage := empty_transient_storage)) s.contexts =
+    s.contexts
+Proof
+  simp[initial_state_def] >>
+  Cases_on `pre_transaction_updates accounts
+    (base_fee_per_blob_gas blk.excessBlobGas) tx` >> simp[] >>
+  pairarg_tac >> simp[] >> pairarg_tac >> simp[] >>
+  gvs[AllCaseEqs()] >> strip_tac >>
+  gvs[initial_rollback_def]
+QED
+
+Theorem raw_create_empty_transient_state[local]:
+  tx.to = NONE ∧
+  run_create dom static chainId blockHashes blk accounts tx =
+    SOME (INR (acc, s, precomp)) ⇒
+  precomp = NONE ∧
+  s with <|
+    rollback updated_by (λrb. rb with tStorage := empty_transient_storage);
+    contexts updated_by
+      (MAP (λ(c, rb). (c, rb with tStorage := empty_transient_storage))) |> = s
+Proof
+  strip_tac >> fs[run_create_def] >>
+  Cases_on `initial_state dom static chainId blockHashes blk accounts tx` >>
+  gvs[] >>
+  drule raw_create_initial_transient >> strip_tac >>
+  gvs[AllCaseEqs()] >>
+  simp[execution_state_component_equality, rollback_state_component_equality]
+QED
+
+(* With ordinary transaction-start transient storage, projecting away the
+   retained transient result is exactly VFM's transaction executor. *)
+Theorem raw_create_transaction_empty_transient:
+  tx.to = NONE ⇒
+  OPTION_MAP (λ(tr, accounts, tStorage). (tr, accounts))
+    (raw_create_transaction chainId blockHashes blk accounts
+                            empty_transient_storage tx) =
+  run_transaction (Collect empty_domain) F chainId blockHashes blk accounts tx
+Proof
+  strip_tac >>
+  Cases_on `run_create (Collect empty_domain) F chainId blockHashes blk accounts tx` >>
+  simp[raw_create_transaction_def, run_transaction_def] >>
+  rename1 `run_create _ _ _ _ _ _ _ = SOME creation` >>
+  Cases_on `creation` >> gvs[]
+  >- (rename1 `run_create _ _ _ _ _ _ _ = SOME (INL terminal)` >>
+      PairCases_on `terminal` >> simp[]) >>
+  rename1 `run_create _ _ _ _ _ _ _ = SOME (INR pending)` >>
+  PairCases_on `pending` >>
+  drule_all raw_create_empty_transient_state >> strip_tac >>
+  gvs[] >>
+  rpt (FIRST [pairarg_tac, CASE_TAC] >> gvs[])
+QED
+
 Definition run_raw_deployment_def:
   run_raw_deployment am (dt: raw_deployment_trace) =
     let sender = lookup_account dt.deployer am.accounts in
     let nonce = case dt.deployerNonce of NONE => sender.nonce | SOME n => n in
     let am = am with accounts updated_by
                update_account dt.deployer (sender with nonce := nonce) in
+    (* The direct fixture deployment helper executes with gas price zero and
+       charges no fees, independently of transaction metadata in the trace. *)
     let tx = make_create_tx dt.deployer nonce dt.value
                             (dt.initcode ++ dt.callData)
-                            dt.gasLimit dt.gasPrice in
+                            dt.gasLimit 0 in
     let expected = callee_from_tx_to dt.deployer nonce NONE in
     let blk = make_create_block dt in
     if nonce < sender.nonce then
@@ -734,11 +785,17 @@ Definition run_raw_deployment_def:
        address when the trace recorded one. *)
     else if dt.expectedAddress <> 0w /\ expected <> dt.expectedAddress then
       INR (Error $ RuntimeError "raw deployment address mismatch")
+    (* Direct fixture CREATE consumes its nonce even when the endowment is
+       unaffordable. No initcode executes and no transaction gas fee is charged. *)
+    else if sender.balance < dt.value then
+      if dt.expectedSuccess then
+        INR (Error $ RuntimeError "raw deployment success mismatch")
+      else INL (increment_account_nonce dt.deployer am)
     else
-      case vfmExecution$run_transaction (Collect empty_domain) F dt.chainId
-                                        dt.blockHashes blk am.accounts tx of
+      case raw_create_transaction dt.chainId dt.blockHashes blk
+                                  am.accounts am.tStorage tx of
       | NONE => INR (Error $ RuntimeError "raw deployment run failed")
-      | SOME (tr, accounts) =>
+      | SOME (tr, accounts, tStorage) =>
           let success = IS_NONE tr.result in
           if success <> dt.expectedSuccess then
             INR (Error $ RuntimeError "raw deployment success mismatch")
@@ -749,6 +806,7 @@ Definition run_raw_deployment_def:
                | SOME bc => code <> bc
             then INR (Error $ RuntimeError "raw deployment bytecode mismatch")
             else INL (am with <| accounts := accounts;
+                                 tStorage := tStorage;
                                  logs updated_by (λls. ls ++ tr.logs) |>)
           else INL (increment_account_nonce dt.deployer am)
 End
@@ -806,6 +864,10 @@ Definition run_trace_def:
       (snss, res)
    | RawDeployment dt =>
      (snss, run_raw_deployment am dt)
+   | StateCheckpoint cp => (snss,
+       case compare_state_checkpoint (trace_code_addresses snss) am cp of
+       | NONE => INL am
+       | SOME message => INR (Error (RuntimeError message)))
    | ClearTransientStorage => (snss,
        INL (am with tStorage := empty_transient_storage))
    | SetBalance addr bal => (snss,
@@ -815,20 +877,21 @@ Definition run_trace_def:
      )
    | Call ct => (snss,
      case ALOOKUP snss ct.target
-     of NONE => if is_transfer ct then do_transfer ct am
-                else
-                  (let rr = raw_call_evm am ct in
-                  let res = FST rr; am' = SND rr in
-                  case res of
-                  | INR ex =>
-                      if IS_NONE ct.expectedOutput ∧ expected_failure ex
-                      then INL am' else INR ex
-                  | INL out =>
-                      (case ct.expectedOutput of
-                       | NONE => INR (Error $ RuntimeError "error expected")
-                       | SOME expected =>
-                           if out = expected then INL am'
-                           else INR (Error $ RuntimeError "output mismatch")))
+     of NONE =>
+        (* Exported calls are message calls: preserve the sender nonce and
+           execute any raw-deployed fallback, even with empty calldata. *)
+        (let rr = raw_call_evm am ct in
+         let res = FST rr; am' = SND rr in
+         case res of
+         | INR ex =>
+             if IS_NONE ct.expectedOutput ∧ expected_failure ex
+             then INL am' else INR ex
+         | INL out =>
+             (case ct.expectedOutput of
+              | NONE => INR (Error $ RuntimeError "error expected")
+              | SOME expected =>
+                  if out = expected then INL am'
+                  else INR (Error $ RuntimeError "output mismatch")))
       | SOME (reads_gas, sns) => let
         cr = run_call reads_gas sns am ct;
         call_res = FST cr;

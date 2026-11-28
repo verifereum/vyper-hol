@@ -891,6 +891,28 @@
       }
     ]
   },
+  "test_checkpoint_balance": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {"trace_type": "set_balance", "address": "0x0000000000000000000000000000000000000001", "value": 7},
+      {"trace_type": "state_checkpoint", "boundary": "call", "call_index": 0,
+       "accounts": [{"address": "0x0000000000000000000000000000000000000001",
+                     "balance": 7, "nonce": 0, "code": "", "storage": []}],
+       "transient_storage": [], "logs": []}
+    ]
+  },
+  "test_checkpoint_balance_mismatch": {
+    "item_type": "test",
+    "deps": [],
+    "traces": [
+      {"trace_type": "set_balance", "address": "0x0000000000000000000000000000000000000001", "value": 7},
+      {"trace_type": "state_checkpoint", "boundary": "call", "call_index": 0,
+       "accounts": [{"address": "0x0000000000000000000000000000000000000001",
+                     "balance": 8, "nonce": 0, "code": "", "storage": []}],
+       "transient_storage": [], "logs": []}
+    ]
+  },
   "test_internal_error_on_expected_revert": {
     "deps": [],
     "item_type": "test",

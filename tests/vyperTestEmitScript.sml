@@ -145,7 +145,8 @@ fun encoder (vars,expr) = (
     (EmitML.pp_term_as_ML ["RunTest"] RIGHT expr);
   put " | _ => raise Fail \"constructor argument count\"");
 val constructors = List.filter TypeBase.is_constructor
-  (List.concat (map constants ["jsonAST","vyperTestRunner","contractABI","vyperAST"]));
+  (List.concat (map constants
+    ["jsonAST","vyperTestRunner","vyperStateCheckpoint","contractABI","vyperAST"]));
 val () = put "structure JsonConstructors = struct\nopen RunTestML\nval nodes = [\n";
 val first_node = ref true;
 fun emit_constructor c = let

@@ -1,6 +1,6 @@
 Theory vyperTestLibTest
 Ancestors vyperTestShardLibTest vyperTestRunner
-Libs vyperTestLib
+Libs vyperTestLib cv_transLib wordsLib
 
 fun source code = JSON.OBJECT [("source_code", JSON.STRING code)];
 
@@ -146,6 +146,103 @@ val () = assert_fixture "exported missing fixture is a JSON decode error"
       [("missing_dep_test", trace_item "test" ["path/missing"] [])]); false)
    handle JSONDecode.JSONError (Fail _, _) => true
         | _ => false);
+
+(* Checkpoints are evidence, not the legacy decoder's lenient hex inputs. *)
+local
+  val address = "0x0000000000000000000000000000000000000001"
+  val limit = IntInf.pow (2,256)
+  fun account addr balance code slots = JSON.OBJECT
+    [("address",JSON.STRING addr), ("balance",JSON.INT balance),
+     ("nonce",JSON.INT 0), ("code",JSON.STRING code),
+     ("storage",JSON.ARRAY slots)]
+  fun slot key value = JSON.OBJECT
+    [("slot",JSON.INT key), ("value",JSON.INT value)]
+  fun checkpoint accounts transient logs = JSON.OBJECT
+    [("trace_type",JSON.STRING "state_checkpoint"),
+     ("boundary",JSON.STRING "call"), ("call_index",JSON.INT 0),
+     ("accounts",JSON.ARRAY accounts),
+     ("transient_storage",JSON.ARRAY transient), ("logs",JSON.ARRAY logs)]
+  fun accepts label expected json =
+    case TraceDecode.decode_cases (JSON.ARRAY [json]) of
+      [("case",[actual])] =>
+        if aconv (rhs (concl (cv_eval (mk_eq (actual,expected))))) ``T``
+        then ()
+        else raise Fail ("checkpoint decoded unexpected state: " ^ label)
+    | _ => raise Fail ("checkpoint decoded unexpected traces: " ^ label)
+  fun rejects label reason json =
+    if ((TraceDecode.decode_cases (JSON.ARRAY [json]); false)
+        handle Fail message => String.isSubstring reason message
+             | JSONDecode.JSONError (Fail message,_) =>
+                 String.isSubstring reason message
+             | _ => false) then ()
+    else raise Fail ("checkpoint rejection did not reach " ^ label ^ " (" ^ reason ^ ")")
+  val empty_account = account address 0 "" []
+  val transient = JSON.OBJECT
+    [("address",JSON.STRING address), ("slot",JSON.INT 0),
+     ("value",JSON.INT 0)]
+  val log = JSON.OBJECT
+    [("address",JSON.STRING address), ("topics",JSON.ARRAY []),
+     ("data",JSON.STRING "")]
+  fun duplicate_member name value (JSON.OBJECT fields) =
+        JSON.OBJECT ((name,value)::fields)
+    | duplicate_member _ _ _ = raise Fail "expected checkpoint object"
+  val hidden_checkpoint =
+    case checkpoint [] [] [] of
+      JSON.OBJECT fields => JSON.OBJECT
+        (("trace_type",JSON.STRING "set_balance")::
+         ("address",JSON.STRING address)::("value",JSON.INT 7)::fields)
+    | _ => raise Fail "expected checkpoint object"
+in
+  val () = accepts "empty account"
+    ``StateCheckpoint <|cpBoundary := "call"; cpIndex := 0;
+      cpAccounts := [<|cpAddress := 1w; cpBalance := 0; cpNonce := 0;
+                      cpCode := []; cpStorage := []|>];
+      cpTransient := []; cpLogs := []|>``
+    (checkpoint [empty_account] [] [])
+  val () = let
+    val maximum = JsonImportHol.natural (limit - 1)
+  in accepts "maximum word and slot"
+    ``StateCheckpoint <|cpBoundary := "call"; cpIndex := 0;
+      cpAccounts := [<|cpAddress := 1w; cpBalance := ^maximum; cpNonce := 0;
+                      cpCode := []; cpStorage := [(^maximum,^maximum)]|>];
+      cpTransient := []; cpLogs := []|>``
+    (checkpoint [account address (limit - 1) "" [slot (limit - 1) (limit - 1)]] [] [])
+  end
+  val () = rejects "short address" "exactly 20 hex bytes"
+    (checkpoint [account "0x01" 0 "" []] [] [])
+  val () = rejects "odd code" "even-length unprefixed hex"
+    (checkpoint [account address 0 "0" []] [] [])
+  val () = rejects "oversized balance" "exceeds 256 bits"
+    (checkpoint [account address limit "" []] [] [])
+  val () = rejects "negative slot" "negative checkpoint number"
+    (checkpoint [account address 1 "" [slot (~1) 0]] [] [])
+  val () = rejects "oversized slot" "exceeds 256 bits"
+    (checkpoint [account address 1 "" [slot limit 0]] [] [])
+  val () = rejects "duplicate zero slots" "duplicate checkpoint key"
+    (checkpoint [account address 1 "" [slot 0 0,slot 0 0]] [] [])
+  val () = rejects "duplicate empty accounts" "duplicate checkpoint key"
+    (checkpoint [empty_account,empty_account] [] [])
+  val () = rejects "duplicate zero transient slots" "duplicate checkpoint key"
+    (checkpoint [] [transient,transient] [])
+  val () = rejects "short topic" "exactly 32 unprefixed hex bytes"
+    (checkpoint [] [] [JSON.OBJECT
+      [("address",JSON.STRING address),
+       ("topics",JSON.ARRAY [JSON.STRING "00"]), ("data",JSON.STRING "")]])
+  val () = rejects "duplicate checkpoint collection" "duplicate checkpoint member"
+    (duplicate_member "accounts" (JSON.ARRAY []) (checkpoint [empty_account] [] []))
+  val () = rejects "contradictory balances" "duplicate checkpoint member"
+    (checkpoint [duplicate_member "balance" (JSON.INT 8)
+      (account address 7 "" [])] [] [])
+  val () = rejects "duplicate slot value" "duplicate checkpoint member"
+    (checkpoint [account address 1 ""
+      [duplicate_member "value" (JSON.INT 1) (slot 0 0)]] [] [])
+  val () = rejects "duplicate transient slot" "duplicate checkpoint member"
+    (checkpoint [] [duplicate_member "slot" (JSON.INT 1) transient] [])
+  val () = rejects "duplicate log topics" "duplicate checkpoint member"
+    (checkpoint [] [] [duplicate_member "topics" (JSON.ARRAY []) log])
+  val () = rejects "hidden checkpoint discriminator" "duplicate checkpoint member"
+    hidden_checkpoint
+end;
 
 (* Chunk partitioning is pure: no JSON decoding, HOL definitions, or generated files. *)
 fun check_weighted_chunks (weights, counts) = let

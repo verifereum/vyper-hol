@@ -19,6 +19,20 @@ functor JsonTraceDecodeFn (
     (string * JSON.value * 'a) list
   val decode_cases : JSON.value -> (string * B.term list) list
   val source_codes_json : JSON.value -> string list
+  (* Complete-state checkpoint evidence, checked by StateCheckpoint traces. *)
+  val state_checkpoint : B.term JSONDecode.decoder
+  val checkpoint_address : B.term JSONDecode.decoder
+  val checkpoint_bytes : B.term JSONDecode.decoder
+  val checkpoint_topic : B.term JSONDecode.decoder
+  val checkpoint_num : B.term JSONDecode.decoder
+  val checkpoint_uint256 : IntInf.int JSONDecode.decoder
+  val checkpoint_unique_array :
+    (IntInf.int -> IntInf.int -> bool) ->
+    (IntInf.int * 'a) JSONDecode.decoder -> 'a list JSONDecode.decoder
+  val checkpoint_num_less : IntInf.int -> IntInf.int -> bool
+  val checkpoint_address_less : string -> string -> bool
+  val checkpoint_slot : (IntInf.int * B.term) JSONDecode.decoder
+  val checkpoint_account : (string * B.term) JSONDecode.decoder
 end = struct
 
 open B JSONDecode
@@ -504,7 +518,128 @@ val deployment : term decoder =
               JSONDecode.map (flat_bytes_from_hex o theoptstring)
                 (orElse (field "initcode" (nullable string), succeed NONE))))
 
+(* ===== Complete-state checkpoints ===== *)
+(* Checkpoint evidence is strict even though legacy trace hex readers accept
+   truncated words/odd byte strings. Validate before either backend sees it. *)
+fun checkpoint_type name =
+  named_type {Thy="vyperStateCheckpoint", Tyop=name}
+val checkpoint_account_ty = checkpoint_type "checkpoint_account"
+val state_checkpoint_ty = checkpoint_type "state_checkpoint"
+val slot_pair_ty = mk_type ("prod", [num_ty,num_ty])
+val transient_entry_ty = mk_type ("prod", [word_ty 160,slot_pair_ty])
+val log_entry_ty = mk_type ("prod", [word_ty 160,
+  mk_type ("prod", [mk_type ("list", [bytes32_ty]),bytes_ty])])
+
+val checkpoint_address_text =
+  andThen string (fn s =>
+    if String.size s = 42 andalso String.isPrefix "0x" s andalso
+       List.all Char.isHexDigit (String.explode (String.extract (s,2,NONE)))
+    then succeed (String.map Char.toLower s)
+    else fail "checkpoint address must contain exactly 20 hex bytes")
+val checkpoint_address = JSONDecode.map address_from_hex checkpoint_address_text
+val checkpoint_bytes =
+  andThen string (fn s =>
+    if String.size s mod 2 = 0 andalso List.all Char.isHexDigit (String.explode s)
+    then succeed (bytes_from_hex s)
+    else fail "checkpoint byte string must be even-length unprefixed hex")
+val checkpoint_topic =
+  andThen string (fn s =>
+    if String.size s = 64 andalso List.all Char.isHexDigit (String.explode s)
+    then succeed (bytes32_from_hex s)
+    else fail "checkpoint topic must contain exactly 32 unprefixed hex bytes")
+val checkpoint_natural =
+  andThen intInf (fn n => if n >= 0 then succeed n
+                         else fail "negative checkpoint number")
+val checkpoint_word_limit = IntInf.pow (2,256)
+val checkpoint_uint256 =
+  andThen checkpoint_natural (fn n =>
+    if n < checkpoint_word_limit then succeed n
+    else fail "checkpoint word exceeds 256 bits")
+val checkpoint_num = JSONDecode.map natural checkpoint_natural
+val checkpoint_word_num = JSONDecode.map natural checkpoint_uint256
+
+(* Validate uniqueness before zero normalization, including duplicate empty
+   accounts and zero-valued slots. Retain input order for stable diagnostics. *)
+fun checkpoint_unique_array less d =
+  andThen (array d) (fn entries => let
+    fun increasing [] = true
+      | increasing [_] = true
+      | increasing ((k,_)::(rest as (next,_)::_)) =
+          less k next andalso increasing rest
+    val sorted = sort (fn (a,_) => fn (b,_) => less a b) entries
+  in
+    if increasing sorted then succeed (List.map #2 entries)
+    else fail "duplicate checkpoint key"
+  end)
+fun checkpoint_num_less (a:IntInf.int) b = a < b
+fun checkpoint_address_less (a:string) b = a < b
+fun checkpoint_transient_less (a,k) (b,j) =
+  checkpoint_address_less a b orelse (a = b andalso checkpoint_num_less k j)
+
+fun checkpoint_unique_members fields =
+  let
+    fun unique [] = true
+      | unique [_] = true
+      | unique (name::(rest as next::_)) =
+          name <> next andalso unique rest
+    val names = sort (fn (a:string) => fn b => a < b)
+      (List.map (fn (name,_) => name) fields)
+  in unique names end
+fun checkpoint_object d =
+  check rawObject checkpoint_unique_members "duplicate checkpoint member" d
+
+(* Inspect all discriminators before dispatch: a second trace_type must not
+   hide checkpoint evidence behind a legacy trace's first trace_type. *)
+fun checkpoint_trace_members fields =
+  not (List.exists
+    (fn ("trace_type",JSON.STRING "state_checkpoint") => true | _ => false)
+    fields) orelse checkpoint_unique_members fields
+
+val checkpoint_slot =
+  checkpoint_object $
+  JSONDecode.map (fn (k,v) => (k,mk_pair (natural k,v))) $
+    tuple2 (field "slot" checkpoint_uint256, field "value" checkpoint_word_num)
+val checkpoint_account =
+  checkpoint_object $
+  JSONDecode.map (fn ((a,b,n,c),s) =>
+    (a,mk_record (checkpoint_account_ty,
+      [("cpAddress",address_from_hex a),("cpBalance",b),("cpNonce",n),
+       ("cpCode",c),("cpStorage",mk_list (s,slot_pair_ty))]))) $
+  tuple2 (tuple4 (field "address" checkpoint_address_text,
+                  field "balance" checkpoint_word_num,
+                  field "nonce" checkpoint_num, field "code" checkpoint_bytes),
+          field "storage" (checkpoint_unique_array checkpoint_num_less checkpoint_slot))
+val checkpoint_transient =
+  checkpoint_object $
+  JSONDecode.map (fn (a,(s,v)) =>
+    ((a,s),mk_pair (address_from_hex a,mk_pair (natural s,v)))) $
+    tuple2 (field "address" checkpoint_address_text,
+            tuple2 (field "slot" checkpoint_uint256,field "value" checkpoint_word_num))
+val checkpoint_log : term decoder =
+  checkpoint_object $
+  JSONDecode.map (fn (a,(ts,d)) =>
+    mk_pair (a,mk_pair (mk_list (ts,bytes32_ty),d))) $
+    tuple2 (field "address" checkpoint_address,
+      tuple2 (field "topics" (array checkpoint_topic),
+              field "data" checkpoint_bytes))
+val state_checkpoint : term decoder =
+  check (field "boundary" string)
+    (fn s => s = "deployment" orelse s = "call") "invalid checkpoint boundary" $
+  JSONDecode.map (fn ((b,i),(accounts,transient,logs)) =>
+    mk_record (state_checkpoint_ty,
+      [("cpBoundary",b),("cpIndex",i),
+       ("cpAccounts",mk_list (accounts,checkpoint_account_ty)),
+       ("cpTransient",mk_list (transient,transient_entry_ty)),
+       ("cpLogs",mk_list (logs,log_entry_ty))])) $
+    tuple2 (tuple2 (field "boundary" stringtm,field "call_index" checkpoint_num),
+      tuple3 (field "accounts"
+                (checkpoint_unique_array checkpoint_address_less checkpoint_account),
+              field "transient_storage"
+                (checkpoint_unique_array checkpoint_transient_less checkpoint_transient),
+              field "logs" (array checkpoint_log)))
+
 val trace : term decoder =
+  check rawObject checkpoint_trace_members "duplicate checkpoint member" $
   andThen (field "trace_type" string) (fn kind =>
     case kind of
       "call" => JSONDecode.map (curry mk_comb Call_tm) call
@@ -514,6 +649,9 @@ val trace : term decoder =
           then JSONDecode.map (curry mk_comb RawDeployment_tm) raw_deployment
           else JSONDecode.map (curry mk_comb Deployment_tm) deployment)
     | "clear_transient_storage" => succeed ClearTransientStorage_tm
+    | "state_checkpoint" =>
+        JSONDecode.map (curry mk_comb (runner_const "StateCheckpoint"))
+          state_checkpoint
     | "set_balance" =>
         JSONDecode.map (fn (a,b) => list_mk_comb(SetBalance_tm, [a,b])) $
           tuple2 (field "address" address, field "value" numtm)
