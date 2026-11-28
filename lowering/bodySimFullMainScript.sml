@@ -9,7 +9,7 @@ Theory bodySimFullMain
 Ancestors bodyFullShadowBodyInv bodyFullRaiseCustomError bodyFullAssertCustomError
   bodyFullCases bodyFullCreateHeld bodyFullIf bodyFullExprStmt bodyFullExits bodyFullPreds bodySimFull gasShadow bodySim supportedStmts
   vyperAST vyperInterpreter vyperState vyperTypeCallGraph typedCopyMetadata alist list
-  vyperTypeContract[qualified,ignore_grammar] constSubst bodyLoopCalls
+  vyperTypeContract[qualified,ignore_grammar] constSubst constSubstMods bodyLoopCalls
   contractInvContextProps
   bodySimFullMainWidenedScratch[qualified]
 
@@ -67,6 +67,27 @@ Proof
 QED
 
 Theorem callable_body_loop_calls_ok:
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
+  get_module_code cx src = SOME ts /\
+  lookup_callable_function cx.in_deploy name ts = SOME (mut,nr,args,dflts,ret,ss) /\
+  (!sid tops vis fm fr raw fn fa fd ft body.
+     ALOOKUP mods sid = SOME tops /\
+     MEM (FunctionDecl vis fm fr raw fn fa fd ft body) tops ==>
+     stmts_loop_calls_ok mods
+       (subst_consts_stmts_mods (consts_env_mods mods) body)) ==>
+  stmts_loop_calls_ok mods (subst_consts_stmts_mods (consts_env_mods mods) ss)
+Proof
+  strip_tac >>
+  qpat_assum `ALOOKUP cx.sources cx.txn.target = SOME mods` (fn code =>
+    qpat_x_assum `get_module_code cx src = SOME ts`
+      (assume_tac o SIMP_RULE bool_ss
+        [vyperContextTheory.get_module_code_def,code,optionTheory.option_case_def])) >>
+  drule vyperTypeCallStackSoundnessTheory.lookup_callable_function_SOME_decompose >> strip_tac
+  >- simp[subst_consts_stmt_mods_def, vyperTypeContractTheory.stmt_loop_calls_ok_def] >>
+  res_tac
+QED
+
+Theorem callable_body_loop_calls_ok_singleton:
   ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
   get_module_code cx src = SOME ts /\
   lookup_callable_function cx.in_deploy name ts = SOME (mut,nr,args,dflts,ret,ss) /\
@@ -77,12 +98,13 @@ Theorem callable_body_loop_calls_ok:
   stmts_loop_calls_ok [(NONE,tops)]
     (subst_consts_stmts (module_consts_env tops []) ss)
 Proof
-  rpt strip_tac >>
-  Cases_on `src` >> gvs[vyperContextTheory.get_module_code_def, alistTheory.ALOOKUP_def] >>
-  drule vyperTypeCallStackSoundnessTheory.lookup_callable_function_SOME_decompose >>
-  simp[] >> rpt strip_tac >>
-  gvs[subst_consts_stmt_def, vyperTypeContractTheory.stmt_loop_calls_ok_def] >>
-  metis_tac[]
+  strip_tac >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`] callable_body_loop_calls_ok) >>
+  impl_tac >-
+    (asm_rewrite_tac[] >> rpt gen_tac >> Cases_on `sid` >>
+     simp[alistTheory.ALOOKUP_def, consts_env_mods_singleton, subst_consts_mods_singleton] >>
+     strip_tac >> gvs[] >> res_tac) >>
+  simp[consts_env_mods_singleton, subst_consts_mods_singleton]
 QED
 
 Theorem callable_remcode_decreases:
