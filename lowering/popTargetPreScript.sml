@@ -64,23 +64,41 @@ Proof
   metis_tac[optionTheory.IS_SOME_EXISTS]
 QED
 
+Theorem target_indices_pre_mods_from_alloc[local]:
+  !bt mods cenv cx env.
+    alloc_limits_target cenv bt /\
+    (!e es. MEM e (target_indices bt) /\ expr_sim_inv_mods mods cenv cx env es ==>
+      expr_body_pre_mods mods cenv cx env e es) ==>
+    target_indices_pre_mods mods cenv cx env bt
+Proof
+  recInduct base_assignment_target_induct >>
+  simp[target_indices_pre_mods_def, target_indices_def, alloc_limits_expr_def] >>
+  metis_tac[]
+QED
+
 Theorem target_pre_of_pop_mods:
   !mods cenv cx env ann bt es.
     expr_body_pre_mods mods cenv cx env (Pop ann bt) es /\ ~immutable_root cx bt ==>
-    expr_sim_inv_mods mods cenv cx env es /\ ~immutable_root cx bt /\
+    target_pre_mods mods cenv cx env bt es /\
     alloc_limits_target cenv bt /\
     (!e st. MEM e (target_indices bt) /\ expr_sim_inv_mods mods cenv cx env st ==>
             expr_body_pre_mods mods cenv cx env e st)
 Proof
   rpt gen_tac >> strip_tac >>
+  `~immutable_root cx bt` by first_assum ACCEPT_TAC >>
   qpat_assum `expr_body_pre_mods _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [expr_body_pre_mods_def]) >>
   gvs[Once well_typed_expr_def, byte_widths_expr_def, alloc_limits_expr_def,
       int_calls_expr_def, expr_has_evm_run_def, supported_expr_exists_def,
       expr_abi_decode_target_root_def, expr_evm_run_root_def,
       const_name_root_mods_def, unallocated_bare_global_root_def] >>
-  rpt gen_tac >> strip_tac >>
-  irule target_indices_pre_of_body_mods >> simp[] >> metis_tac[]
+  `!e st. MEM e (target_indices bt) /\
+           expr_sim_inv_mods mods cenv cx env st ==>
+           expr_body_pre_mods mods cenv cx env e st` by
+    (rpt gen_tac >> strip_tac >>
+     irule target_indices_pre_of_body_mods >> simp[] >> metis_tac[]) >>
+  simp[target_pre_mods_def] >>
+  metis_tac[target_indices_pre_mods_from_alloc]
 QED
 
 Theorem target_indices_pre_from_singleton[local]:

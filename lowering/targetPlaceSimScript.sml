@@ -189,10 +189,38 @@ Proof
      target_indices_pre_def]
 QED
 
+Theorem target_pre_mods_sub:
+  (!mods cenv cx env t fld es.
+     target_pre_mods mods cenv cx env (AttributeTarget t fld) es ==>
+     target_pre_mods mods cenv cx env t es) /\
+  (!mods cenv cx env t e es.
+     target_pre_mods mods cenv cx env (SubscriptTarget t e) es ==>
+     target_pre_mods mods cenv cx env t es)
+Proof
+  rw[target_pre_mods_def, immutable_root_def, target_root_def,
+     target_indices_pre_mods_def]
+QED
+
 (* ===== Locals ===== *)
 
 (* A local the typing knows: its pointer variable, its scope entry, and its
    declared type evaluating to the entry's type. *)
+Theorem expr_sim_inv_local_mods:
+  !mods cenv cx env es id ty.
+    expr_sim_inv_mods mods cenv cx env es /\ FLOOKUP env.var_types id = SOME ty ==>
+    (?p sz. FLOOKUP cenv.ce_vars id = SOME (PtrVar (Var p) sz)) /\
+    (?entry. lookup_scopes id es.scopes = SOME entry) /\
+    !entry. lookup_scopes id es.scopes = SOME entry ==>
+            evaluate_type (get_tenv cx) ty = SOME entry.type
+Proof
+  rpt gen_tac >> strip_tac >>
+  fs[expr_sim_inv_mods_def, env_consistent_def, env_scopes_consistent_def] >>
+  qpat_x_assum `!id ty. _ ==> IS_SOME _` drule >>
+  qpat_x_assum `!id ty. _ ==> ?p sz. _` drule >>
+  simp[optionTheory.IS_SOME_EXISTS] >> rpt strip_tac >>
+  qpat_x_assum `!id ty entry. _ /\ _ ==> _` drule_all >> simp[]
+QED
+
 Theorem expr_sim_inv_local:
   !cenv cx env es id ty.
     expr_sim_inv cenv cx env es /\ FLOOKUP env.var_types id = SOME ty ==>
@@ -201,12 +229,7 @@ Theorem expr_sim_inv_local:
     !entry. lookup_scopes id es.scopes = SOME entry ==>
             evaluate_type (get_tenv cx) ty = SOME entry.type
 Proof
-  rpt gen_tac >> strip_tac >>
-  fs[expr_sim_inv_def, env_consistent_def, env_scopes_consistent_def] >>
-  qpat_x_assum `!id ty. _ ==> IS_SOME _` drule >>
-  qpat_x_assum `!id ty. _ ==> ?p sz. _` drule >>
-  simp[optionTheory.IS_SOME_EXISTS] >> rpt strip_tac >>
-  qpat_x_assum `!id ty entry. _ /\ _ ==> _` drule_all >> simp[]
+  simp[expr_sim_inv_split_def] >> metis_tac[expr_sim_inv_local_mods]
 QED
 
 (* ===== Leaves ===== *)
@@ -300,6 +323,35 @@ QED
    storage or transient variable is not a mapping and has its declared
    type, a mapping its declared key and value types (expr_sim_inv's
    storage clause and place_map_tables_agree_on_defined). *)
+Theorem toplevel_target_env_mods:
+  !mods cenv cx env es src id vt ts d id_str.
+    expr_sim_inv_mods mods cenv cx env es /\
+    type_place_target env (TopLevelNameTarget (src,id)) = SOME vt /\
+    get_module_code cx src = SOME ts /\
+    find_var_decl_by_name id ts = SOME (d, id_str) ==>
+    (!tr typ. d = StorageVarDecl tr typ ==>
+              cenv.ce_hashmap_info (src,id) = NONE /\
+              cenv.ce_module_var_type (src,id) = SOME typ) /\
+    (!tr kt vt'. d = HashMapVarDecl tr kt vt' ==>
+                 ?tr'. cenv.ce_hashmap_info (src,id) = SOME (tr',kt,vt'))
+Proof
+  rpt gen_tac >> strip_tac >> conj_tac
+  >- (rpt gen_tac >> strip_tac >> gvs[expr_sim_inv_mods_def] >> metis_tac[]) >>
+  rpt gen_tac >> strip_tac >> gvs[] >>
+  `env_consistent env cx es` by fs[expr_sim_inv_mods_def] >>
+  `!ts'. get_module_code cx src = SOME ts' ==>
+         find_var_decl_by_name id ts' <> NONE` by gvs[] >>
+  drule_all toplevel_target_decl >> strip_tac >> gvs[] >>
+  `FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt')` by
+    metis_tac[type_place_target_global_lookup] >>
+  `place_map_tables_agree_on_defined cenv env` by fs[expr_sim_inv_mods_def] >>
+  qpat_x_assum `place_map_tables_agree_on_defined _ _` mp_tac >>
+  simp[place_map_tables_agree_on_defined_def] >>
+  disch_then drule >>
+  Cases_on `cenv.ce_hashmap_info (src,id)` >> simp[] >>
+  PairCases_on `x` >> simp[]
+QED
+
 Theorem toplevel_target_env:
   !cenv cx env es src id vt ts d id_str.
     expr_sim_inv cenv cx env es /\
@@ -312,21 +364,7 @@ Theorem toplevel_target_env:
     (!tr kt vt'. d = HashMapVarDecl tr kt vt' ==>
                  ?tr'. cenv.ce_hashmap_info (src,id) = SOME (tr',kt,vt'))
 Proof
-  rpt gen_tac >> strip_tac >> conj_tac
-  >- (rpt gen_tac >> strip_tac >> gvs[expr_sim_inv_def] >> metis_tac[]) >>
-  rpt gen_tac >> strip_tac >> gvs[] >>
-  `env_consistent env cx es` by fs[expr_sim_inv_def] >>
-  `!ts'. get_module_code cx src = SOME ts' ==>
-         find_var_decl_by_name id ts' <> NONE` by gvs[] >>
-  drule_all toplevel_target_decl >> strip_tac >> gvs[] >>
-  `FLOOKUP env.toplevel_vtypes (src,id) = SOME (HashMapT kt vt')` by
-    metis_tac[type_place_target_global_lookup] >>
-  `place_map_tables_agree_on_defined cenv env` by fs[expr_sim_inv_def] >>
-  qpat_x_assum `place_map_tables_agree_on_defined _ _` mp_tac >>
-  simp[place_map_tables_agree_on_defined_def] >>
-  disch_then drule >>
-  Cases_on `cenv.ce_hashmap_info (src,id)` >> simp[] >>
-  PairCases_on `x` >> simp[]
+  simp[expr_sim_inv_split_def] >> metis_tac[toplevel_target_env_mods]
 QED
 
 (* A storage, transient or mapping variable: its slot, no code. *)

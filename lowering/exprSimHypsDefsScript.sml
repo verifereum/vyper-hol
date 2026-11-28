@@ -536,6 +536,20 @@ Proof
   simp[expr_sim_inv_def]
 QED
 
+Theorem expr_sim_inv_mods_gas_obs[simp]:
+  expr_sim_inv_mods mods cenv cx env (es with gas_obs := gs) <=>
+  expr_sim_inv_mods mods cenv cx env es
+Proof
+  simp[expr_sim_inv_mods_def]
+QED
+
+Theorem expr_sim_inv_mods_storage_trace[simp]:
+  expr_sim_inv_mods mods cenv cx env (es with storage_trace := observations) <=>
+  expr_sim_inv_mods mods cenv cx env es
+Proof
+  simp[expr_sim_inv_mods_def]
+QED
+
 Theorem expr_body_pre_storage_trace[simp]:
   expr_body_pre cenv cx env e (es with storage_trace := observations) <=>
   expr_body_pre cenv cx env e es
