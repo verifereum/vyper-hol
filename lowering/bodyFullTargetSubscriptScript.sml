@@ -646,26 +646,6 @@ Proof
   fs[expr_sim_inv_mods_def] >> metis_tac[]
 QED
 
-Theorem immutable_path_value_type[local]:
-  expr_sim_inv_mods mods cenv cx env es /\
-  FLOOKUP (case ALOOKUP es.immutables cx.txn.target of
-             NONE => FEMPTY | SOME imms => get_source_immutables src imms) id =
-    SOME (itv,iv) /\
-  mem_path_offset itv path = SOME (k,tv) /\
-  evaluate_subscripts itv iv path = INL v ==>
-  value_has_type tv v
-Proof
-  rpt strip_tac >>
-  `state_well_typed es` by fs[expr_sim_inv_mods_def] >>
-  Cases_on `ALOOKUP es.immutables cx.txn.target` >> gvs[] >>
-  drule_all vyperTypeEnvTheory.state_well_typed_immutables_ALOOKUP >>
-  strip_tac >>
-  drule_all vyperTypeEnvTheory.imms_well_typed_get_source_immutables >>
-  strip_tac >>
-  drule exprSimPropsTheory.mem_path_offset_sound >> strip_tac >>
-  metis_tac[vyperPlaceStatePreservationTheory.evaluate_subscripts_type]
-QED
-
 Theorem immutable_target_subscript_sim_full:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -913,7 +893,8 @@ Resume immutable_target_subscript_sim_full[tail]:
      qpat_assum `mid2 with gas_obs := [] = mid2` (fn th => rewrite_tac[th]) >>
      simp[]) >>
   qabbrev_tac `ix = mid1 with gas_obs := gas_explicit marks2 t1.vs_gas_readings` >>
-  `expr_body_pre_mods mods cenv cx env e ix` by simp[Abbr `ix`] >> metis_tac[] >>
+  `expr_body_pre_mods mods cenv cx env e ix` by
+    (simp[Abbr `ix`] >> metis_tac[]) >>
   `is_int_type (expr_type e) /\ ty = et` by
     (qpat_assum `subscript_vtype (Type (ArrayT et bd)) (expr_type e) = SOME (Type ty)` mp_tac >>
      simp_tac (srw_ss()) [subscript_vtype_def,AllCaseEqs()]) >>
@@ -958,16 +939,16 @@ Resume immutable_target_subscript_sim_full[tail]:
       (CONJUNCTS_THEN2 (strip_assume_tac o REWRITE_RULE[imm_target_post_def])
         assume_tac))) >>
   `IS_SOME (type_place_target env bt)` by simp[] >>
-  drule_all_then (qx_choosel_then [`root`,`root_ty`] strip_assume_tac)
+  drule_all_then (qx_choosel_then [`root_src`,`root`,`root_ty`] strip_assume_tac)
     typed_immutable_target_root >>
-  `root = id` by
-    (qpat_assum `target_root bt = TopLevelNameTarget (NONE,root)` mp_tac >>
+  `root_src = NONE /\ root = id` by
+    (qpat_assum `target_root bt = TopLevelNameTarget (root_src,root)` mp_tac >>
      qpat_assum `target_root bt = TopLevelNameTarget (NONE,id)` (fn th => simp[NoAsms,th])) >>
-  qpat_x_assum `root = id` SUBST_ALL_TAC >>
-  `cenv.ce_module = NONE /\ evaluate_type (get_tenv cx) root_ty = SOME itv` by
+  gvs[] >>
+  `evaluate_type (get_tenv cx) root_ty = SOME itv` by
     (qunabbrev_tac `p` >>
      drule_all_then strip_assume_tac immutable_target_write_root >>
-     conj_tac >> first_assum ACCEPT_TAC) >>
+     first_assum ACCEPT_TAC) >>
   `off + type_memory_size itv < dimword (:256)` by
     (fs[expr_sim_inv_mods_def] >> metis_tac[]) >>
   `?raw. eval_expr cx e ix = (INL raw,mid2)` by
