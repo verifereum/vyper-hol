@@ -13,7 +13,7 @@ Theorem bool_chain_full_from_members[local]:
   !xs. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,cx_tops cx)] /\
     EVERY (body_expr_full_ok cx) xs ==> bool_chain_full_ok [(NONE,cx_tops cx)] [] cx xs
 Proof
-  Induct_on `xs` >> simp[bool_chain_full_ok_def] >> strip_tac >>
+  Induct_on `xs` >> simp[bool_chain_full_ok_def] >> rpt strip_tac >>
   drule_then (fn th => fs[th]) bodyFullPredsModsTheory.body_expr_full_ok_mods_singleton
 QED
 
