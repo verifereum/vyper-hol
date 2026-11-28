@@ -24,7 +24,7 @@ Ancestors
   loweringPosts bodyPtrPopTargetFragTransport
   vyperStorageTrace vyperTypeEnv vyperTypeSystem vyperInterpreter vyperState
   vyperAST pair list exprSimDefs exprSimHypsDefs vyperStorageFootprint
-  bodyFullPredsMods[qualified] bodyInvSplit[qualified]
+  bodyFullPredsMods[qualified] bodyInvSplit[qualified] supportedExprs
 
 val _ = Parse.hide "body";
 
@@ -64,19 +64,25 @@ Theorem body_imm_target_place_sim_full:
 Proof
   recInduct base_assignment_target_induct >>
   simp[target_root_def, target_indices_pre_mods_def, target_indices_def,
-       bodyFullPredsModsTheory.body_base_target_full_ok_mods_def]
+       bodyFullPredsModsTheory.body_base_target_full_ok_mods_def] >>
+  rpt conj_tac
   >- (rpt strip_tac >> gvs[] >>
-      irule immutable_toplevel_target_sim_full >> simp[] >> metis_tac[])
+      mp_tac immutable_toplevel_target_sim_full >> simp[])
   >- (rpt strip_tac >>
       `immutable_root cx bt` by fs[immutable_root_def,target_root_def] >>
-      irule immutable_target_subscript_sim_full >>
-      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      TRY (fs[bodyFullPredsModsTheory.body_base_target_full_ok_mods_def] >> NO_TAC) >>
-      metis_tac[])
-  >> rpt strip_tac >>
+      `imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+         cenv cx env bt es` by
+        (first_x_assum irule >> simp[] >> metis_tac[]) >>
+      mp_tac immutable_target_subscript_sim_full >>
+      simp[Once bodyFullPredsModsTheory.body_base_target_full_ok_mods_def] >>
+      metis_tac[]) >>
+  rpt strip_tac >>
   `immutable_root cx bt` by fs[immutable_root_def,target_root_def] >>
-  irule immutable_target_attribute_sim_full >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[]
+  `imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx env bt es` by
+    (first_x_assum irule >> simp[] >> metis_tac[]) >>
+  irule immutable_target_attribute_sim_full >> simp[] >>
+  qexists_tac `mods` >> simp[]
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
