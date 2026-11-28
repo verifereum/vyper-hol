@@ -124,11 +124,11 @@ Theorem tuple_exact_store_cursor_iff:
     tvs1 = DROP k tvs /\ vs1 = DROP k vs /\
     EVERY (assignable_type (get_tenv cx)) tys1 /\
     EVERY (\g. case g of BaseTarget bt =>
-      supported_target tops bindings bt /\ target_indices_pre cenv cx env bt
+      supported_target tops bindings bt /\ target_indices_pre_mods cenv.ce_modules cenv cx env bt
       | TupleTarget ts => F) todo /\
     callback /\ child_ok /\
-    body_const_cells_agree [(NONE,tops)] cx env src /\
-    expr_sim_inv cenv cx env src /\ src with gas_obs := [] = src /\
+    body_const_cells_agree cenv.ce_modules cx env src /\
+    expr_sim_inv_mods cenv.ce_modules cenv cx env src /\ src with gas_obs := [] = src /\
     admissible /\
     call_evaluation_safe cx (int_calls_atargets todo) /\
     compile_tuple_store_all cenv tys1 todo ops1 cur = ((),sb) /\

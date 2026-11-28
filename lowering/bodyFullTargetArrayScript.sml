@@ -6,7 +6,7 @@
      target_array_tail_full -- subscript_tail_full when the base is an array *)
 Theory bodyFullTargetArray
 Ancestors
-  bodyInvSplit[qualified]
+  bodyInvSplit[qualified] bodyInvCodeProps
   bodyFullTargetArraySource bodyFullTargetArraySuffix
   bodyFullTargetSubscript bodyFullTargetDefs bodySimFull targetPlaceSim
   vyperTypeSystem vyperInterpreter vyperState
@@ -20,6 +20,7 @@ Theorem target_array_tail_full:
     cenv cx env bt e es
 Proof
   strip_tac >> simp[subscript_tail_full_def] >> rpt gen_tac >> strip_tac >>
+  drule_then assume_tac contract_inv_cenv_modules >>
   irule target_array_suffix_full >>
   simp[array_tail_packet_def] >> metis_tac[]
 QED

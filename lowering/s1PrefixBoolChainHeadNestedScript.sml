@@ -5,14 +5,16 @@ Ancestors
   s1PrefixBoolChainNestedEntry s1PrefixBoolChainUniformEntries
   s1PrefixBoolChainNestedDemandStep s1PrefixCheckedContextFull s1PrefixBoolChainEqDemand gasShadowBoolChainOperands boolChainWrapperRead
   s1PrefixOfVV s1PrefixPreds s1PrefixDefs
-  vyperTypeCallGraph alist
+  vyperTypeCallGraph alist gasContext bodyFullPredsMods[qualified]
   bodyFullBoolChain bodyFullPreds bodySimFull exprLoweringProps
   exprBodyPreProps exprSimHyps boolChainCodeLayout compileEnv vyperContext vyperTypeSystem exprLowering vyperInterpreter vyperAST list
 
 Theorem bool_chain_full_from_members[local]:
-  !xs. EVERY (body_expr_full_ok cx) xs ==> bool_chain_full_ok [(NONE,cx_tops cx)] [] cx xs
+  !xs. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,cx_tops cx)] /\
+    EVERY (body_expr_full_ok cx) xs ==> bool_chain_full_ok [(NONE,cx_tops cx)] [] cx xs
 Proof
-  Induct_on `xs` >> simp[bool_chain_full_ok_def]
+  Induct_on `xs` >> simp[bool_chain_full_ok_def] >> strip_tac >>
+  drule_then (fn th => fs[th]) bodyFullPredsModsTheory.body_expr_full_ok_mods_singleton
 QED
 
 Theorem bool_chain_head_nested_prefix_ok:
@@ -34,6 +36,7 @@ Proof
   gvs[well_typed_expr_def, well_typed_builtin_app_def] >>
   `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
     fs[body_const_cells_agree_def] >>
+  `cx_tops cx = tops` by simp[cx_tops_def, get_module_code_def, ALOOKUP_def] >>
   `EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
       (int_calls_expr x0)` by
     (res_tac >> fs[int_calls_expr_def, EVERY_APPEND]) >>

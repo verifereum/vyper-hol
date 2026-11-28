@@ -7452,7 +7452,7 @@ Proof
        (irule stateRelProjTheory.stmt_state_rel_state_rel >>
         qexists_tac `ctx` >>
         qpat_assum `!H. valid_horizon cx st0 H ed.storage_trace ==>
-           intcall_entry_full_mods _ _ _ H _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+           intcall_entry_full_mods _ H _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
           (qspec_then `H` mp_tac) >>
         (impl_tac >- first_assum ACCEPT_TAC) >>
         disch_then (mp_tac o cj 7 o PURE_REWRITE_RULE [intcall_entry_full_mods_def]) >>
@@ -11764,7 +11764,7 @@ Resume intcall_args_full[after_defaults]:
        !tail. after_defaults ed.scopes dvs (ed with gas_obs := tail) =
          (INR err,failed with <|scopes := ed.scopes; gas_obs := tail|>)) /\
      (!H. valid_horizon cx st0 H ed.storage_trace ==>
-       intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm
+       intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm
          vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) ed.scopes penv rtv
          (ed with scopes := [penv]) u Gd tnd) /\
      body_const_cells_agree [(NONE,tops)] cx tenv (ed with scopes := [penv]) /\

@@ -2835,7 +2835,7 @@ Theorem for_nonslot_code_frame_bare[local]:
     FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
     ~cx_const_name cx (src,name) /\
     vv_location vv = SOME LocCode /\ post_value_type c e = ArrayT et bd) ==>
-  for_nonslot_code_frame mods c cx env ctx func id e body loc rv vv av em u
+  for_nonslot_code_frame [(NONE,tops)] c cx env ctx func id e body loc rv vv av em u
 Proof
   cheat
 QED

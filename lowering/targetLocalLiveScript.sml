@@ -23,7 +23,7 @@ Ancestors
   bodySimStmtFacts
   vyperFixedShapePath allocLimits stmtSimAssignAttr targetOverlapAccess
   targetPlaceSim
-  targetPlaceSimCasesBase
+  targetPlaceSimCasesBase compileEnv loweringStateRelDefs
   targetSubscriptMemory exprSimSource exprSimHypsDefs
   vyperSubscriptOverlap vyperLocalAccessFrame
   vyperTypeSystem vyperTypeEnv vyperTypeInvariants vyperTypeStatePreservation
@@ -47,30 +47,52 @@ Proof
 QED
 
 (* A local-rooted target's typing agrees with the lowering's place type. *)
-Theorem local_target_place_type:
-  !bt cenv cx env s id bvt.
-    expr_sim_inv cenv cx env s /\ target_root bt = NameTarget id /\
-    type_place_target env bt = SOME bvt ==>
+Theorem alookup_field_layout[local]:
+  !fields args fld fty.
+    MAP FST fields = MAP FST args /\ MAP (FST o SND) fields = MAP SND args /\
+    ALOOKUP args fld = SOME fty ==>
+    ?fsz. ALOOKUP fields fld = SOME (fty,fsz)
+Proof
+  Induct >> rpt gen_tac >> Cases_on `args` >> simp[] >>
+  PairCases_on `h` >> PairCases_on `h'` >> rw[] >> gvs[] >> metis_tac[]
+QED
+
+Theorem local_target_place_type_layout[local]:
+  !bt cenv env id bvt.
+    (!name ty. FLOOKUP env.var_types name = SOME ty ==>
+               cenv.ce_var_type name = SOME ty) /\
+    sfields_tenv_consistent cenv.ce_struct_fields env.type_defs /\
+    target_root bt = NameTarget id /\ type_place_target env bt = SOME bvt ==>
     ?ty. bvt = Type ty /\ target_place_type cenv bt = SOME (ValPT ty)
 Proof
   recInduct base_assignment_target_induct >> rpt conj_tac
   >- (rpt gen_tac >>
       simp[target_root_def, Once well_typed_expr_def, target_place_type_def,
            AllCaseEqs()] >>
-      rpt strip_tac >> gvs[expr_sim_inv_def] >> metis_tac[])
+      rpt strip_tac >> gvs[] >> metis_tac[])
   >- simp[target_root_def] >>
   rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
   gvs[target_root_def, Once well_typed_expr_def, AllCaseEqs()] >>
   first_x_assum drule_all >> strip_tac >> gvs[]
   >- (Cases_on `ty` >> gvs[subscript_vtype_def] >>
       simp[target_place_type_def]) >>
-  `env.type_defs = get_tenv cx` by
-    fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def] >>
-  Cases_on `tgt_ty` >> gvs[attribute_type_def] >>
-  `attribute_type (get_tenv cx) (StructT p) s = SOME ty` by
-    simp[attribute_type_def] >>
-  drule_all stmtSimAssignAttrTheory.attribute_type_struct_field >>
-  strip_tac >> simp[target_place_type_def]
+  Cases_on `tgt_ty` >> gvs[attribute_type_def, AllCaseEqs()] >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  simp[sfields_tenv_consistent_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  qspecl_then [`fields'`, `fields`, `s`, `ty`] mp_tac alookup_field_layout >>
+  rw[target_place_type_def, get_struct_fields_def] >> simp[]
+QED
+
+Theorem local_target_place_type:
+  !bt cenv cx env s id bvt.
+    expr_sim_inv cenv cx env s /\ target_root bt = NameTarget id /\
+    type_place_target env bt = SOME bvt ==>
+    ?ty. bvt = Type ty /\ target_place_type cenv bt = SOME (ValPT ty)
+Proof
+  rpt strip_tac >> irule local_target_place_type_layout >>
+  qexistsl_tac [`env`,`id`] >>
+  fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]
 QED
 
 (* The local keeps its type across states meeting expr_sim_inv. *)
@@ -430,24 +452,9 @@ Theorem local_target_place_type_mods:
     type_place_target env bt = SOME bvt ==>
     ?ty. bvt = Type ty /\ target_place_type cenv bt = SOME (ValPT ty)
 Proof
-  recInduct base_assignment_target_induct >> rpt conj_tac
-  >- (rpt gen_tac >>
-      simp[target_root_def, Once well_typed_expr_def, target_place_type_def,
-           AllCaseEqs()] >>
-      rpt strip_tac >> gvs[expr_sim_inv_mods_def] >> metis_tac[])
-  >- simp[target_root_def] >>
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  gvs[target_root_def, Once well_typed_expr_def, AllCaseEqs()] >>
-  first_x_assum drule_all >> strip_tac >> gvs[]
-  >- (Cases_on `ty` >> gvs[subscript_vtype_def] >>
-      simp[target_place_type_def]) >>
-  `env.type_defs = get_tenv cx` by
-    fs[expr_sim_inv_mods_def, env_consistent_def, env_context_consistent_def] >>
-  Cases_on `tgt_ty` >> gvs[attribute_type_def] >>
-  `attribute_type (get_tenv cx) (StructT p) s = SOME ty` by
-    simp[attribute_type_def] >>
-  drule_all stmtSimAssignAttrTheory.attribute_type_struct_field >>
-  strip_tac >> simp[target_place_type_def]
+  rpt strip_tac >> irule local_target_place_type_layout >>
+  qexistsl_tac [`env`,`id`] >>
+  fs[expr_sim_inv_mods_def, env_consistent_def, env_context_consistent_def]
 QED
 
 Theorem local_entry_type_kept_mods[local]:

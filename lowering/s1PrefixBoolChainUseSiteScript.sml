@@ -50,7 +50,7 @@ Theorem bool_chain_dispatch_observation_at_test:
      e = IfExp (BaseT BoolT) c (Literal (BaseT BoolT) (BoolL T)) residual) /\
   body_expr_prefix_ok cx e /\
   bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (bool_chain_operands p (SUC k) e) ==>
-  body_expr_full_ok cx c /\
+  body_expr_full_ok_mods [(NONE,cx_tops cx)] [] cx c /\
   ((?s tv s'. eval_expr cx c s = (INL tv,s')) ==>
    bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (bool_chain_operands p k residual)) /\
   body_expr_prefix_ok cx e

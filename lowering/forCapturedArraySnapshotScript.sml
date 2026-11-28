@@ -465,7 +465,7 @@ Resume for_array_snapshot_length_setup[round_frame]:
   `for_nonslot_code_frame mods c cx env ctx func id e loop_body loc rv vv av em tL` by
     (`for_nonslot_code_frame mods c cx env ctx func id e loop_body loc rv vv av em u` by
        (qpat_assum `loc = case vv_location vv of NONE => LocMemory | SOME l => l` SUBST1_TAC >> simp[]) >>
-     qpat_x_assum `for_nonslot_code_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _`
+     qpat_x_assum `for_nonslot_code_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_tac o REWRITE_RULE [for_nonslot_code_frame_def]) >>
      `vv_place_ptr c cx em u rv vv /\ vv_place_ptr c cx em tL rv vv` by
        (conj_tac >> fs[vv_post_def]) >>
