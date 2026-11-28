@@ -9894,33 +9894,40 @@ Proof
 QED
 *)
 Theorem intcall_args_full:
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
+  !DF lo d ctx shadow_ctx PG func shadow_func mods exps caller_src caller_tops
+   src callee_tops vis cenv cx tenv ty ann name
    es dflt es0 mut nr args ret ss rr dflts.
     (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
+     module_body_inv mods caller_src caller_tops cenv cx) /\
     shadow_body_inv_mods mods exps ctx shadow_ctx /\
     body_const_cells_agree mods cx tenv es0 /\
-    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
-    lookup_callable_function cx.in_deploy name tops =
+    expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
+    ALOOKUP mods src = SOME callee_tops /\
+    (src = NONE \/ context_function_live cx (src,name)) /\
+    ((src = NONE /\ mods = [(NONE,callee_tops)]) \/
+     MEM (src,name) (linked_live_functions mods exps)) /\
+    lookup_callable_function cx.in_deploy name callee_tops =
       SOME (mut,nr,args,dflts,ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+    (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+    MEM (FunctionDecl vis mut nr rr name args dflts ret ss) callee_tops /\
+    (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot) /\
     LENGTH args - LENGTH dflts <= LENGTH es /\
     LENGTH es <= LENGTH args /\
-    (~MEM (NONE,name) cx.stk ==> body_exprs_full_ok_mods mods exps cx es) /\
+    (~MEM (src,name) cx.stk ==> body_exprs_full_ok_mods mods exps cx es) /\
     (!s1 vs t1.
-       ~MEM (NONE,name) cx.stk /\
+       ~MEM (src,name) cx.stk /\
        eval_exprs cx es s1 = (INL vs,t1) ==>
-       body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (NONE,name))
+       body_exprs_full_ok_mods mods exps (cx with stk updated_by CONS (src,name))
          (DROP (LENGTH dflts - (LENGTH args - LENGTH es))
-           (subst_consts_exprs (module_consts_env tops []) dflts))) ==>
+           (subst_consts_exprs_mods (consts_env_mods mods) dflts))) ==>
     !st0 sa sb shadow_sa shadow_sb s0 G0 tn0 kc out f P Q R.
       (!v. storage_trace_frame (f v)) /\
       (!v. cs_appends (kc v)) /\
-      comp_bind (compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt))
+      comp_bind (compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt))
         kc sa = (out, sb) /\
       comp_bind
         (compile_expr (gas_shadow_env T cenv) ty
-           (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)))
+           (gas_shadow_expr (Call ann (IntCall (src,name)) es dflt)))
         kc shadow_sa = (out, shadow_sb) /\
       gas_shadow_state sa shadow_sa /\ gas_shadow_state sb shadow_sb /\
       gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -9938,7 +9945,7 @@ Theorem intcall_args_full:
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
       gas_admissible
-        (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
+        (bind (eval_expr cx (Call ann (IntCall (src,name)) es dflt)) f)
         P es0 /\
       (!e. P (INR e) ==> expr_vv_res_ok (INR e)) /\
       return_buf_frame d cenv sa s0 /\
@@ -9954,27 +9961,27 @@ Theorem intcall_args_full:
          (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s) ==>
          R H res ee gt r) /\
       (!vv sm prev penv rtv es1 t G tn.
-         compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa =
+         compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt) sa =
            (vv, sm) /\
          kc vv sm = (out, sb) /\
          (!H. valid_horizon cx st0 H es1.storage_trace ==>
-            intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name
+            intcall_entry_full_mods (DF, lo, d) H mods src callee_tops ctx func cenv cx tenv name
               es sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv
               es1 t G tn) /\
          body_const_cells_agree mods cx tenv es1 /\
          (!i. active_inst func i t ==> frag_reachable ctx func s0 func i t) /\
          (?H. valid_horizon cx st0 H es1.storage_trace) /\
-         gas_admissible (bind (intcall_rest cx name mut nr ss prev rtv) f)
+         gas_admissible (bind (intcall_rest_at cx src name mut nr ss prev rtv) f)
            P es1 ==>
          gas_outcome_full_mods
            (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
            cenv.ce_modules cx st0
-           (bind (intcall_rest cx name mut nr ss prev rtv) f) (es1, t, G, tn)
+           (bind (intcall_rest_at cx src name mut nr ss prev rtv) f) (es1, t, G, tn)
            Q R) ==>
       gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
         cenv.ce_modules cx st0
-        (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
+        (bind (eval_expr cx (Call ann (IntCall (src,name)) es dflt)) f)
         (es0, s0, G0, tn0) Q R
 Proof
   cheat
