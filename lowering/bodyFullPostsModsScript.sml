@@ -445,7 +445,7 @@ Proof
   simp[expr_post_mods_def]
 QED
 
-Theorem vv_post_mods_body_entry[local]:
+Theorem vv_post_mods_body_entry:
   cenv_module_pins_mods mods cenv /\
   module_body_inv mods src tops cenv cx /\
   stmt_state_rel H ctx func cenv cx es' s ==>
