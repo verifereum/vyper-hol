@@ -43,6 +43,7 @@ Ancestors bodyCallSupport bodyFullShadowBodyInv vyperCallOutcome[qualified,ignor
   compileUnit intCallAllocationProps[qualified]
   bodyFullPredsMods[qualified]
   gasOutcomeFullMods[qualified]
+  gasExemptCertMods[qualified]
 
   venomInst[qualified,ignore_grammar]
   bodyFullIfExpReach[qualified,ignore_grammar]
@@ -7550,7 +7551,7 @@ Proof
 QED
 
 Theorem args_invoke_reach[local]:
-  body_inv tops ctx cenv cx /\ MEM fn ctx.ctx_functions /\
+  contract_inv mods exps ctx cenv cx /\ MEM fn ctx.ctx_functions /\
   gas_origin_ptr_path (D,lo,explicit,ctx,fn,PG)
     (s0,G0,tn0) [] (OK entry,Ga,tna) /\
   gas_path ctx fn entry n (OK t) /\ gas_path ctx fn t m (OK u) ==>
@@ -7569,7 +7570,8 @@ Proof
   qpat_assum `gas_path ctx fn s0 (n + m) (OK u)`
     (mp_then Any mp_tac bodyFullIfExpReachTheory.gas_path_reach) >>
   disch_then (qspecl_then [`fn`,`s0`,`u`] mp_tac) >>
-  simp[contextRawReachableTheory.frag_reachable_start] >> metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi]
+  simp[contextRawReachableTheory.frag_reachable_start] >>
+  metis_tac[bodyFullIfExpReachTheory.body_inv_no_phi_mods]
 QED
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
@@ -7695,7 +7697,7 @@ Proof
 QED
 
 Theorem args_compile_expr_alloca_interval[local]:
-  compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
+  compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt) sa = (vv,sm) /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
   MEM inst (fn_insts func) /\ inst.inst_opcode = ALLOCA /\
   inst.inst_outputs = [p] /\ sa.cs_next_id <= inst.inst_id /\
@@ -8235,15 +8237,15 @@ Theorem args_scope_outcome[local]:
   ~s.vs_halted /\
   (!obs. source (es with gas_obs := obs) =
          scoped ((es with scopes := scopes) with gas_obs := obs)) /\
-  gas_outcome_full (DF,lo,explicit,ctx,fn,PG) tops cx st0 scoped
+  gas_outcome_full_mods (DF,lo,explicit,ctx,fn,PG) mods cx st0 scoped
     (es with scopes := scopes,s,G,tn) Q R ==>
-  gas_outcome_full (DF,lo,explicit,ctx,fn,PG) tops cx st0 source
+  gas_outcome_full_mods (DF,lo,explicit,ctx,fn,PG) mods cx st0 source
     (es,s,G,tn) Q R
 Proof
   strip_tac >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ scoped _ _ _`
-    (strip_assume_tac o ONCE_REWRITE_RULE [gas_outcome_full_def]) >>
-  rewrite_tac[gas_outcome_full_def] >>
+  qpat_x_assum `gas_outcome_full_mods _ _ _ _ scoped _ _ _`
+    (strip_assume_tac o ONCE_REWRITE_RULE [gasOutcomeFullModsTheory.gas_outcome_full_mods_def]) >>
+  rewrite_tac[gasOutcomeFullModsTheory.gas_outcome_full_mods_def] >>
   qexists_tac `marks`
   >- (disj1_tac >> conj_tac
       >- (qpat_assum `gas_bad_storage_at cx st0 scoped _ s marks` mp_tac >>
@@ -8282,33 +8284,33 @@ Proof
           evaluation_state_component_equality] >>
      irule fragGasModeTheory.gas_marked_path_from_mem >>
      simp[cj 1 fragGasPathMemTheory.gas_path_mem_rules]) >>
-  `gas_exempt_cert T tops (ctx,fn) (rest T)
+  `gas_exempt_cert_mods T mods (ctx,fn) (rest T)
      ((es with scopes := scopes) with gas_obs := [],s)
      marks (err,ee) (leaf,finish')` by
     (simp[Abbr `rest`] >>
-     drule gasExemptCertTheory.gas_exempt_cert_start_gas_obs >> simp[]) >>
-  drule_all gasExemptCertTheory.gas_exempt_cert_bind_bool >> simp[]
+     drule gasExemptCertModsTheory.gas_exempt_cert_start_gas_obs_mods >> simp[]) >>
+  drule_all gasExemptCertModsTheory.gas_exempt_cert_mods_bind_bool >> simp[]
 QED
 
 Theorem args_rest_outcome[local]:
   ~u.vs_halted /\
   (!locked. lock_if_nr cx nr (is_view_mut mut) ed = (INL (),locked) ==>
     !tail. source (ed with gas_obs := tail) =
-      bind (intcall_rest cx name mut nr ss ed.scopes rtv) f
+      bind (intcall_rest_at cx src name mut nr ss ed.scopes rtv) f
         ((ed with scopes := [penv]) with gas_obs := tail)) /\
   (!err failed. lock_if_nr cx nr (is_view_mut mut) ed = (INR err,failed) ==>
     !tail. source (ed with gas_obs := tail) =
       (INR err, failed with <|scopes := ed.scopes; gas_obs := tail|>)) /\
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
-    (bind (intcall_rest cx name mut nr ss ed.scopes rtv) f)
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
+    (bind (intcall_rest_at cx src name mut nr ss ed.scopes rtv) f)
     (ed with scopes := [penv],u,G,tn) Q R /\
   (!err failed.
     lock_if_nr cx nr (is_view_mut mut) ed = (INR err,failed) /\
     (!tail. source (ed with gas_obs := tail) =
       (INR err,failed with gas_obs := tail)) ==>
-    gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+    gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
       source (ed,u,G,tn) Q R) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) mods cx st0
     source (ed,u,G,tn) Q R
 Proof
   strip_tac >>
@@ -8317,10 +8319,10 @@ Proof
   Cases_on `lock_res`
   >- (irule args_scope_outcome >>
       conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl_tac [`bind (intcall_rest cx name mut nr ss ed.scopes rtv) f`,
+      qexistsl_tac [`bind (intcall_rest_at cx src name mut nr ss ed.scopes rtv) f`,
                      `[penv]`] >>
       fs[oneTheory.one]) >>
-  qpat_x_assum `!err failed. _ /\ _ ==> gas_outcome_full _ _ _ _ _ _ _ _`
+  qpat_x_assum `!err failed. _ /\ _ ==> gas_outcome_full_mods _ _ _ _ _ _ _ _`
     irule >> qexistsl_tac [`y`,`locked`] >>
   simp[] >>
   `locked.scopes = ed.scopes` by metis_tac[ctorDeployLoweringSourceTheory.lock_if_nr_scopes] >>
@@ -8800,16 +8802,16 @@ Proof
 QED
 
 Theorem intcall_args_supplied_source:
-  get_module_code cx NONE = SOME tops /\
+  get_module_code cx src = SOME tops /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
-  ~MEM (NONE,name) cx.stk /\ LENGTH es <= LENGTH args /\
+  ~MEM (src,name) cx.stk /\ LENGTH es <= LENGTH args /\
   LENGTH args - LENGTH es <= LENGTH dflts ==>
-  eval_expr cx (Call ann (IntCall (NONE,name)) es dflt) =
+  eval_expr cx (Call ann (IntCall (src,name)) es dflt) =
    bind (eval_exprs cx es) (\vs.
      bind get_scopes (\prev.
        bind (finally
          (ignore_bind (set_scopes [FEMPTY])
-           (eval_exprs (cx with stk updated_by CONS (NONE,name))
+           (eval_exprs (cx with stk updated_by CONS (src,name))
              (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)))
          (set_scopes prev)) (\dvs.
        bind (lift_option_type (bind_arguments (get_tenv cx) args (vs ++ dvs))
@@ -8817,7 +8819,7 @@ Theorem intcall_args_supplied_source:
        bind (lift_option_type (evaluate_type (get_tenv cx) ret)
                 "IntCall eval ret") (\rtv.
        ignore_bind (lock_if_nr cx nr (is_view_mut mut))
-         (bind (push_function (NONE,name) penv cx) (\cxf.
+         (bind (push_function (src,name) penv cx) (\cxf.
           bind (finally_unless_halt
             (finally
               (try (ignore_bind (eval_stmts cxf ss) (return NoneV)) handle_function)
