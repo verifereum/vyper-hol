@@ -60,7 +60,7 @@ QED
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
-  rw[body_stmt_full_ok_def] >>
+  rw[bodyFullPredsModsTheory.body_stmt_full_ok_mods_def] >>
   Cases_on `is_word_type typ`
   >- (irule body_annassign_word_full >> metis_tac[]) >>
   `0 < type_memory_bytes cenv typ` by
@@ -118,7 +118,7 @@ QED
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
-  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  rpt strip_tac >> rewrite_tac[bodyFullPredsModsTheory.body_stmt_full_ok_mods_def] >> rpt strip_tac >>
   irule compile_assert_reason_frag_full >> metis_tac[]
 QED
 *)
@@ -709,7 +709,7 @@ QED
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
-  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  rpt strip_tac >> rewrite_tac[bodyFullPredsModsTheory.body_stmt_full_ok_mods_def] >> rpt strip_tac >>
   `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
     (drule body_inv_contract >>
      MATCH_ACCEPT_TAC contract_inv_singleton_source_modules) >>
@@ -909,7 +909,7 @@ QED
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
-  rpt strip_tac >> rewrite_tac[body_stmt_full_ok_def] >> rpt strip_tac >>
+  rpt strip_tac >> rewrite_tac[bodyFullPredsModsTheory.body_stmt_full_ok_mods_def] >> rpt strip_tac >>
   irule compile_raise_reason_frag_full >> metis_tac[]
 QED
 *)

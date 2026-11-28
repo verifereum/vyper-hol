@@ -1,6 +1,7 @@
 (* Route a nested immutable iterator through its selected-array snapshot. *)
 Theory s1PrefixForImmutableSubplace
 Ancestors
+  bodySingletonStmtGuards[qualified] stmtExprAllocationPreProps[qualified]
   s1PrefixPreds s1PrefixDefs bodyFullForIteratorHeld
   bodyFullForArrayBranch bodyFullForArrayRound bodyFullForExprCut
   bodyFullForFacts contractInvContextProps
@@ -15,14 +16,22 @@ val _ = Parse.hide "body";
 Proof
   rpt gen_tac >> disch_then (mk_asm "prepared") >> disch_then (mk_asm "snapshot") >>
   strip_tac >>
+  drule_then strip_assume_tac type_stmt_for_projection >>
+  drule_then strip_assume_tac supported_stmt_for_projection >>
+  `?bd. expr_type e = ArrayT typ bd` by
+    (drule_then strip_assume_tac vyperTypeSystemTheory.type_stmt_for_array_bound >> simp[]) >>
+  drule_all_then strip_assume_tac bodySingletonStmtGuardsTheory.singleton_stmt_expr_guards >>
   `expr_body_pre cenv cx env e es` by
-    (drule_then strip_assume_tac type_stmt_for_projection >>
-     drule_then strip_assume_tac supported_stmt_for_projection >>
-     `?bd. expr_type e = ArrayT typ bd` by
-       (drule_then strip_assume_tac vyperTypeSystemTheory.type_stmt_for_array_bound >> simp[]) >>
+    (mp_tac (Q.INST [`s` |-> `(For id typ (Array e) n body)`,
+                     `tops` |-> `tops`, `ctx` |-> `ctx`]
+        stmtExprAllocationPrePropsTheory.body_inv_stmt_expr_pre_singleton) >>
+     simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+          supportedStmtTraverseTheory.supported_iterator_exists_def] >>
+     disch_then irule >> strip_tac >>
      irule nonslot_iterator_expr_pre >>
-     conj_tac >- first_assum ACCEPT_TAC >>
-     qexistsl [`bd`,`ctx`,`id`,`body`,`n`,`tops`,`typ`] >> simp[]) >>
+     fs[bodySimTheory.body_inv_split_def,
+        bodyInvSplitTheory.module_body_inv_def, alistTheory.ALOOKUP_def] >>
+     metis_tac[]) >>
   asm_x "prepared" irule >> conj_tac
   >- suspend "capture" >>
   rpt conj_tac >> first_assum ACCEPT_TAC

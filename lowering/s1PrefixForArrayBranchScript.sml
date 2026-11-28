@@ -1,6 +1,7 @@
 (* Request-prefix companion to bodyFullForArrayBranch. *)
 Theory s1PrefixForArrayBranch
 Ancestors
+  bodySingletonStmtGuards[qualified] stmtExprAllocationPreProps[qualified]
   s1PrefixPreds bodyFullForArrayBranch s1PrefixDefs
   s1PrefixForArrayRound s1PrefixForRounds s1PrefixCompose s1PrefixOfVV
   bodyTypedTargetScope[qualified,ignore_grammar] bodyInvCodeProps
@@ -40,8 +41,18 @@ Proof
     suspend "toplevel_scope" >>
   `!nid. e = TopLevelName (expr_type e) nid ==>
      IS_SOME (supported_immutable_type tops nid)` by suspend "toplevel_immutable" >>
+  drule_all_then strip_assume_tac bodySingletonStmtGuardsTheory.singleton_stmt_expr_guards >>
   `expr_body_pre cenv cx env e es` by
-    (irule nonslot_iterator_expr_pre >> goal_assum (drule_at Any) >>
+    (mp_tac (Q.INST [`s` |-> `(For id typ (Array e) n loop_body)`,
+                     `tops` |-> `tops`, `ctx` |-> `ctx`]
+        stmtExprAllocationPrePropsTheory.body_inv_stmt_expr_pre_singleton) >>
+     simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+          supportedStmtTraverseTheory.supported_iterator_exists_def] >>
+     disch_then irule >> strip_tac >>
+     irule nonslot_iterator_expr_pre >>
+     fs[bodySimTheory.body_inv_split_def,
+        bodyInvSplitTheory.module_body_inv_def, alistTheory.ALOOKUP_def] >>
+     metis_tac[]) >>
      qexistsl_tac [`bd`,`ctx`,`id`,`loop_body`,`n`,`tops`,`typ`] >> simp[]) >>
   mp_tac (Q.INST [`c` |-> `cenv`,`sty` |-> `typ`,`fty` |-> `typ`,
       `loop_body` |-> `loop_body`,`sa0` |-> `sa`,`shadow_sa0` |-> `shadow_sa`]

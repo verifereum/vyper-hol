@@ -1,6 +1,7 @@
 (* Request-prefix companion to bodyFullRaiseCustomError. *)
 Theory s1PrefixRaiseCustomError
 Ancestors
+  bodySingletonStmtGuards[qualified]
   s1PrefixPreds bodyFullRaiseCustomError s1PrefixDefs s1PrefixOfVV
   bodyFullCustomErrorSource bodyFullCustomErrorLayout gasShadow s1PrefixExtCallPosList
   stmtSimDefs loweringPosts vyperState list pair
@@ -9,8 +10,12 @@ Ancestors
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >> Cases_on `err` >> rename1 `CustomError id pos kw` >>
+  drule_all_then strip_assume_tac bodySingletonStmtGuardsTheory.singleton_stmt_expr_guards >>
+  drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_main_code >>
+  fs[bodySimTheory.body_inv_split_def, exprSimHypsDefsTheory.expr_sim_inv_split_def,
+     bodyInvSplitTheory.module_body_inv_def, alistTheory.ALOOKUP_def] >>
   drule_all custom_error_raise_source >>
-  disch_then (qx_choosel_then [`params`,`args`] strip_assume_tac) >>
+  disch_then (qx_choosel_then [`etops`,`params`,`args`] strip_assume_tac) >>
   `body_exprs_full_ok cx args /\ body_exprs_prefix_ok cx args` by metis_tac[] >>
   pure_rewrite_tac[stmt_frag_prefix_def, stmt_frag_full_pre_def] >>
   rpt gen_tac >> strip_tac >>

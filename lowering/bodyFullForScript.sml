@@ -55,6 +55,8 @@ Theorem compile_for_frag_full:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ it n body) = SOME env' /\
     stmt_exprs_ok cenv (For id typ it n body) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (For id typ it n body) /\
     call_evaluation_safe cx (int_calls_stmt (For id typ it n body)) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
