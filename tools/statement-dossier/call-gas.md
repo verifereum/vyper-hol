@@ -18,8 +18,8 @@ The compiler produces deployment bytecode and runtime bytecode for the module.
 Deployment establishes the installed code at the target. For every well-typed
 transaction to that address, `deployed H` supplies source typing, source
 deployment and `storage_ok H`. The starting storage decodes on the regions
-in `H`, which fit, are pairwise identical or disjoint within each storage kind
-and avoid the transient lock slots.
+in `H`, which fit and are pairwise identical or disjoint within each storage
+kind. The transient regions are disjoint from the transient lock slots.
 
 ## call_tx_well_typed
 
