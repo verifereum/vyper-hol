@@ -322,7 +322,6 @@ Proof
   suspend "physical_run"
 QED
 
-(* SCRATCH MEASUREMENT: original continuation.
 Resume source_array_init_owned_sequence[physical_run]:
   `s.vs_alloca_next < dimword (:256)` by
     (drule alloca_frontier_inv_bound >> decide_tac) >>
@@ -398,11 +397,8 @@ Resume source_array_init_owned_sequence[physical_run]:
   rule_assum_tac (PURE_REWRITE_RULE [pairTheory.FST, pairTheory.SND]) >>
   asm_simp_tac bool_ss [] >> metis_tac[]
 QED
-*)
 
-(* SCRATCH MEASUREMENT: original continuation.
 Finalise source_array_init_owned_sequence
-*)
 
 val world_fields =
   ["vs_accounts", "vs_transient", "vs_logs", "vs_outcomes", "vs_requests",
