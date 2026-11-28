@@ -119,46 +119,6 @@ Proof
 QED
 
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
- rpt gen_tac >> strip_tac >>
- drule deploy_ctor_entry_immutable_layout >> strip_tac >>
- drule deploy_ctor_entry_immutable_config >> strip_tac >>
- drule deploy_ctor_module_locations >> strip_tac >>
- drule_all deploy_ctor_storage_vars_rel >> strip_tac >>
- gvs[] >>
- drule deploy_ctor_body_source_frame >> strip_tac >>
- drule_all deploy_ctor_entry_ambient >> strip_tac >>
- `actual.vs_accounts = vs.vs_accounts /\ actual.vs_transient = vs.vs_transient /\
-  actual.vs_logs = vs.vs_logs /\ actual.vs_requests = vs.vs_requests /\
-  actual.vs_pending_deletions = vs.vs_pending_deletions` by
-  (fs[abi_encoder_registered_effect_def, vars_pc_only_def,
-      venom_state_component_equality]) >>
- `local_ptrs_rel func (ce1 with ce_ctor_exit_label := SOME lbl) [scope] actual` by
-  (qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
-   simp[local_ptrs_rel_def, local_region_def]) >>
- `immutables_rel (ce1 with ce_ctor_exit_label := SOME lbl) tx.target NONE T
-   (es0 with outcomes := SOME vs.vs_outcomes) actual` by
-  (qpat_x_assum `immutables_rel _ _ _ _ _ _` mp_tac >> simp[immutables_rel_def]) >>
- `vs.vs_call_ctx.cc_address = tx.target` by fs[call_ctx_rel_def] >>
- `call_ctx_rel (tx with created_in_tx := T) vs.vs_call_ctx vs.vs_tx_ctx
-    vs.vs_block_ctx` by fs[call_ctx_rel_def, tx_env_ok_def] >>
- `vs.vs_code = tx.code` by
-  (qpat_x_assum `gas_variant _ _` mp_tac >>
-   rewrite_tac[gas_variant_def] >>
-   disch_then (mp_tac o Q.AP_TERM `\s. s.vs_code`) >>
-   simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def] >>
-   gvs[deploy_state_rel_def]) >>
- simp[state_rel_def, deploy_evaluation_context_def, initial_evaluation_context_def,
-      storage_rel_def, transient_rel_def,
-      accounts_rel_def, logs_rel_def, contract_storage_def, contract_transient_def,
-      accountsRelPropsTheory.storage_agree_refl,
-      accountsRelPropsTheory.accounts_agree_refl,
-      accountsRelPropsTheory.transient_agree_refl,
-      accounts_agree_def, transient_agree_def, storage_agree_def]
-QED
-*)
 Theorem deploy_ctor_entry_body_state_rel:
  !policy tops deploy_bc runtime_bc rp unit dout prog cplan am tx es vs
  body cenv nr key ut imm lbl sa sb sj se sp sf func mut nr' body' am_c es0
@@ -194,5 +154,48 @@ Theorem deploy_ctor_entry_body_state_rel:
  state_rel H func cenv (deploy_evaluation_context tops am tx)
    (es0 with outcomes := SOME vs.vs_outcomes) actual
 Proof
-  cheat
+ rpt gen_tac >> strip_tac >>
+ `cenv.ce_modules = [(NONE,tops)]` by
+   (qpat_x_assum `cenv = ce1 with ce_ctor_exit_label := SOME lbl` kall_tac >>
+    qpat_x_assum `deploy_ctor_code _ _ _ _ _` mp_tac >>
+    simp[deploy_ctor_code_def] >> strip_tac >>
+    drule deploy_frame_register_static_fields >> strip_tac >>
+    PairCases_on `cf` >>
+    gvs[set_constructor_package_target_def, package_constructor_def,
+        update_cenv_nonreentrant_def, build_compile_env_ce_modules]) >>
+ drule deploy_ctor_entry_immutable_layout >> strip_tac >>
+ drule deploy_ctor_entry_immutable_config >> strip_tac >>
+ drule deploy_ctor_module_locations >> strip_tac >>
+ drule_all deploy_ctor_storage_vars_rel >> strip_tac >>
+ gvs[] >>
+ drule deploy_ctor_body_source_frame >> strip_tac >>
+ drule_all deploy_ctor_entry_ambient >> strip_tac >>
+ `actual.vs_accounts = vs.vs_accounts /\ actual.vs_transient = vs.vs_transient /\
+  actual.vs_logs = vs.vs_logs /\ actual.vs_requests = vs.vs_requests /\
+  actual.vs_pending_deletions = vs.vs_pending_deletions` by
+  (fs[abi_encoder_registered_effect_def, vars_pc_only_def,
+      venom_state_component_equality]) >>
+ `local_ptrs_rel func (ce1 with ce_ctor_exit_label := SOME lbl) [scope] actual` by
+  (qpat_x_assum `local_ptrs_rel _ _ _ _` mp_tac >>
+   simp[local_ptrs_rel_def, local_region_def]) >>
+ `immutables_rel (ce1 with ce_ctor_exit_label := SOME lbl) tx.target NONE T
+   (es0 with outcomes := SOME vs.vs_outcomes) actual` by
+  (qpat_x_assum `immutables_rel _ _ _ _ _ _` mp_tac >> simp[immutables_rel_def]) >>
+ `vs.vs_call_ctx.cc_address = tx.target` by fs[call_ctx_rel_def] >>
+ `call_ctx_rel (tx with created_in_tx := T) vs.vs_call_ctx vs.vs_tx_ctx
+    vs.vs_block_ctx` by fs[call_ctx_rel_def, tx_env_ok_def] >>
+ `vs.vs_code = tx.code` by
+  (qpat_x_assum `gas_variant _ _` mp_tac >>
+   rewrite_tac[gas_variant_def] >>
+   disch_then (mp_tac o Q.AP_TERM `\s. s.vs_code`) >>
+   simp[deploy_entry_state_def, entry_venom_state_def, init_venom_state_def] >>
+   gvs[deploy_state_rel_def]) >>
+ simp[state_rel_def, deploy_evaluation_context_def, initial_evaluation_context_def,
+      storage_rel_def, transient_rel_def,
+      accounts_rel_def, logs_rel_def, contract_storage_def, contract_transient_def,
+      accountsRelPropsTheory.storage_agree_refl,
+      accountsRelPropsTheory.accounts_agree_refl,
+      accountsRelPropsTheory.transient_agree_refl,
+      accounts_agree_def, transient_agree_def, storage_agree_def] >>
+ rpt strip_tac >> gvs[alistTheory.ALOOKUP_def, AllCaseEqs()]
 QED
