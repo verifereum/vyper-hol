@@ -700,10 +700,12 @@ Theorem vyper_call_correct_deployed:
       run_call es = SOME (r, es') /\
       (frame_starved es r es' \/
        calldata_result_rel H tops am tx es r es') /\
-      (LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete ==>
-       deployed tops runtime_bc (transaction_world am r es') tx.target /\
-       !tx'. tx'.target = tx.target ==>
-         storage_ok H (transaction_world am r es') tx')
+      !tx'.
+        LENGTH es.contexts = 1 /\ ~MEM tx.target es'.rollback.toDelete /\
+        tx'.target = tx.target
+        ==>
+        deployed tops runtime_bc (transaction_world am r es') tx.target /\
+        storage_ok H (transaction_world am r es') tx'
 Proof
   rpt gen_tac >> strip_tac >>
   `runtime_bc <> []` by
@@ -718,7 +720,7 @@ Proof
     (CONJUNCTS_THEN2 assume_tac assume_tac)) >>
   qexistsl_tac [`r`, `es'`] >> asm_rewrite_tac[] >>
   reverse conj_tac
-  >- (strip_tac >> Cases_on `r = INR NONE`
+  >- (qx_gen_tac `tx'` >> strip_tac >> Cases_on `r = INR NONE`
       >- (simp[transaction_world_def] >>
           qpat_x_assum `frame_resource_starved es r es' \/
              calldata_result_rel H tops am tx es r es'`
