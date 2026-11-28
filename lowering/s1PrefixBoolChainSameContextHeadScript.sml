@@ -11,8 +11,14 @@ Libs
 
 Theorem bool_chain_same_context_head_prefix_ok:
   !cx h.
+    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+      EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+        (vyperTypeCallGraph$int_calls_expr h)) /\
     ~(?ann nid args dr. h = Call ann (IntCall nid) args dr) /\
-    (!a. expr_size a < expr_size h ==> body_expr_prefix_ok cx a) ==>
+    (!a. expr_size a < expr_size h /\
+        (!ts. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,ts)] ==>
+          EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+            (vyperTypeCallGraph$int_calls_expr a)) ==> body_expr_prefix_ok cx a) ==>
     body_expr_prefix_ok cx h
 Proof
   rpt gen_tac >> strip_tac >>

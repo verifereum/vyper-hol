@@ -16,7 +16,7 @@ Proof
   fs[expr_sim_inv_mods_def] >> metis_tac[]
 QED
 
-Theorem toplevel_ctor_source_layout_mods:
+Theorem toplevel_ctor_source_layout:
   contract_inv mods exps ctx cenv cx /\
   expr_body_pre_mods mods cenv cx env (TopLevelName ann (src,id)) es /\
   cenv.ce_is_ctor /\ dead_lo_ok_mods H D lo cenv cx /\
@@ -66,45 +66,4 @@ Proof
   conj_tac >- fs[] >>
   qpat_assum `tops = _` SUBST_ALL_TAC >>
   qexistsl_tac [`pre`, `post`, `vis`, `slot`] >> fs[]
-QED
-
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  drule body_inv_main_code >> strip_tac >>
-  drule body_inv_contract >> strip_tac >>
-  drule contract_inv_cenv_modules >> strip_tac >>
-  drule_all body_inv_expr_body_pre_mods >> strip_tac >>
-  `dead_lo_ok_mods H D lo cenv cx` by
-    fs[dead_lo_ok_mods_singleton] >>
-  qpat_x_assum `src = cenv.ce_module` SUBST_ALL_TAC >>
-  drule_all toplevel_ctor_source_layout_mods >>
-  Cases_on `cenv.ce_module` >> gvs[alistTheory.ALOOKUP_def, AllCaseEqs(),
-    compileUnitTheory.make_struct_fields_map_mods_singleton] >>
-  metis_tac[]
-QED
-*)
-Theorem toplevel_ctor_source_layout:
-  (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-  expr_body_pre_mods mods cenv cx env (TopLevelName ann (cenv.ce_module,id)) es /\
-  cenv.ce_is_ctor /\ dead_lo_ok H D lo cenv cx /\
-  stmt_state_rel H ctx func cenv cx es s /\
-  ghost_inv_at D lo d cenv cx es G tn s /\
-  src = cenv.ce_module /\
-  FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
-  ALOOKUP es.immutables cx.txn.target = SOME imms /\
-  FLOOKUP (get_source_immutables src imms) id = SOME (rt,v) /\
-  evaluate_type (get_tenv cx) ann = SOME rt ==>
-  cx_tops cx = tops /\ off + type_memory_size rt <= lo /\
-  ?pre post vis ty slot.
-    tops = pre ++ VariableDecl vis Immutable id ty slot :: post /\
-    off = compute_immutables_len
-      (get_struct_fields (make_struct_fields_map tops)) pre /\
-    ty = ann /\
-    type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ty =
-      type_memory_size rt
-Proof
-  cheat
 QED

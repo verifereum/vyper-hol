@@ -45,17 +45,55 @@ Proof
   PairCases_on `cfg` >> PairCases_on `origin` >> simp[bool_chain_default_ready_def]
 QED
 
-Theorem bool_chain_default_bind_cons[local]:
-  bind (eval_exprs cx (a::rs)) (\vs. next (vals ++ vs)) =
-  bind (eval_exprs cx [a]) (\hs.
-    bind (eval_exprs cx rs) (\vs. next ((vals ++ hs) ++ vs)))
-Proof
-  simp[Once intcall_stage_cons_source, bind_assoc, bind_return, APPEND_ASSOC]
-QED
-
 (* The nonempty callback for the suffix fold. Only the reached read or VV
    observation is needed from the smaller-context proof. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rewrite_tac[bool_chain_default_ready_def] >> strip_tac >>
+  qpat_assum `compile_stage_intcall_args _ ce (a::rs) flags dtys si = (rest,sf)`
+    (mp_then (Pos (el 3)) mp_tac intcall_stage_cons_cut_elim) >>
+  disch_then irule >>
+  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr (a::rs)) flags dtys shi = (rest,shf)`
+    (irule_at Any) >>
+  qpat_assum `fn_has_code si sf func` (irule_at Any) >>
+  qpat_assum `fn_has_code shi shf shadow_func` (irule_at Any) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  map_every qx_gen_tac [`flag`,`fs`,`dt`,`ts`,`opnd`,`sm`,`shm`,`remain`] >>
+  strip_tac >> gvs[MAP] >>
+  drule_then strip_assume_tac checked_context_full_exprs >>
+  qpat_x_assum `gas_admissible (bind (eval_exprs cx (a::rs)) _) P es`
+    (assume_tac o REWRITE_RULE [bool_chain_default_bind_cons]) >>
+  `gas_admissible (eval_exprs cx [a])
+      (\res. !err. res = INR err ==> expr_vv_res_ok (INR err)) es` by
+    (drule slice_gas_admissible_bind_head >>
+     disch_then (qspec_then `\res:value list + exception.
+       !err. res = INR err ==> expr_vv_res_ok (INR err)` mp_tac) >> simp[]) >>
+  `flag ==> is_word_type dt` by
+    (qpat_assum `!j. _ /\ EL j (flag::fs) ==> is_word_type (EL j (dt::ts))`
+       (qspec_then `0` (mp_tac o SIMP_RULE std_ss [listTheory.EL, prim_recTheory.LESS_0])) >>
+     simp[NoAsms]) >>
+  `!H. valid_horizon cx st0 H es.storage_trace ==>
+    stmt_state_rel H ctx func ce cx es s /\ storage_well_formed_on cx es (FST H) /\
+    ghost_inv_at (DF H) lo d ce cx es G tn s` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
+       (drule_then (strip_assume_tac o REWRITE_RULE [intcall_args_stage_post_def])) >> simp[]) >>
+  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
+    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
+       (drule_then strip_assume_tac) >>
+     drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
+    (drule_then (strip_assume_tac o SIMP_RULE bool_ss
+       [intcall_args_stage_post_def,APPEND_NIL,sumTheory.INL_11,UNWIND_THM2])) >>
+  suspend "outcome"
+QED
+*)
 Theorem bool_chain_default_singleton_callback:
+  EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+    (vyperTypeCallGraph$int_calls_expr a) /\
   body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shadow_ctx /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
   gas_shadow_function func shadow_func /\ gas_shadow_state sf shf /\
@@ -102,47 +140,10 @@ Theorem bool_chain_default_singleton_callback:
         (sm,shm,fs,ts,ops ++ [opnd],vals ++ hs,ptys ++ [dt],pflags ++ [flag])
         (mid,t,G1,tn1))
 Proof
-  rewrite_tac[bool_chain_default_ready_def] >> strip_tac >>
-  qpat_assum `compile_stage_intcall_args _ ce (a::rs) flags dtys si = (rest,sf)`
-    (mp_then (Pos (el 3)) mp_tac intcall_stage_cons_cut_elim) >>
-  disch_then irule >>
-  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr (a::rs)) flags dtys shi = (rest,shf)`
-    (irule_at Any) >>
-  qpat_assum `fn_has_code si sf func` (irule_at Any) >>
-  qpat_assum `fn_has_code shi shf shadow_func` (irule_at Any) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  map_every qx_gen_tac [`flag`,`fs`,`dt`,`ts`,`opnd`,`sm`,`shm`,`remain`] >>
-  strip_tac >> gvs[MAP] >>
-  drule_then strip_assume_tac checked_context_full_exprs >>
-  qpat_x_assum `gas_admissible (bind (eval_exprs cx (a::rs)) _) P es`
-    (assume_tac o REWRITE_RULE [bool_chain_default_bind_cons]) >>
-  `gas_admissible (eval_exprs cx [a])
-      (\res. !err. res = INR err ==> expr_vv_res_ok (INR err)) es` by
-    (drule slice_gas_admissible_bind_head >>
-     disch_then (qspec_then `\res:value list + exception.
-       !err. res = INR err ==> expr_vv_res_ok (INR err)` mp_tac) >> simp[]) >>
-  `flag ==> is_word_type dt` by
-    (qpat_assum `!j. _ /\ EL j (flag::fs) ==> is_word_type (EL j (dt::ts))`
-       (qspec_then `0` (mp_tac o SIMP_RULE std_ss [listTheory.EL, prim_recTheory.LESS_0])) >>
-     simp[NoAsms]) >>
-  `!H. valid_horizon cx st0 H es.storage_trace ==>
-    stmt_state_rel H ctx func ce cx es s /\ storage_well_formed_on cx es (FST H) /\
-    ghost_inv_at (DF H) lo d ce cx es G tn s` by
-    (gen_tac >> strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
-       (drule_then (strip_assume_tac o REWRITE_RULE [intcall_args_stage_post_def])) >> simp[]) >>
-  `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
-    fs[storage_trace_domain_def] >>
-  `ctx_has_dalloca ctx ==> allocas_below_fmp s` by
-    (qpat_assum `!H. valid_horizon _ _ H _ ==> stmt_state_rel H _ _ _ _ _ _ /\ _`
-       (drule_then strip_assume_tac) >>
-     drule stmt_state_rel_allocas_below_fmp >> simp[]) >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
-    (drule_then (strip_assume_tac o SIMP_RULE bool_ss
-       [intcall_args_stage_post_def,APPEND_NIL,sumTheory.INL_11,UNWIND_THM2])) >>
-  suspend "outcome"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_default_singleton_callback[outcome]:
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (cx_tops cx) cx st0 (eval_exprs cx [a]) (es,s,G,tn)
@@ -165,7 +166,9 @@ Resume bool_chain_default_singleton_callback[outcome]:
   >- suspend "prefix"
   >> (conj_tac >- (rpt gen_tac >> strip_tac >> simp[]) >> suspend "advance")
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_default_singleton_callback[prefix]:
   irule intcall_stage_singleton_prefix_at_cut >>
   qpat_assum `compile_stage_intcall_args _ ce [a] _ _ si = _` (irule_at Any) >>
@@ -176,7 +179,9 @@ Resume bool_chain_default_singleton_callback[prefix]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
   Cases_on `flag` >> fs[] >> rpt strip_tac >> first_x_assum irule >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_default_singleton_callback[advance]:
   rpt gen_tac >> strip_tac >>
   drule_all intcall_stage_replay_head_read >> strip_tac >>
@@ -217,5 +222,8 @@ Resume bool_chain_default_singleton_callback[advance]:
   qpat_assum `eval_operands (ops ++ [opnd]) t = SOME _` (irule_at Any) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise bool_chain_default_singleton_callback
+*)

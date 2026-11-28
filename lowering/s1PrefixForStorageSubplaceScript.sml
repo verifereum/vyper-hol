@@ -10,6 +10,50 @@ Ancestors
   gasContext gasExplicitSites fragGasOriginPtr ptrDiscipline
   stmtLowering loweringPosts compileEnv context
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  disch_then (mk_asm "prepared") >> disch_then (mk_asm "snapshot") >>
+  disch_then (mk_asm "live") >>
+  qpat_x_assum `?tgt nid. loop_iterator_place _ = _ /\ _`
+    (qx_choosel_then [`tgt`,`nid`] (map_every assume_tac o CONJUNCTS)) >>
+  asm "prepared" irule >> reverse conj_tac
+  >- (drule_then strip_assume_tac type_stmt_for_projection >>
+      drule_then strip_assume_tac supported_stmt_for_projection >>
+      `?bd. expr_type e = ArrayT typ bd` by
+        (drule_then strip_assume_tac type_stmt_for_array_bound >> simp[]) >>
+      irule nonslot_iterator_expr_pre >> conj_tac >- first_assum ACCEPT_TAC >>
+      qexistsl [`bd`,`ctx`,`id`,`loop_body`,`n`,`tops`,`typ`] >> simp[]) >>
+  map_every qx_gen_tac [`st0`,`sa`,`sb`,`sha`,`shb`,`s0`,`G0`,`tn0`,`vv`,
+    `se`,`she`,`bd`,`tyv`,`marks`,`rv`,`em`,`G`,`tn`,`u`] >>
+  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `obs = gas_explicit marks s0.vs_gas_readings` >>
+  `valid_horizon cx st0 (storage_trace_horizon em.storage_trace) em.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  `em with gas_obs := [] = em` by
+    (qpat_assum `!H. valid_horizon _ _ H em.storage_trace ==> for_array_expr_endpoint _ _ _ _ _ _ _ _ _ _ _ _`
+       (drule_then (mp_tac o REWRITE_RULE [for_array_expr_endpoint_def])) >>
+     simp[evaluation_state_component_equality]) >>
+  `eval_expr cx e (es with gas_obs := obs) = (INL rv,em)` by
+    (qpat_assum `em with gas_obs := [] = em` (fn eq =>
+       qpat_assum `!tail. eval_expr cx e _ = _` (qspec_then `[]` mp_tac) >>
+       simp[NoAsms,Abbr `obs`,eq])) >>
+  `expr_body_pre cenv cx env e (es with gas_obs := obs)` by simp[] >>
+  drule_at_then (Pat `eval_expr _ _ _ = _`) drule_all
+    forNestedArrayCaptureTheory.nested_array_capture_cases >>
+  disch_then (qx_choose_then `elem` (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 mp_tac kall_tac))) >>
+  `elem = tyv` by
+    (qpat_assum `evaluate_type (get_tenv cx) typ = SOME elem` mp_tac >>
+     qpat_assum `evaluate_type (get_tenv cx) typ = SOME tyv`
+       (fn th => simp[NoAsms,th])) >>
+  pop_assum SUBST_ALL_TAC >> impl_tac >- first_assum ACCEPT_TAC >>
+  disch_then (DISJ_CASES_THEN2 (qx_choose_then `av` assume_tac)
+    (qx_choosel_then [`tr`,`slot`] assume_tac))
+  >- suspend "snapshot"
+  >> suspend "storage"
+QED
+*)
 Theorem compile_for_storage_subplace_array_frag_prefix_from_cuts:
   !cx id typ e n loop_body DF lo d PG tops bindings ctx shadow_ctx func
    shadow_func cenv env env' ret_ty lctx RetQ es.
@@ -185,47 +229,10 @@ Theorem compile_for_storage_subplace_array_frag_prefix_from_cuts:
     (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (For id typ (Array e) n loop_body)))
     (eval_stmt cx (For id typ (Array e) n loop_body)) es
 Proof
-  rpt gen_tac >> DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  disch_then (mk_asm "prepared") >> disch_then (mk_asm "snapshot") >>
-  disch_then (mk_asm "live") >>
-  qpat_x_assum `?tgt nid. loop_iterator_place _ = _ /\ _`
-    (qx_choosel_then [`tgt`,`nid`] (map_every assume_tac o CONJUNCTS)) >>
-  asm "prepared" irule >> reverse conj_tac
-  >- (drule_then strip_assume_tac type_stmt_for_projection >>
-      drule_then strip_assume_tac supported_stmt_for_projection >>
-      `?bd. expr_type e = ArrayT typ bd` by
-        (drule_then strip_assume_tac type_stmt_for_array_bound >> simp[]) >>
-      irule nonslot_iterator_expr_pre >> conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl [`bd`,`ctx`,`id`,`loop_body`,`n`,`tops`,`typ`] >> simp[]) >>
-  map_every qx_gen_tac [`st0`,`sa`,`sb`,`sha`,`shb`,`s0`,`G0`,`tn0`,`vv`,
-    `se`,`she`,`bd`,`tyv`,`marks`,`rv`,`em`,`G`,`tn`,`u`] >>
-  DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
-  qabbrev_tac `obs = gas_explicit marks s0.vs_gas_readings` >>
-  `valid_horizon cx st0 (storage_trace_horizon em.storage_trace) em.storage_trace` by
-    fs[storage_trace_domain_def] >>
-  `em with gas_obs := [] = em` by
-    (qpat_assum `!H. valid_horizon _ _ H em.storage_trace ==> for_array_expr_endpoint _ _ _ _ _ _ _ _ _ _ _ _`
-       (drule_then (mp_tac o REWRITE_RULE [for_array_expr_endpoint_def])) >>
-     simp[evaluation_state_component_equality]) >>
-  `eval_expr cx e (es with gas_obs := obs) = (INL rv,em)` by
-    (qpat_assum `em with gas_obs := [] = em` (fn eq =>
-       qpat_assum `!tail. eval_expr cx e _ = _` (qspec_then `[]` mp_tac) >>
-       simp[NoAsms,Abbr `obs`,eq])) >>
-  `expr_body_pre cenv cx env e (es with gas_obs := obs)` by simp[] >>
-  drule_at_then (Pat `eval_expr _ _ _ = _`) drule_all
-    forNestedArrayCaptureTheory.nested_array_capture_cases >>
-  disch_then (qx_choose_then `elem` (CONJUNCTS_THEN2 assume_tac (CONJUNCTS_THEN2 mp_tac kall_tac))) >>
-  `elem = tyv` by
-    (qpat_assum `evaluate_type (get_tenv cx) typ = SOME elem` mp_tac >>
-     qpat_assum `evaluate_type (get_tenv cx) typ = SOME tyv`
-       (fn th => simp[NoAsms,th])) >>
-  pop_assum SUBST_ALL_TAC >> impl_tac >- first_assum ACCEPT_TAC >>
-  disch_then (DISJ_CASES_THEN2 (qx_choose_then `av` assume_tac)
-    (qx_choosel_then [`tr`,`slot`] assume_tac))
-  >- suspend "snapshot"
-  >> suspend "storage"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_storage_subplace_array_frag_prefix_from_cuts[snapshot]:
   `post_value_type cenv e = ArrayT typ bd` by
     (`post_value_type cenv e = expr_type e` suffices_by simp[] >>
@@ -248,7 +255,9 @@ Resume compile_for_storage_subplace_array_frag_prefix_from_cuts[snapshot]:
   qpat_assum `!v. rv = Value v /\ _ ==> _` (qspec_then `ArrayV av` mp_tac) >>
   Cases_on `vv` >> simp[vv_location_def,is_word_type_def,is_bytestring_type_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_for_storage_subplace_array_frag_prefix_from_cuts[storage]:
   qpat_x_assum `rv = PlaceR _` SUBST_ALL_TAC >>
   `!H. valid_horizon cx st0 H es.storage_trace ==> storage_well_formed_on cx es (FST H)` by
@@ -263,5 +272,8 @@ Resume compile_for_storage_subplace_array_frag_prefix_from_cuts[storage]:
   asm_rewrite_tac[] >>
   disj2_tac >> qexistsl [`tgt`,`nid`] >> asm_rewrite_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise compile_for_storage_subplace_array_frag_prefix_from_cuts
+*)

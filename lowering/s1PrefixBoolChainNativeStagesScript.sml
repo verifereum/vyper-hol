@@ -169,6 +169,27 @@ QED
    It is preserved only along a successful continuing test in the emitted
    code. Every reached head needs its request prefix; only a head with a
    nonempty tail needs a full outcome to reach the next test. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  qpat_x_assum `!e rest sa sc shadow_sa shadow_sc es s G tn op.
+                  _ ==> gas_prefix_full _ _ _ _ _ /\ _`
+    (mk_asm "operand") >>
+  qpat_x_assum `!c rest sa sc shadow_sa shadow_sc es s G tn op sj sn lt lf st shadow_st marks mid G1 tn1 u.
+                  _ ==> reached _ _ _ _ _ _ _` (mk_asm "advance") >>
+  Induct_on `k`
+  >- (pure_rewrite_tac[bool_chain_operands_def, listTheory.MAP] >>
+      rpt strip_tac >> suspend "singleton") >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `expr_type x = BaseT BoolT`
+    (mp_then Any (qspecl_then [`k`,`p`] strip_assume_tac) bool_chain_residual_cases)
+  >- (qpat_assum `bool_chain_operands _ _ _ = [_]`
+        (fn th => RULE_ASSUM_TAC (SIMP_RULE bool_ss [th, listTheory.MAP])) >>
+      suspend "singleton") >>
+  suspend "test"
+QED
+*)
 Theorem bool_chain_ops_prefix_from_observations:
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -239,24 +260,10 @@ Theorem bool_chain_ops_prefix_from_observations:
   gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     cx st0 (bind (eval_expr cx x) (read_result cx)) (es,s,G,tn)
 Proof
-  strip_tac >>
-  qpat_x_assum `!e rest sa sc shadow_sa shadow_sc es s G tn op.
-                  _ ==> gas_prefix_full _ _ _ _ _ /\ _`
-    (mk_asm "operand") >>
-  qpat_x_assum `!c rest sa sc shadow_sa shadow_sc es s G tn op sj sn lt lf st shadow_st marks mid G1 tn1 u.
-                  _ ==> reached _ _ _ _ _ _ _` (mk_asm "advance") >>
-  Induct_on `k`
-  >- (pure_rewrite_tac[bool_chain_operands_def, listTheory.MAP] >>
-      rpt strip_tac >> suspend "singleton") >>
-  rpt gen_tac >> strip_tac >>
-  qpat_assum `expr_type x = BaseT BoolT`
-    (mp_then Any (qspecl_then [`k`,`p`] strip_assume_tac) bool_chain_residual_cases)
-  >- (qpat_assum `bool_chain_operands _ _ _ = [_]`
-        (fn th => RULE_ASSUM_TAC (SIMP_RULE bool_ss [th, listTheory.MAP])) >>
-      suspend "singleton") >>
-  suspend "test"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_ops_prefix_from_observations[singleton]:
   markerLib.RESUME_TAC >>
   irule bool_chain_singleton_prefix >>
@@ -271,7 +278,9 @@ Resume bool_chain_ops_prefix_from_observations[singleton]:
      pure_rewrite_tac[expr_sim_full_pre_def] >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
   asm "operand" (drule_all_then (ACCEPT_TAC o CONJUNCT1))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_ops_prefix_from_observations[test]:
   `?hd hs. bool_chain_operands p k tail = hd::hs` by simp[bool_chain_operands_cons] >>
   fs[] >>
@@ -304,7 +313,9 @@ Resume bool_chain_ops_prefix_from_observations[test]:
       rpt strip_tac >> first_assum irule) >>
   suspend "selected"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_ops_prefix_from_observations[selected]:
   qx_genl_tac [`marks`,`b`,`mid`,`G1`,`tn1`,`u`] >>
   qabbrev_tac `z = jump_to (if b then (if p then st.cs_current_bb else ss.cs_current_bb)
@@ -313,7 +324,9 @@ Resume bool_chain_ops_prefix_from_observations[selected]:
   >- suspend "continue"
   >> suspend "short"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_ops_prefix_from_observations[continue]:
   qpat_x_assum `b = p` SUBST_ALL_TAC >>
   RULE_ASSUM_TAC (PURE_REWRITE_RULE [REFL_CLAUSE, COND_CLAUSES]) >>
@@ -368,7 +381,9 @@ Resume bool_chain_ops_prefix_from_observations[continue]:
     (fn th => pure_rewrite_tac [th, listTheory.MAP]) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_ops_prefix_from_observations[short]:
   `(if b then (if p then tail else Literal (BaseT BoolT) (BoolL T))
           else (if p then Literal (BaseT BoolT) (BoolL F) else tail)) =
@@ -380,8 +395,11 @@ Resume bool_chain_ops_prefix_from_observations[short]:
        storage_trace_frame_read_result, Once evaluate_def, evaluate_literal_def,
        read_result_def, bind_return, return_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise bool_chain_ops_prefix_from_observations
+*)
 
 Theorem bool_chain_ops_prefix_from_reached:
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\

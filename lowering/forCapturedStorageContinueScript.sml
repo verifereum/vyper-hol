@@ -49,7 +49,7 @@ Proof
     (irule body_const_cells_agree_expr >>
      qpat_assum `eval_expr cx e start = _`
        (irule_at (Pat `eval_expr _ _ _ = _`)) >>
-     drule_then (assume_tac o cj 2) exprBodyPrePropsTheory.expr_body_pre_static_facts >>
+     drule_then strip_assume_tac exprBodyPrePropsTheory.expr_body_pre_static_facts >>
      simp[Abbr `start`]) >>
   suspend "capture"
 QED
@@ -217,13 +217,10 @@ QED
 (* SCRATCH MEASUREMENT: original continuation.
 Resume for_captured_storage_continue_rounds_cut[initial]:
   drule_then strip_assume_tac type_stmt_for_projection >>
-  drule_all_then (assume_tac o CONJUNCT1) exprSimSourceTheory.expr_body_pre_eval_result >>
+  drule_all_then assume_tac bodySimStmtFactsTheory.expr_body_pre_eval_result >>
   `lookup_scopes id em.scopes = NONE` by
-    (map_every (fn q => qpat_assum q mp_tac)
-       [`expr_sim_inv c cx env em`, `id NOTIN FDOM env.var_types`] >>
-     POP_ASSUM_LIST (K ALL_TAC) >>
-     Cases_on `lookup_scopes id em.scopes` >>
-     simp[expr_sim_inv_def,env_consistent_def,env_scopes_consistent_def,FLOOKUP_DEF] >> metis_tac[]) >>
+    (irule exprSimInvScopeAbsenceTheory.expr_sim_inv_scope_lookup_none >>
+     goal_assum (drule_at Any) >> first_assum ACCEPT_TAC) >>
   `stride = type_slot_size tyv /\ type_memory_bytes c typ = 32 * type_slot_size tyv` by
     (qpat_assum `stride = elem_size_in_location c (slot_loc tr) typ` SUBST1_TAC >>
      simp[slot_loc_def,NoAsms] >>
@@ -416,9 +413,13 @@ Resume for_captured_storage_continue_rounds_cut[prepare_body]:
      qpat_assum `!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x`
        (drule_then assume_tac) >>
      qpat_assum `!x. not_fresh_at sa x ==> _` (drule_then (ACCEPT_TAC o cj 3))) >>
+  `bc.ce_modules = c.ce_modules` by
+    (qpat_assum `bc with <|ce_vars := _; ce_var_type := _; ce_dynarray_capacity := _|> = c`
+       (mp_tac o AP_TERM ``\env. env.ce_modules``) >> simp[NoAsms]) >>
   `!H. dead_lo_ok H (DF H) lo bc cx` by
     (gen_tac >> qpat_assum `same_frame c bc`
        (fn th => rewrite_tac[dead_lo_ok_def,MATCH_MP bodyPtrDefsTheory.same_frame_is_ctor th]) >>
+     qpat_assum `bc.ce_modules = c.ce_modules` (rewrite_tac o single) >>
      qpat_assum `!H. dead_lo_ok H (DF H) lo c cx`
        (qspec_then `H` (ACCEPT_TAC o REWRITE_RULE [dead_lo_ok_def]))) >>
   `frame_ret_ok_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ bc ret_ty` by suspend "ret_frame" >>
@@ -674,7 +675,7 @@ Resume for_captured_storage_continue_rounds_cut[extra]:
       (assume_tac o PURE_REWRITE_RULE[eq])) >>
   qpat_assum `!a rs ei ss gg tt bc bc1 env_b exit incr sb0 sb1 sh0 sh1 idx p dst lvo len inst nb bop vs. _ ==> _`
     irule >>
-  rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE (qexists `env_b` >> first_assum ACCEPT_TAC))) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >-
     (`valid_horizon cx st0 (storage_trace_horizon ei.storage_trace) ei.storage_trace` by
        (qpat_assum `storage_trace_domain cx st0 ei.storage_trace`
@@ -684,7 +685,8 @@ Resume for_captured_storage_continue_rounds_cut[extra]:
           (drule_then (strip_assume_tac o
             REWRITE_RULE [forCapturedStorageLiveTheory.for_captured_storage_live_def]))) >>
      first_assum ACCEPT_TAC) >>
-  rpt (conj_tac >- (first_assum ACCEPT_TAC ORELSE (qexists `env_b` >> first_assum ACCEPT_TAC))) >>
+  conj_tac >- (qexists `env_b` >> first_assum ACCEPT_TAC) >>
+  rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   qexistsl [`bc`,`bc1`,`bop`,`dst`,`exit`,`idx`,`incr`,`ai`,`len`,`lvo`,`nb`,`p`,
             `sbCopy`,`sbBody`,`shadow_sbCopy`,`shadow_sbBody`,`vs`] >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>

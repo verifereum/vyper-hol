@@ -463,113 +463,6 @@ Proof
 QED
 
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `!bb label. lookup_block label func.fn_blocks = SOME bb ==>
-     phi_prefix_length bb.bb_instructions = 0` by
-    (drule_all deploy_ptr_entry_normalized >> simp_tac bool_ss [LET_THM] >>
-     strip_tac >> first_assum ACCEPT_TAC) >>
-  drule_all (SIMP_RULE bool_ss [] (Q.SPEC `T` deploy_ptr_entry_prefix_source_mode)) >> strip_tac >>
-  (* The prefix is pointer-safe at every horizon: its path is. *)
-  `!HS. (!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
-           fuel unit.cu_context func [] H qt actual) ==>
-        !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
-          fuel unit.cu_context func [] FEMPTY entry_taint
-          (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)` by
-    (qx_gen_tac `HS` >> strip_tac >>
-     qspecl_then [`deploy_dead HS tops runtime_bc am tx`, `imm_len tops`,
-       `unit.cu_context`, `func`, `[]`, `FEMPTY`, `entry_taint`,
-       `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
-       `0`, `H`, `qt`, `actual`] mp_tac gas_path_ptr_safe_run >>
-     impl_tac
-     >- (rpt conj_tac
-         >- (qpat_x_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
-               (qspecl_then [`deploy_dead HS tops runtime_bc am tx`, `{}`] mp_tac) >>
-             disch_then (mp_tac o MATCH_MP gas_origin_ptr_path_projections) >>
-             simp[])
-         >- first_assum ACCEPT_TAC >>
-         first_assum ACCEPT_TAC) >>
-     disch_then ACCEPT_TAC) >>
-  gvs[] >>
-  drule deploy_ptr_ctor_environment >> strip_tac >>
-  `deploy_typing_ok tops am tx /\ supported_program tops /\
-   supported_program_deploy tops` by fs[deploy_source_ok_def] >>
-  `immutables_rel ce (deploy_evaluation_context tops am tx).txn.target
-     ce.ce_module ce.ce_is_ctor (es0 with outcomes := SOME vs.vs_outcomes) actual` by
-    (simp[] >> irule ctorDeployLoweringEntryImmutableMemoryTheory.deploy_ctor_zero_memory_immutables >>
-     goal_assum (drule_at Any) >> simp[] >>
-     goal_assum (drule_at Any) >>
-     simp[deploy_evaluation_context_def, initial_evaluation_context_def] >>
-     rpt strip_tac >>
-     qpat_x_assum `!a. a < imm_len tops ==> read_byte _ _ = _` drule >>
-     disch_tac >> irule listTheory.LIST_EQ >>
-     simp[valueEncodingProofsTheory.LENGTH_mem_bytes_at_proof] >>
-     rpt strip_tac >>
-     rewrite_tac[GSYM listTheory.EL] >>
-     simp[valueEncodingProofsTheory.EL_mem_bytes_at] >> fs[read_byte_def]) >>
-  `!HS. state_rel HS func ce (deploy_evaluation_context tops am tx)
-     (es0 with outcomes := SOME vs.vs_outcomes) actual` by
-    (qx_gen_tac `HS` >>
-     `local_ptrs_rel func ce es0.scopes actual` by simp[] >>
-     drule_all deploy_ptr_entry_actual_state_rel >> simp[]) >>
-
-  `!p. p < imm_len tops ==>
-     mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 []` by
-    (rpt strip_tac >>
-     qpat_x_assum `!a. a < imm_len tops ==> read_byte _ _ = _` drule >>
-     disch_tac >> irule listTheory.LIST_EQ >>
-     simp[valueEncodingProofsTheory.LENGTH_mem_bytes_at_proof] >>
-     rpt strip_tac >>
-     rewrite_tac[GSYM listTheory.EL] >>
-     simp[valueEncodingProofsTheory.EL_mem_bytes_at] >> fs[read_byte_def]) >>
-  `immutable_alloca_sep func ce (deploy_evaluation_context tops am tx)
-     es0 actual` by
-    (drule (cj 2 deploy_ctor_entry_immutable_resources) >>
-     disch_then irule >> fs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
-  `immutable_alloca_sep func ce (deploy_evaluation_context tops am tx)
-     (es0 with outcomes := SOME vs.vs_outcomes) actual` by
-    (qpat_x_assum `immutable_alloca_sep func ce _ es0 actual` mp_tac >>
-     simp[immutable_alloca_sep_def] >> tautLib.TAUT_TAC) >>
-  `immutable_base_zero ce actual` by
-    (drule_all prefix_entry_immutable_base >> simp[]) >>
-  `alloca_room unit.cu_context func actual` by
-    (irule deploy_ctor_frontier_alloca_room >>
-     qexistsl [`imm_len tops`,`mk_inst 0 STOP [] []`] >> simp[] >>
-     drule deploy_imm_budget_ok >> simp[]) >>
-  `!HS. ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
-      (deploy_evaluation_context tops am tx)
-      (es0 with outcomes := SOME vs.vs_outcomes) H qt actual` by
-    (qx_gen_tac `HS` >>
-     qpat_assum `!HS. deploy_ptr_inv HS _ _ _ _ _ _ _ _` (qspec_then `HS` assume_tac) >>
-     drule ctorDeployLoweringFrameTheory.deploy_ctor_return_metadata >> strip_tac >>
-     drule prefix_entry_immutable_operand >> strip_tac >>
-     fs[deploy_ptr_inv_def] >>
-     simp[ghost_inv_at_def, return_buf_ptr_def, stor_taint_ok_at_def,
-       deploy_dead_def, deploy_evaluation_context_def, initial_evaluation_context_def,
-       ptrDisciplineTheory.op_prov_def] >>
-     reverse conj_tac
-     >- (simp[gasContextTheory.cx_tops_def, get_module_code_def] >> metis_tac[]) >>
-     rpt gen_tac >> strip_tac >> conj_tac
-     >- metis_tac[] >>
-     rpt gen_tac >> strip_tac >>
-     `ALL_DISTINCT (MAP FST fargs)` by
-       metis_tac[ctorDeployMemoryRunMemEntryTaskInputsTheory.ctor_task_source_params] >>
-     `FLOOKUP scope name = SOME entry` by
-       fs[lookup_scopes_def, AllCaseEqs()] >>
-     drule_all decoded_arguments_scope_lookup >> strip_tac >>
-     qpat_x_assum `!j. j < LENGTH fargs ==> _` drule >> strip_tac >>
-     gvs[local_region_def] >>
-     qpat_x_assum `!mem'. _ ==> val_in_memory _ _ _ mem'` irule >>
-     fs[mem_agree_outside_def, pred_setTheory.DISJOINT_DEF,
-        pred_setTheory.EXTENSION] >> metis_tac[]) >>
-  `return_buf_frame NONE ce sa actual` by
-    (drule ctor_checked_code_return_buf >> simp[loweringPostsTheory.return_buf_frame_def]) >>
-  qexistsl [`actual`,`H`,`qt`] >> simp[] >> qx_gen_tac `HS` >>
-  simp[stmt_state_rel_def] >> first_assum ACCEPT_TAC
-QED
-*)
 Theorem deploy_ptr_entry_prefix_related_raw_checked:
   deploy_phases policy tops (assemble prog,runtime_bc) (rp,unit,dout,prog,cplan) /\
   deploy_source_ok tops am tx /\ deploy_state_rel tops (assemble prog') am tx es /\
@@ -608,5 +501,112 @@ Theorem deploy_ptr_entry_prefix_related_raw_checked:
           fuel unit.cu_context func [] FEMPTY entry_taint
           (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>))
 Proof
-  cheat
+  strip_tac >>
+  `ce.ce_modules = [(NONE,tops)]` by
+    (qpat_assum `deploy_ctor_code _ _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [deploy_ctor_code_def]) >>
+     drule ctorDeployLoweringFrameTheory.deploy_frame_register_static_fields >>
+     strip_tac >>
+     qpat_x_assum `set_constructor_package_target _ _ = _` mp_tac >>
+     PairCases_on `cf` >>
+     simp[set_constructor_package_target_def, package_constructor_def,
+          update_cenv_nonreentrant_def] >> strip_tac >>
+     gvs[build_compile_env_ce_modules]) >>
+  `!bb label. lookup_block label func.fn_blocks = SOME bb ==>
+     phi_prefix_length bb.bb_instructions = 0` by
+    (drule_all deploy_ptr_entry_normalized >> simp_tac bool_ss [LET_THM] >>
+     strip_tac >> first_assum ACCEPT_TAC) >>
+  drule_all (SIMP_RULE bool_ss [] (Q.SPEC `T` deploy_ptr_entry_prefix_source_mode)) >> strip_tac >>
+  (* The prefix is pointer-safe at every horizon: its path is. *)
+  `!HS. (!fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+           fuel unit.cu_context func [] H qt actual) ==>
+        !fuel. ptr_safe_run (deploy_dead HS tops runtime_bc am tx) (imm_len tops)
+          fuel unit.cu_context func [] FEMPTY entry_taint
+          (vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>)` by
+    (qx_gen_tac `HS` >> strip_tac >>
+     qspecl_then [`deploy_dead HS tops runtime_bc am tx`, `imm_len tops`,
+       `unit.cu_context`, `func`, `[]`, `FEMPTY`, `entry_taint`,
+       `vs with <|vs_prev_bb := NONE; vs_current_bb := lbl; vs_inst_idx := 0|>`,
+       `0`, `H`, `qt`, `actual`] mp_tac gas_path_ptr_safe_run >>
+     impl_tac
+     >- (conj_tac
+         >- (qpat_x_assum `!D explicit. gas_origin_ptr_path _ _ _ _`
+               (qspecl_then [`deploy_dead HS tops runtime_bc am tx`, `{}`] mp_tac) >>
+             disch_then (mp_tac o MATCH_MP gas_origin_ptr_path_projections) >>
+             simp[]) >>
+         conj_tac >> first_assum ACCEPT_TAC) >>
+     disch_then ACCEPT_TAC) >>
+  gvs[] >>
+  drule deploy_ptr_ctor_environment >> strip_tac >>
+  `deploy_typing_ok tops am tx /\ supported_program tops /\
+   supported_program_deploy tops` by fs[deploy_source_ok_def] >>
+  `!p. p < imm_len tops ==>
+     mem_bytes_at p 1 actual.vs_memory = mem_bytes_at p 1 []` by
+    (rpt strip_tac >>
+     qpat_x_assum `!a. a < imm_len tops ==> read_byte _ _ = _` drule >>
+     disch_tac >> irule listTheory.LIST_EQ >>
+     simp[valueEncodingProofsTheory.LENGTH_mem_bytes_at_proof] >>
+     rpt strip_tac >>
+     rewrite_tac[GSYM listTheory.EL] >>
+     simp[valueEncodingProofsTheory.EL_mem_bytes_at] >> fs[read_byte_def]) >>
+  `immutables_rel ce (deploy_evaluation_context tops am tx).txn.target
+     ce.ce_module ce.ce_is_ctor (es0 with outcomes := SOME vs.vs_outcomes) actual` by
+    (simp[] >> irule ctorDeployLoweringEntryImmutableMemoryTheory.deploy_ctor_zero_memory_immutables >>
+     simp[deploy_evaluation_context_def, initial_evaluation_context_def] >>
+     qexistsl [`am`,`am_c`,`source_body`,`es0`,`mut`,`F`,`tops`,`tx`] >> simp[]) >>
+  `!HS. state_rel HS func ce (deploy_evaluation_context tops am tx)
+     (es0 with outcomes := SOME vs.vs_outcomes) actual` by
+    (qx_gen_tac `HS` >>
+     `local_ptrs_rel func ce es0.scopes actual` by simp[] >>
+     drule_all deploy_ptr_entry_actual_state_rel >> simp[]) >>
+  `immutable_alloca_sep func ce (deploy_evaluation_context tops am tx)
+     es0 actual` by
+    (drule (cj 2 deploy_ctor_entry_immutable_resources) >>
+     disch_then irule >> fs[ptrDisciplineTheory.allocas_from_def] >> metis_tac[]) >>
+  `immutable_alloca_sep func ce (deploy_evaluation_context tops am tx)
+     (es0 with outcomes := SOME vs.vs_outcomes) actual` by
+    (qpat_x_assum `immutable_alloca_sep func ce _ es0 actual` mp_tac >>
+     simp[immutable_alloca_sep_def] >> tautLib.TAUT_TAC) >>
+  `immutable_base_zero ce actual` by
+    (drule_all prefix_entry_immutable_base >> simp[]) >>
+  `alloca_room unit.cu_context func actual` by
+    (irule deploy_ctor_frontier_alloca_room >>
+     qexistsl [`imm_len tops`,`mk_inst 0 STOP [] []`] >> simp[] >>
+     drule deploy_imm_budget_ok >> simp[]) >>
+  `!HS. ghost_inv_at (deploy_dead HS tops runtime_bc am tx) (imm_len tops) NONE ce
+      (deploy_evaluation_context tops am tx)
+      (es0 with outcomes := SOME vs.vs_outcomes) H qt actual` by
+    (qx_gen_tac `HS` >>
+     qpat_assum `!HS. deploy_ptr_inv HS _ _ _ _ _ _ _ _` (qspec_then `HS` assume_tac) >>
+     drule ctorDeployLoweringFrameTheory.deploy_ctor_return_metadata >> strip_tac >>
+     drule prefix_entry_immutable_operand >> strip_tac >>
+     fs[deploy_ptr_inv_def] >>
+     simp[ghost_inv_at_def, return_buf_ptr_def, stor_taint_ok_at_def,
+       deploy_dead_def, deploy_evaluation_context_def, initial_evaluation_context_def,
+       ptrDisciplineTheory.op_prov_def] >>
+     reverse conj_tac
+     >- simp[immSectionDeadTheory.imm_section_dead_mods_def] >>
+     rpt gen_tac >> strip_tac >> conj_tac
+     >- metis_tac[] >>
+     rpt gen_tac >> strip_tac >>
+     `ALL_DISTINCT (MAP FST fargs)` by
+       metis_tac[ctorDeployMemoryRunMemEntryTaskInputsTheory.ctor_task_source_params] >>
+     `FLOOKUP scope name = SOME entry` by
+       fs[lookup_scopes_def, AllCaseEqs()] >>
+     drule_all decoded_arguments_scope_lookup >> strip_tac >>
+     qpat_x_assum `!j. j < LENGTH fargs ==> _` drule >> strip_tac >>
+     gvs[local_region_def] >>
+     qpat_x_assum `!mem'. _ ==> val_in_memory _ _ _ mem'` irule >>
+     fs[mem_agree_outside_def, pred_setTheory.DISJOINT_DEF,
+        pred_setTheory.EXTENSION] >> metis_tac[]) >>
+  `return_buf_frame NONE ce sa actual` by
+    (drule ctor_checked_code_return_buf >> simp[loweringPostsTheory.return_buf_frame_def]) >>
+  qexistsl [`actual`,`H`,`qt`] >> simp[] >> qx_gen_tac `HS` >>
+  irule stateRelProjTheory.stmt_state_rel_intro >>
+  simp[alistTheory.ALOOKUP_def] >>
+  conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!inst n base sz. MEM inst _ /\ _ ==> _` drule_all >> simp[]) >>
+  `ce with ce_module := NONE = ce` by simp[compile_env_component_equality] >>
+  simp[]
 QED

@@ -1,6 +1,7 @@
 (* The terminal default stage continues at the caller's actual INVOKE. *)
 Theory s1PrefixBoolChainDefaultsToInvoke
 Ancestors
+  bodyCallLiveness bodyInvCodeProps bodySim bodyInvSplit exprSimHypsDefs gasContext
   s1PrefixBoolChainPushedLockedRun s1PrefixBoolChainDefaultCallback
   s1PrefixIntCallArgsSource s1PrefixOfVV bodyFullIntCall bodyFullIntCallArgsTrace
   bodyFullIntCallReturnSource bodyFullIntCallDefs fragGasFocus ptrSafeRun
@@ -28,9 +29,12 @@ Theorem selected_entry_rest_prefix[local]:
      (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
      body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
        (subst_consts_stmts (module_consts_env tops []) ss)) /\
+  MEM (NONE,name) (vyperTypeContract$linked_live_functions [(NONE,tops)] []) /\
   LENGTH (remcode cx) <= rank /\
   (!c ys. LENGTH (remcode c) < rank /\
      (!ts. ALOOKUP c.sources c.txn.target = SOME [(NONE,ts)] ==>
+        EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+          (vyperTypeCallGraph$int_calls_stmts ys) /\
         stmts_loop_calls_ok [(NONE,ts)] ys) ==>
      body_stmts_prefix_ok c ys) /\
   gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
@@ -86,6 +90,12 @@ Proof
     (`(dflts,ss) <> ([],[])` by simp[] >>
      drule_all bodySimFullMainTheory.callable_remcode_decreases >>
      qpat_assum `pushed = _` SUBST1_TAC >> decide_tac) >>
+  drule_then assume_tac body_const_cells_agree_runtime_check >>
+  `EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (int_calls_stmts compiled)` by
+    (qpat_assum `compiled = _` SUBST1_TAC >>
+     fs[optionTheory.IS_SOME_EXISTS] >>
+     drule_all_then (ACCEPT_TAC o CONJUNCT1) callable_compiled_calls_live) >>
   qpat_x_assum `body_pg = _` SUBST_ALL_TAC >>
   drule_all_then ACCEPT_TAC bool_chain_pushed_locked_run_compiled
 QED
@@ -212,9 +222,12 @@ Theorem bool_chain_defaults_to_invoke_projected_prefix:
      (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
      body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
        (subst_consts_stmts (module_consts_env tops []) ss)) /\
+  MEM (NONE,name) (vyperTypeContract$linked_live_functions [(NONE,tops)] []) /\
   LENGTH (remcode cx) <= rank /\
   (!c ys. LENGTH (remcode c) < rank /\
      (!ts. ALOOKUP c.sources c.txn.target = SOME [(NONE,ts)] ==>
+        EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+          (vyperTypeCallGraph$int_calls_stmts ys) /\
         stmts_loop_calls_ok [(NONE,ts)] ys) ==>
      body_stmts_prefix_ok c ys) ==>
   gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -246,6 +259,23 @@ Resume bool_chain_defaults_to_invoke_projected_prefix[native_entry]:
     [`ops = _`,`vals = _`,`ptys = _`,`pflags = _`,`dc = _`] >>
   `well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt)` by
     (drule expr_body_pre_static_facts >> simp[]) >>
+  `cx_tops cx = tops` by drule_then (ACCEPT_TAC o CONJUNCT2) body_inv_main_code >>
+  `cx_tops cxd = tops` by fs[cx_tops_def, vyperContextTheory.get_module_code_def] >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx tenv es0` by
+    (qpat_assum `expr_sim_inv cenv cx tenv es0` (fn th =>
+       qpat_assum `cx_tops cx = tops` (fn code =>
+         ACCEPT_TAC (CONJUNCT1 (REWRITE_RULE [expr_sim_inv_split_def,code] th))))) >>
+  `expr_sim_inv_mods [(NONE,tops)] cenv cx tenv ee` by
+    (qpat_assum `expr_sim_inv cenv cx tenv ee` (fn th =>
+       qpat_assum `cx_tops cx = tops` (fn code =>
+         ACCEPT_TAC (CONJUNCT1 (REWRITE_RULE [expr_sim_inv_split_def,code] th))))) >>
+  `expr_sim_inv_mods [(NONE,tops)] (cenv_without_defaults cenv name) cxd
+      (tenv with current_src := NONE) ed` by
+    (qpat_assum `expr_sim_inv (cenv_without_defaults cenv name) cxd _ ed` (fn th =>
+       qpat_assum `cx_tops cxd = tops` (fn code =>
+         ACCEPT_TAC (CONJUNCT1 (REWRITE_RULE [expr_sim_inv_split_def,code] th))))) >>
+  `cenv.ce_module = NONE` by
+    fs[body_inv_split_def, cenv_module_pins_split_def, cenv_module_pins_mods_def] >>
   `?penv tv.
      ~u.vs_halted /\
      compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
@@ -266,20 +296,18 @@ Resume bool_chain_defaults_to_invoke_projected_prefix[native_entry]:
      (?H. valid_horizon cx st0 H ed.storage_trace) /\
      gas_admissible (bind (intcall_rest cx name mut nr ss ed.scopes tv) f)
        P (ed with scopes := [penv])` by
-    (irule (PURE_REWRITE_RULE [APPEND] intcall_args_after_defaults_data) >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
-     >- (qexists_tac `rtv` >> first_assum ACCEPT_TAC) >>
-     qpat_assum `lookup_callable_function cx.in_deploy name tops = SOME _` (irule_at Any) >>
-     qpat_assum `compile_stage_intcall_args _ cenv es _ _ st2 = (sup_ops,st2a)` (irule_at Any) >>
-     qpat_assum `compile_stage_intcall_args _ _ ds _ _ st2a = (def_ops,st3)` (irule_at Any) >>
-     qpat_assum `eval_operands _ u = SOME _` (irule_at Any) >>
-     qpat_assum `gas_path ctx func entry (LENGTH marks) (OK t)` (irule_at Any) >>
-     qpat_assum `gas_path ctx func t (LENGTH dm) (OK u)` (irule_at Any) >>
-     qpat_assum `expr_sim_inv cenv cx tenv ee` (irule_at Any) >>
-     qpat_assum `expr_sim_inv (cenv_without_defaults cenv name) cxd _ ed` (irule_at Any) >>
-     qpat_assum `cenv.ce_func_info _ = (result_count,rbs,pvs)` (irule_at Any) >>
-     qexistsl_tac [`svs`,`tna`,`pin`,`ilabel`,`gas_explicit_sites ctx shadow_ctx`,`PG`,`Ga`] >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+    (irule (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
+       (PURE_REWRITE_RULE [APPEND] intcall_args_after_defaults_data)) >>
+     qpat_assum `body_inv tops ctx cenv cx`
+       (strip_assume_tac o REWRITE_RULE [body_inv_split_def]) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     TRY (qexists_tac `rtv` >> first_assum ACCEPT_TAC >> NO_TAC) >>
+     TRY (map_every qexists_tac
+       [`Ga`,`PG`,`cxd`,`def_ops`,`dflts`,`dm`,`ds`,`ee`,`entry`,
+        `gas_explicit_sites ctx shadow_ctx`,`ilabel`,`marks`,`pin`,`pvs`,`rbs`,`result_count`,
+        `st2`,`st2a`,`st3`,`sup_ops`,`t`,`tna`,`ws1`,`svs`]) >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     simp[nsid_to_string_def] >> first_assum ACCEPT_TAC) >>
   suspend "continuation"
 QED
 
@@ -458,9 +486,12 @@ Theorem bool_chain_defaults_to_invoke_prefix:
      (nr /\ ~is_view_mut mut ==> ~cx.txn.is_static) ==>
      body_stmts_full_ok (cx with stk updated_by CONS (NONE,name))
        (subst_consts_stmts (module_consts_env tops []) ss)) /\
+  MEM (NONE,name) (vyperTypeContract$linked_live_functions [(NONE,tops)] []) /\
   LENGTH (remcode cx) <= rank /\
   (!c ys. LENGTH (remcode c) < rank /\
      (!ts. ALOOKUP c.sources c.txn.target = SOME [(NONE,ts)] ==>
+        EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+          (vyperTypeCallGraph$int_calls_stmts ys) /\
         stmts_loop_calls_ok [(NONE,ts)] ys) ==>
      body_stmts_prefix_ok c ys) ==>
   gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)

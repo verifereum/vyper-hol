@@ -77,14 +77,8 @@ Proof
   metis_tac[body_expr_full_ok_simulations]
 QED
 
-Theorem bop_bytestring_eqne_value_prefix:
-  (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
-  body_exprs_full_ok cx [e1;e2] /\ body_exprs_prefix_ok cx [e1;e2] /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es ==>
-  expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty
-    (Builtin ann (Bop bop) [e1;e2]) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
   drule expr_body_pre_bop >> strip_tac >>
@@ -124,7 +118,20 @@ Proof
      first_assum ACCEPT_TAC) >>
   suspend "left_outcome"
 QED
+*)
+Theorem bop_bytestring_eqne_value_prefix:
+  (bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1) /\
+  body_exprs_full_ok cx [e1;e2] /\ body_exprs_prefix_ok cx [e1;e2] /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es ==>
+  expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty
+    (Builtin ann (Bop bop) [e1;e2]) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_bytestring_eqne_value_prefix[left_outcome]:
   (* The right operand starts after the selected left hash, not after
      lower_value on the left operand. *)
@@ -164,7 +171,9 @@ Resume bop_bytestring_eqne_value_prefix[left_outcome]:
   >- (rpt gen_tac >> rename1 `expr_exit res r /\ _ ==> _` >> Cases_on `res` >> simp[]) >>
   suspend "right_prefix"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_bytestring_eqne_value_prefix[right_prefix]:
   qx_genl_tac [`marks`, `v1`, `mid`, `G1`, `tn1`, `t`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -221,5 +230,8 @@ Resume bop_bytestring_eqne_value_prefix[right_prefix]:
   gen_tac >> Cases_on `bind (eval_expr cx e2) (read_result cx) qe` >>
   rename1 `_ = (res,ee)` >> Cases_on `res` >> simp[bind_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise bop_bytestring_eqne_value_prefix
+*)

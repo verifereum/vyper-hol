@@ -19,11 +19,42 @@ Proof
   simp[accounts_after_transfer_def]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem deploy_ptr_entry_actual_state_rel:
+  !tops bc am tx es vs prog prog' cp rp runtime unit body ce nr key ut imm exit
+    sa sb sj se sp sf func mut source_body am_c es0 args scope actual.
+  deploy_source_ok tops am tx /\ deploy_state_rel tops bc am tx es /\
+  raw_variant vs.vs_initial_fmp vs
+    (opt_deploy_entry_state_own prog prog' cp tops es with vs_outcomes := vs.vs_outcomes) /\
+  deploy_ctor_code tops rp runtime unit
+    (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
+  deploy_ctor_start tops am tx (mut,F,source_body,am_c,es0) /\
+  lookup_function NONE tx.function_name Deploy tops = SOME (mut,F,args,[],NoneT,source_body) /\
+  bind_arguments (type_env tops) args tx.args = SOME scope /\
+  actual.vs_code = vs.vs_code /\
+  actual.vs_accounts = vs.vs_accounts /\ actual.vs_transient = vs.vs_transient /\
+  actual.vs_logs = vs.vs_logs /\ actual.vs_requests = vs.vs_requests /\
+  actual.vs_pending_deletions = vs.vs_pending_deletions /\
+  actual.vs_call_ctx = vs.vs_call_ctx /\ actual.vs_tx_ctx = vs.vs_tx_ctx /\
+  actual.vs_block_ctx = vs.vs_block_ctx /\ actual.vs_outcomes = vs.vs_outcomes /\
+  local_ptrs_rel func ce es0.scopes actual /\
+  immutables_rel ce (deploy_evaluation_context tops am tx).txn.target
+    ce.ce_module ce.ce_is_ctor (es0 with outcomes := SOME vs.vs_outcomes) actual ==>
+  state_rel H func ce (deploy_evaluation_context tops am tx)
+    (es0 with outcomes := SOME vs.vs_outcomes) actual
 Proof
   rpt gen_tac >> strip_tac >>
   drule_all ctorDeployMemoryRunMemEntryLandingTheory.ctor_task_landing_layout >> strip_tac >>
+  drule ctorDeployLoweringFrameTheory.deploy_ctor_module_locations >> strip_tac >>
+  `ce.ce_modules = [(NONE,tops)]` by
+    (qpat_x_assum `deploy_ctor_code _ _ _ _ _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >>
+     simp[ctorDeployLoweringDefsTheory.deploy_ctor_code_def] >> strip_tac >>
+     drule ctorDeployLoweringFrameTheory.deploy_frame_register_static_fields >> strip_tac >>
+     PairCases_on `cf` >>
+     gvs[compileVyperTheory.set_constructor_package_target_def,
+         compileVyperTheory.package_constructor_def, compileVyperTheory.update_cenv_nonreentrant_def] >>
+     simp[compileVyperTheory.build_compile_env_ce_modules]) >>
+  qpat_x_assum `deploy_ctor_code _ _ _ _ _` kall_tac >>
   drule_all deploy_ctor_source_start_fields >> strip_tac >>
   drule_all deploy_ptr_entry_source_accounts >> strip_tac >>
   gvs[state_rel_def, storage_rel_def, transient_rel_def, accounts_rel_def,
@@ -50,30 +81,4 @@ Proof
   rw[] >> gvs[] >>
   Cases_on `256 <= LENGTH es.txParams.prevHashes` >>
   gvs[listTheory.LENGTH_TAKE_EQ] >> decide_tac
-QED
-*)
-Theorem deploy_ptr_entry_actual_state_rel:
-  !tops bc am tx es vs prog prog' cp rp runtime unit body ce nr key ut imm exit
-    sa sb sj se sp sf func mut source_body am_c es0 args scope actual.
-  deploy_source_ok tops am tx /\ deploy_state_rel tops bc am tx es /\
-  raw_variant vs.vs_initial_fmp vs
-    (opt_deploy_entry_state_own prog prog' cp tops es with vs_outcomes := vs.vs_outcomes) /\
-  deploy_ctor_code tops rp runtime unit
-    (body,ce,nr,key,ut,imm,exit,sa,sb,sj,se,sp,sf,func) /\
-  deploy_ctor_start tops am tx (mut,F,source_body,am_c,es0) /\
-  lookup_function NONE tx.function_name Deploy tops = SOME (mut,F,args,[],NoneT,source_body) /\
-  bind_arguments (type_env tops) args tx.args = SOME scope /\
-  actual.vs_code = vs.vs_code /\
-  actual.vs_accounts = vs.vs_accounts /\ actual.vs_transient = vs.vs_transient /\
-  actual.vs_logs = vs.vs_logs /\ actual.vs_requests = vs.vs_requests /\
-  actual.vs_pending_deletions = vs.vs_pending_deletions /\
-  actual.vs_call_ctx = vs.vs_call_ctx /\ actual.vs_tx_ctx = vs.vs_tx_ctx /\
-  actual.vs_block_ctx = vs.vs_block_ctx /\ actual.vs_outcomes = vs.vs_outcomes /\
-  local_ptrs_rel func ce es0.scopes actual /\
-  immutables_rel ce (deploy_evaluation_context tops am tx).txn.target
-    ce.ce_module ce.ce_is_ctor (es0 with outcomes := SOME vs.vs_outcomes) actual ==>
-  state_rel H func ce (deploy_evaluation_context tops am tx)
-    (es0 with outcomes := SOME vs.vs_outcomes) actual
-Proof
-  cheat
 QED

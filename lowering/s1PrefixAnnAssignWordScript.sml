@@ -137,7 +137,7 @@ Resume annassign_word_prefix_execution_sep[entry]:
   drule_all annassign_full_alloc_entry >>
   disch_then (qspecl_then [`PG`, `gas_explicit_sites ctx shadow_ctx`]
     (qx_choosel_then [`w`, `t`, `G'`, `tn'`] strip_assume_tac)) >>
-  `cenv'.ce_is_ctor = cenv.ce_is_ctor` by
+  `cenv'.ce_is_ctor = cenv.ce_is_ctor /\ cenv'.ce_modules = cenv.ce_modules` by
     (qpat_assum `cenv' with <|ce_vars := _; ce_var_type := _;
                               ce_dynarray_capacity := _|> = cenv` mp_tac >>
      simp[compile_env_component_equality]) >>
@@ -158,10 +158,12 @@ Resume annassign_word_prefix_execution_sep[entry]:
      fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
         unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]) >>
   `!H. dead_lo_ok H (DF H) lo cenv' cx` by
-    (pure_rewrite_tac[bodyPtrDefsTheory.dead_lo_ok_def] >>
-     qpat_assum `cenv'.ce_is_ctor = cenv.ce_is_ctor` SUBST1_TAC >>
-     qpat_assum `!H. dead_lo_ok H _ _ cenv _`
-       (ACCEPT_TAC o PURE_REWRITE_RULE[bodyPtrDefsTheory.dead_lo_ok_def])) >>
+    (qpat_assum `cenv'.ce_modules = cenv.ce_modules` SUBST1_TAC >>
+     qpat_assum `cenv'.ce_is_ctor <=> cenv.ce_is_ctor`
+       (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `!H. dead_lo_ok H _ _ cenv _` mp_tac >>
+     simp[bodyPtrDefsTheory.dead_lo_ok_def] >>
+     gvs[bodyPtrDefsTheory.dead_lo_ok_def]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     (drule annassign_admissible_rhs >> simp[]) >>
   suspend "source"

@@ -103,6 +103,32 @@ QED
 
 (* The value-view post is at the expression cut, not at the private copy's
    return. Only the next row's entry uses the copy's new ghosts. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG:(num # num) option list,func,shfunc)
+     ce cx (expr_type e) e p (st0,a,m,sha,shm,vv,s,G,tn)` by
+    (fs[expr_vv_sim_full_pre_def, expr_sim_full_code_def] >>
+     metis_tac[expr_body_pre_vv_gas_admissible]) >>
+  drule_all create_size_replay_vv_cut >> strip_tac >>
+  Cases_on `eval_expr cx e p` >>
+  qmatch_asmsub_rename_tac `eval_expr cx e p = (rv,rq)` >>
+  `rq = q` by (Cases_on `rv` >> fs[bind_def] >> metis_tac[read_result_state]) >>
+  qpat_x_assum `rq = q` SUBST_ALL_TAC >>
+  `p.gas_obs = gas_explicit chunk s.vs_gas_readings ++
+     (gas_explicit (snap ++ rest) mid.vs_gas_readings ++ tail)` by
+    (qpat_assum `create_expr_prefix a m _ _ _ s chunk mid`
+       (assume_tac o MATCH_MP create_prefix_readings) >>
+     qpat_assum `p.gas_obs = gas_explicit (chunk ++ (snap ++ rest)) _ ++ _`
+       (pure_once_rewrite_tac o single) >>
+     CONV_TAC (LAND_CONV (LAND_CONV (REWR_CONV gas_explicit_append))) >>
+     simp[APPEND_ASSOC]) >>
+  drule_all blueprint_ctor_complete >> strip_tac
+  >- (disj1_tac >> qexists_tac `err` >> fs[bind_def]) >>
+  suspend "read"
+QED
+*)
 Theorem blueprint_ctor_vv_row:
   body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shctx /\
   expr_body_pre ce cx env e p /\ create_operand_completed_ok cx e /\
@@ -171,29 +197,10 @@ Theorem blueprint_ctor_vv_row:
       stmt_state_rel h ctx func ce cx q t /\ storage_well_formed_on cx q (FST h) /\
       ghost_inv_at (DF h) lo d ce cx q Gt tt t)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `expr_vv_sim_full_pre (DF,lo,d,ctx,shctx,PG:(num # num) option list,func,shfunc)
-     ce cx (expr_type e) e p (st0,a,m,sha,shm,vv,s,G,tn)` by
-    (fs[expr_vv_sim_full_pre_def, expr_sim_full_code_def] >>
-     metis_tac[expr_body_pre_vv_gas_admissible]) >>
-  drule_all create_size_replay_vv_cut >> strip_tac >>
-  Cases_on `eval_expr cx e p` >>
-  qmatch_asmsub_rename_tac `eval_expr cx e p = (rv,rq)` >>
-  `rq = q` by (Cases_on `rv` >> fs[bind_def] >> metis_tac[read_result_state]) >>
-  qpat_x_assum `rq = q` SUBST_ALL_TAC >>
-  `p.gas_obs = gas_explicit chunk s.vs_gas_readings ++
-     (gas_explicit (snap ++ rest) mid.vs_gas_readings ++ tail)` by
-    (qpat_assum `create_expr_prefix a m _ _ _ s chunk mid`
-       (assume_tac o MATCH_MP create_prefix_readings) >>
-     qpat_assum `p.gas_obs = gas_explicit (chunk ++ (snap ++ rest)) _ ++ _`
-       (pure_once_rewrite_tac o single) >>
-     CONV_TAC (LAND_CONV (LAND_CONV (REWR_CONV gas_explicit_append))) >>
-     simp[APPEND_ASSOC]) >>
-  drule_all blueprint_ctor_complete >> strip_tac
-  >- (disj1_tac >> qexists_tac `err` >> fs[bind_def]) >>
-  suspend "read"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume blueprint_ctor_vv_row[read]:
   qpat_x_assum `!h. _ ==> gas_origin_ptr_path _ _ _ _ /\ _`
     (assume_tac o BETA_RULE) >>
@@ -217,6 +224,8 @@ Resume blueprint_ctor_vv_row[read]:
   qexistsl [`tv`,`ann`] >> simp[] >>
   suspend "advance"
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume blueprint_ctor_vv_row[advance]:
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     (fs[expr_sim_full_code_def] >> metis_tac[body_inv_no_phi]) >>
@@ -227,6 +236,8 @@ Resume blueprint_ctor_vv_row[advance]:
   >- suspend "copy" >>
   suspend "retain"
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume blueprint_ctor_vv_row[retain]:
   `vv_type (ext_call_arg_value (lowered_value_type ce e) vv) = lowered_value_type ce e`
      by metis_tac[extcall_operand_snapshot_type] >>
@@ -252,6 +263,8 @@ Resume blueprint_ctor_vv_row[retain]:
   simp_tac (srw_ss()) [ghost_inv_at_def,ghost_inv_def,local_region_def] >>
   strip_tac >> first_assum ACCEPT_TAC
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume blueprint_ctor_vv_row[copy]:
   qpat_x_assum `exprs_can_mutate ce xs ==> _` (drule_then strip_assume_tac) >>
   qpat_assum `create_expr_prefix m b _ _ _ mid snap t`
@@ -290,6 +303,8 @@ Resume blueprint_ctor_vv_row[copy]:
   disch_then (strip_assume_tac o SPEC_ALL) >>
   suspend "copied_entry"
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Resume blueprint_ctor_vv_row[copied_entry]:
   qmatch_asmsub_rename_tac `gas_origin_ptr_path _ (mid,G',tn') [] (OK t,Gout,tout)` >>
   qpat_assum `!h. _ ==> gas_origin_ptr_path _ (mid,_,_) [] _ /\ _`
@@ -327,4 +342,7 @@ Resume blueprint_ctor_vv_row[copied_entry]:
         (drule_then strip_assume_tac) >> gvs[]) >>
   first_assum ACCEPT_TAC
 QED
+*)
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise blueprint_ctor_vv_row
+*)

@@ -6,19 +6,6 @@ Ancestors
   loweringPosts valueEncodingProofs valueEncoding valueEncodingDefs exprBopSimProps
   list rich_list finite_map pair vyperState compileEnv loweringStateRelDefs exprLoweringProps vyperValue
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `FST (read_result cx r es') = FST (read_result cx r es)` by
-    (irule read_result_nonstorage_frame >> simp[]) >>
-  `SND (read_result cx r es') = es'` by
-    (Cases_on `read_result cx r es'` >> drule read_result_state >> simp[]) >>
-  gvs[immutable_holds_def] >>
-  qexistsl_tac [`name`, `off`, `itv`, `iv`, `k`, `v`] >> simp[] >>
-  metis_tac[PAIR, FST, SND]
-QED
-*)
 Theorem immutable_holds_runtime_frame:
   ~cenv.ce_is_ctor /\ immutable_holds cenv cx ty r w es s /\
   es'.immutables = es.immutables /\
@@ -26,7 +13,17 @@ Theorem immutable_holds_runtime_frame:
   es'.scopes = es.scopes ==>
   immutable_holds cenv cx ty r w es' s'
 Proof
-  cheat
+  strip_tac >>
+  `FST (read_result cx r es') = FST (read_result cx r es)` by
+    (irule read_result_nonstorage_frame >> simp[]) >>
+  `SND (read_result cx r es') = es'` by
+    (Cases_on `read_result cx r es'` >> drule read_result_state >> simp[]) >>
+  qpat_x_assum `immutable_holds _ _ _ _ _ _ _`
+    (qx_choosel_then [`src`,`name`,`off`,`itv`,`iv`,`k`,`tvt`,`v`]
+       (map_every assume_tac o CONJUNCTS) o REWRITE_RULE [immutable_holds_def]) >>
+  simp[immutable_holds_def] >>
+  qexistsl_tac [`src`,`name`,`off`,`itv`,`iv`,`k`,`v`] >>
+  simp[] >> metis_tac[PAIR, FST, SND]
 QED
 
 Theorem locals_kept_dynarray_free_value:

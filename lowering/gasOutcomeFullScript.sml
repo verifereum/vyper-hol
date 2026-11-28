@@ -7,7 +7,7 @@
    of its endpoint joins it. *)
 Theory gasOutcomeFull
 Ancestors
-  createSizeExit gasOutcomeFullMods fragGasOriginPtr fragGasOrigin gasOutcome gasStorage gasExemptCert
+  createSizeExit gasOutcomeFullMods gasExemptCertMods[qualified] fragGasOriginPtr fragGasOrigin gasOutcome gasStorage gasExemptCert
   gasSummary fragGasMode fragGasPathPtr vyperStorageFootprint
   vyperInterpreter vyperState venomState
 
@@ -69,14 +69,14 @@ Proof
   rw[gas_outcome_full_def] >> qexists_tac `marks` >> metis_tac[]
 QED
 
-Theorem gas_outcome_full_source_cong:
-  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+Theorem gas_outcome_full_mods_source_cong:
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source
     (es, s, G, tn) Q R /\
   (!gs. source' (es with gas_obs := gs) = source (es with gas_obs := gs)) ==>
-  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source'
+  gas_outcome_full_mods (DF, lo, explicit, ctx, func, PG) mods cx st0 source'
     (es, s, G, tn) Q R
 Proof
-  rw[gas_outcome_full_def, gas_bad_storage_at_def] >>
+  rw[gas_outcome_full_mods_def, gas_bad_storage_at_def] >>
   qexists_tac `marks`
   >- (disj1_tac >> simp[] >>
       qexistsl_tac [`H`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`, `finish'`] >>
@@ -86,10 +86,21 @@ Proof
   disj2_tac >> disj2_tac >>
   qexistsl_tac [`err`, `ee`, `leaf`, `leaf_pg`, `leaf_g`, `leaf_tn`, `finish'`] >>
   conj_tac
-  >- (irule gas_exempt_cert_source_cong >>
+  >- (irule gasExemptCertModsTheory.gas_exempt_cert_mods_source_cong >>
       qexists_tac `ignore_bind source (return ())` >>
       simp[ignore_bind_def, bind_def]) >>
   qexists_tac `H` >> simp[]
+QED
+
+Theorem gas_outcome_full_source_cong:
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source
+    (es, s, G, tn) Q R /\
+  (!gs. source' (es with gas_obs := gs) = source (es with gas_obs := gs)) ==>
+  gas_outcome_full (DF, lo, explicit, ctx, func, PG) tops cx st0 source'
+    (es, s, G, tn) Q R
+Proof
+  simp[gas_outcome_full_singleton_def] >>
+  metis_tac[gas_outcome_full_mods_source_cong]
 QED
 
 (* With no step, the focus stops where it starts. *)

@@ -1023,7 +1023,7 @@ Proof
   simp[Excl "lock_if_nr_def", Excl "unlock_if_nr_def"]
 QED
 
-Theorem intcall_args_defaults_scope_with_code_addr[local]:
+Theorem intcall_args_defaults_scope_with_code_addr:
   (!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
     !cx s sc. conditional_result cx r (s with scopes := sc) =
       (FST (conditional_result cx r s),
@@ -1115,6 +1115,7 @@ Resume intcall_args_defaults_scope_with_code_addr[global]:
   simp[cj 30 evaluate_def] >>
   metis_tac[vyperLocalAccessFrameTheory.lookup_global_not_memory]
 QED
+
 Resume intcall_args_defaults_scope_with_code_addr[ifexp]:
   strip_tac >> strip_tac >> gen_tac >>
   simp[cj 4 well_typed_expr_def] >> strip_tac >> gen_tac >> gvs[] >>
@@ -1137,6 +1138,7 @@ Resume intcall_args_defaults_scope_with_code_addr[ifexp]:
   gvs[cj 32 evaluate_def, switch_BoolV_def, bind_def, AllCaseEqs(),
       COND_RATOR, raise_def] >> metis_tac[]
 QED
+
 Resume intcall_args_defaults_scope_with_code_addr[structlit]:
   PairCases_on `id` >> strip_tac >> strip_tac >> gen_tac >>
   simp[cj 6 well_typed_expr_def] >> strip_tac >> gen_tac >> gvs[] >>
@@ -1148,6 +1150,7 @@ Resume intcall_args_defaults_scope_with_code_addr[structlit]:
   irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
   simp[return_def]
 QED
+
 Resume intcall_args_defaults_scope_with_code_addr[subscript]:
   strip_tac >> strip_tac >> gen_tac >>
   simp[cj 7 well_typed_expr_def] >> strip_tac >> gen_tac >> gvs[] >>
@@ -1187,6 +1190,7 @@ Resume intcall_args_defaults_scope_with_code_addr[subscript]:
         _ /\ select_result cx ty r sb s = (INL r',t) ==> _` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]))
 QED
+
 Resume intcall_args_defaults_scope_with_code_addr[attribute]:
   strip_tac >> strip_tac >> gen_tac >>
   simp[cj 8 well_typed_expr_def] >> strip_tac >> gen_tac >> gvs[] >>
@@ -1206,6 +1210,7 @@ Resume intcall_args_defaults_scope_with_code_addr[attribute]:
      _ /\ select_result cx ty r sb s = (INL r',t) ==> _` mp_tac >>
    POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[])
 QED
+
 Resume intcall_args_defaults_scope_with_code_addr[pop]:
   strip_tac >> strip_tac >> gen_tac >> disch_tac >> gen_tac >>
   sg `IS_SOME (type_place_target (defaults_env tenv) target)`
@@ -1294,9 +1299,9 @@ Resume intcall_args_defaults_scope_with_code_addr[builtin]:
                    lift_sum_def, precompile_call_success_def, check_def,
                    assert_def, evaluation_state_component_equality] >>
               rpt IF_CASES_TAC >> simp[bind_def, return_def, raise_def] >>
-              Cases_on `s.outcomes` >> simp[bind_def, return_def, raise_def] >>
-              TRY (Cases_on `x`) >> simp[bind_def, return_def, raise_def] >>
-              TRY (Cases_on `x'`) >> simp[bind_def, return_def, raise_def] >>
+              (namedCases_on `s.outcomes` ["", "outs"]
+               >- simp[bind_def, return_def, raise_def]) >>
+              Cases_on `outs` >> simp[bind_def, return_def, raise_def] >>
               rpt IF_CASES_TAC >> simp[bind_def, return_def, raise_def] >>
               simp[vyperCallOutcomeTheory.take_call_outcome_def,
                    vyperCallOutcomeTheory.take_request_outcome_def,
@@ -1310,8 +1315,9 @@ Resume intcall_args_defaults_scope_with_code_addr[builtin]:
           simp[precompile_call_success_def, check_def, assert_def,
                bind_def, return_def, raise_def] >>
           rpt IF_CASES_TAC >> simp[bind_def, return_def, raise_def] >>
-          Cases_on `s.outcomes` >> simp[bind_def, return_def, raise_def] >>
-          TRY (Cases_on `x'`) >> simp[bind_def, return_def, raise_def] >>
+          (namedCases_on `s.outcomes` ["", "outs"]
+           >- simp[bind_def, return_def, raise_def]) >>
+          Cases_on `outs` >> simp[bind_def, return_def, raise_def] >>
           rpt IF_CASES_TAC >> simp[bind_def, return_def, raise_def] >>
           simp[vyperCallOutcomeTheory.take_call_outcome_def,
                vyperCallOutcomeTheory.take_request_outcome_def,
@@ -1340,6 +1346,7 @@ Resume intcall_args_defaults_scope_with_code_addr[typebuiltin]:
   Cases_on `evaluate_type_builtin cx blt target (MAP expr_type es) v'` >>
   simp[return_def, raise_def]
 QED
+
 Resume intcall_args_defaults_scope_with_code_addr[cons]:
   strip_tac >> strip_tac >> gvs[] >> reverse conj_tac >- metis_tac[] >>
   gen_tac >> simp[Once well_typed_expr_def] >> strip_tac >> gen_tac >>
@@ -1355,6 +1362,7 @@ Resume intcall_args_defaults_scope_with_code_addr[cons]:
   irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
   simp[return_def]
 QED
+
 Resume intcall_args_defaults_scope_with_code_addr[fields_cons]:
   strip_tac >> strip_tac >> gvs[] >>
   gen_tac >> simp[Once well_typed_expr_def] >> strip_tac >> gen_tac >>
@@ -1370,6 +1378,7 @@ Resume intcall_args_defaults_scope_with_code_addr[fields_cons]:
   irule intcall_args_scope_bind >> reverse conj_tac >- simp[] >>
   simp[return_def]
 QED
+
 Resume intcall_args_defaults_scope_with_code_addr[place_global]:
   PairCases_on `id` >> disch_tac >> gen_tac >> disch_tac >> gen_tac >>
   conj_tac
@@ -1379,6 +1388,7 @@ Resume intcall_args_defaults_scope_with_code_addr[place_global]:
   simp[cj 30 evaluate_def] >>
   metis_tac[vyperLocalAccessFrameTheory.lookup_global_not_memory]
 QED
+
 Resume intcall_args_defaults_scope_with_code_addr[place_subscript]:
   strip_tac >> strip_tac >> gen_tac >>
   simp[cj 7 well_typed_expr_def] >>
@@ -1420,19 +1430,22 @@ Resume intcall_args_defaults_scope_with_code_addr[place_subscript]:
         _ /\ select_result cx ty r sb s = (INL r',t) ==> _` mp_tac >>
       POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]))
 QED
+
 Resume intcall_args_defaults_scope_with_code_addr[place_rest]:
-  markerLib.RESUME_TAC >> rpt (gen_tac ORELSE disch_then strip_assume_tac) >>
-  fs[] >>
-  TRY (qpat_x_assum `type_place_expr _ _ = SOME _` mp_tac >>
-    simp[Once well_typed_expr_def] >> NO_TAC) >>
-  TRY (qpat_x_assum `!tenv. well_typed_expr _ _ ==> _`
-    (drule_all_then (qspec_then `cx` ACCEPT_TAC)) >> NO_TAC)
+  markerLib.RESUME_TAC >> ntac 2 strip_tac >> rpt gen_tac >>
+  disch_then (DISJ_CASES_THEN2 assume_tac (qx_choose_then `vt` mp_tac))
+  >>~- ([`type_place_expr _ _ = SOME _ ==> _`],
+    simp[Once well_typed_expr_def]) >>
+  gen_tac >> fs[]
   >>~- ([`eval_expr cx (Builtin _ _ _)`],
     qpat_x_assum `!tenv. well_typed_expr _ (Builtin _ _ _) ==> _`
       (drule_all_then (qspec_then `cx` (fn th =>
         ACCEPT_TAC (CONJ (cj 1 th) (cj 2 th))))) )
   >>~- ([`eval_expr cx (Call _ _ _ _)`],
     qpat_x_assum `!tenv. well_typed_expr _ (Call _ _ _ _) ==> _`
+      (drule_all_then (qspec_then `cx` ACCEPT_TAC)))
+  >>~- ([`!te. well_typed_expr (defaults_env te) _ ==> _`],
+    qpat_x_assum `!tenv. well_typed_expr _ _ ==> _`
       (drule_all_then (qspec_then `cx` ACCEPT_TAC))) >>
   gvs[cj 8 well_typed_expr_def] >>
   qpat_x_assum `!tenv. _ \/ _ ==> _` (qspec_then `tenv` mp_tac) >>
@@ -1451,6 +1464,7 @@ Resume intcall_args_defaults_scope_with_code_addr[place_rest]:
     _ /\ select_result cx ty r sb s = (INL r',t) ==> _` mp_tac >>
   POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[]
 QED
+
 Resume intcall_args_defaults_scope_with_code_addr[code_slice_args]:
   simp_tac bool_ss [TL] >>
   irule intcall_args_scope_bind >> reverse conj_tac
@@ -1593,7 +1607,7 @@ Resume intcall_args_defaults_scope_with_code_addr[call]:
     simp[intcall_args_create_operands_scope])
 QED
 
-Finalise intcall_args_defaults_scope_with_code_addr
+Finalise intcall_args_defaults_scope_with_code_addr[local]
 
 Theorem intcall_args_defaults_scope_mutual_from_actions:
   (!r. (!id path. r <> PlaceR (MemoryPlace id path)) ==>
@@ -4568,6 +4582,12 @@ Proof
             qexistsl_tac [`H`,`cenv`,`ctx`,`cx`,`mid`,`v`,`name`,`z`] >> simp[]) >>
          fs[loweringStateRelDefsTheory.regions_disjoint_def, arithmeticTheory.MAX_DEF] >>
          decide_tac) >>
+      `!src. (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) <=>
+             src = cenv.ce_module` by
+        (drule_then assume_tac bodySimTheory.body_inv_contract >>
+         drule_then assume_tac bodyInvCodePropsTheory.contract_inv_cenv_modules >>
+         drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_module_locations >>
+         gen_tac >> Cases_on `src = NONE` >> simp[alistTheory.ALOOKUP_def]) >>
       conj_tac >-
         (qmatch_abbrev_tac `stmt_state_rel H ctx func cenv cx mid wt` >>
          `stmt_state_rel H ctx func cenv cx mid
@@ -4579,6 +4599,7 @@ Proof
          qpat_assum `typed_copy_state_frame cu (w2n aw) nw z wt` mp_tac >>
          qpat_assum `!n lb sz. local_region cenv mid.scopes z n lb sz ==> _` mp_tac >>
          qpat_assum `cenv.ce_is_ctor ==> !name tv v off. _` mp_tac >>
+         qpat_assum `!src. (src = cenv.ce_module \/ _) <=> _` mp_tac >>
          qpat_assum `local_ptrs_reserved cenv cu` mp_tac >>
          qpat_assum `stmt_state_rel H ctx func cenv cx mid z` mp_tac >>
          POP_ASSUM_LIST (K all_tac) >>
@@ -5954,183 +5975,6 @@ Proof
 QED
 
 
-
-(* Compatibility for continuations that only need expr_exit. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  rpt gen_tac >> strip_tac >>
-  irule intcall_args_stage_full_p2 >>
-  qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-  qpat_assum `expr_sim_inv cenv cx tenv esi` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ _ es _ _ si = _` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) _ _ shadow_si = _`
-    (irule_at Any) >>
-  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
-  qpat_assum `gas_admissible (vyperState$bind (eval_exprs cx es) f) P esi`
-    (irule_at Any) >>
-  qpat_assum `eval_operands ops s = SOME ws` (irule_at Any) >>
-  qpat_assum `ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn` (irule_at Any) >>
-  qpat_assum `return_buf_frame d cenv si s` (irule_at Any) >>
-  qexistsl [`vals`, `ptys`, `pin`, `pflags`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[]
-QED
-*)
-Theorem intcall_args_stage_full:
-  !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
-   st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
-   flags dtys newops ops ws vals ptys pflags pin f P Q R.
-    (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-    shadow_body_inv_mods mods exps ctx shadow_ctx /\
-    body_const_cells_agree mods cx tenv esi /\
-    expr_sim_inv_mods mods cenv cx tenv esi /\
-    EVERY (\e. expr_body_pre_mods mods cenv cx tenv e esi) es /\
-    body_exprs_full_ok_mods mods exps cx es /\
-    LENGTH flags = LENGTH es /\ LENGTH dtys = LENGTH es /\
-    EVERY (supported_value_type tops) dtys /\
-    EVERY (\ty. type_memory_bytes cenv ty < 2 ** 64) dtys /\
-    LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es) dtys /\
-    (!j. j < LENGTH es /\ EL j flags ==> is_word_type (EL j dtys)) /\
-    (!e dty ee ci vv cm.
-       expr_body_pre_mods mods cenv cx tenv e ee /\
-       compile_expr cenv (expr_type e) e ci = (vv,cm) /\
-       ~is_word_type dty /\ ~is_bytestring_type dty /\
-       type_widens_to (get_tenv cx) (expr_type e) dty ==>
-       vv_type vv = lowered_value_type cenv e) /\
-    compile_stage_intcall_args compile_expr cenv es flags dtys si =
-      (newops,sf) /\
-    compile_stage_intcall_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr es)
-      flags dtys shadow_si = (newops,shadow_sf) /\
-    gas_shadow_state si shadow_si /\ gas_shadow_state sf shadow_sf /\
-    gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-    gas_shadow_function func shadow_func /\
-    MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-    fn_has_code si sf func /\ fn_has_code shadow_si shadow_sf shadow_func /\
-    fn_inst_ids_distinct func /\ local_ptrs_reserved cenv si /\
-    ((ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
-     (!fn inst u. frag_reachable ctx func s fn inst u ==> dalloca_fmp_headroom inst u)) /\
-    (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-    (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==>
-       not_fresh_at si x) /\
-    (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
-       not_fresh_at si x) /\
-    (!xs. storage_trace_frame (f xs)) /\
-    gas_admissible (vyperState$bind (eval_exprs cx es) f) P esi /\
-    (!err. P (INR err) ==> expr_vv_res_ok (INR err)) /\
-    (!H res ee gt r. expr_exit res r ==> R H res ee gt r) /\
-    LENGTH ws = LENGTH ops /\ LENGTH vals = LENGTH ops /\
-    LENGTH ptys = LENGTH ops /\ LENGTH pflags = LENGTH ops /\
-    eval_operands ops s = SOME ws /\ EVERY (\op. op_taint tn op = {}) ops /\
-    (!x. MEM (Var x) ops ==> not_fresh_at si x) /\
-    (!j rt. j < LENGTH ops /\
-       evaluate_type (get_tenv cx) (EL j ptys) = SOME rt ==>
-       value_has_type rt (EL j vals) /\ val_wf rt (EL j vals) /\
-       val_footprint rt (EL j vals) <= type_memory_size rt /\
-       (EL j pflags ==> EL j ws = typed_val_to_w256 rt (EL j vals)) /\
-       (~EL j pflags ==>
-         ?b cap aid.
-           op_prov G (EL j ops) = SOME (b,cap) /\
-           FLOOKUP s.vs_allocas aid = SOME (b,cap) /\
-           sa.cs_next_id <= aid /\ aid < si.cs_next_id /\
-           lo <= b /\ b+cap <= s.vs_alloca_next /\ b <= w2n (EL j ws) /\
-           w2n (EL j ws) + type_memory_size rt <= b+cap /\
-           (!mem. mem_agree_outside tn.t_mem s.vs_memory mem ==>
-             val_in_memory rt (EL j vals) (w2n (EL j ws)) mem) /\
-           (!n lb sz. local_region cenv esi.scopes s n lb sz ==>
-             b+cap <= lb \/ lb+sz <= b) /\
-           (case pin of NONE => T | SOME (rb,pb,pk) =>
-             b+cap <= pb \/ pb+pk <= b))) /\
-    (case pin of NONE => T | SOME (rb,b,k) =>
-       FLOOKUP G rb = SOME (b,k) /\ op_taint tn (Var rb) = {} /\
-       lookup_var rb s = SOME (n2w b) /\
-       FLOOKUP s.vs_allocas sa.cs_next_id = SOME (b,k) /\
-       sa.cs_next_id < si.cs_next_id /\ lo <= b /\ b+k <= s.vs_alloca_next /\
-       not_fresh_at si rb /\
-       (!n lb sz. local_region cenv esi.scopes s n lb sz ==>
-         b+k <= lb \/ lb+sz <= b)) /\
-    wb_frame cenv es0 esi sa s0 s /\
-    ghost_kept_at lo cenv es0 sa G0 tn0 s0 G tn /\
-    alloca_history func s /\ sa.cs_next_id <= si.cs_next_id /\
-    sa.cs_next_var <= si.cs_next_var /\
-    (!n b sz. local_region cenv es0.scopes s0 n b sz <=>
-       local_region cenv esi.scopes s n b sz) /\
-    s0.vs_alloca_next <= s.vs_alloca_next /\
-    MAP FDOM es0.scopes = MAP FDOM esi.scopes /\
-    return_buf_frame d cenv si s /\ ~s.vs_halted /\
-    s.vs_current_bb = si.cs_current_bb /\
-    s.vs_inst_idx = LENGTH si.cs_current_insts /\
-    (!H. valid_horizon cx st0 H esi.storage_trace ==>
-       stmt_state_rel H ctx func cenv cx esi s /\
-       storage_well_formed_on cx esi (FST H) /\
-       ghost_inv_at (DF H) lo d cenv cx esi G tn s) /\
-    (!marks xs ee t G1 tn1.
-       (!tail. eval_exprs cx es
-          (esi with gas_obs := gas_explicit marks s.vs_gas_readings ++ tail) =
-          (INL xs, ee with gas_obs := tail)) /\
-       storage_trace_domain cx st0 ee.storage_trace /\
-       LENGTH xs = LENGTH es /\ expr_sim_inv_mods mods cenv cx tenv ee /\
-       (?ws1.
-         LENGTH ws1 = LENGTH (ops ++ newops) /\
-         LENGTH (vals ++ xs) = LENGTH (ops ++ newops) /\
-         LENGTH (ptys ++ dtys) = LENGTH (ops ++ newops) /\
-         LENGTH (pflags ++ flags) = LENGTH (ops ++ newops) /\
-         eval_operands (ops ++ newops) t = SOME ws1 /\
-         EVERY (\op. op_taint tn1 op = {}) (ops ++ newops) /\
-         (!x. MEM (Var x) (ops ++ newops) ==> not_fresh_at sf x) /\
-         (!j rt. j < LENGTH (ops ++ newops) /\
-           evaluate_type (get_tenv cx) (EL j (ptys ++ dtys)) = SOME rt ==>
-           value_has_type rt (EL j (vals ++ xs)) /\
-           val_wf rt (EL j (vals ++ xs)) /\
-           val_footprint rt (EL j (vals ++ xs)) <= type_memory_size rt /\
-           (EL j (pflags ++ flags) ==>
-             EL j ws1 = typed_val_to_w256 rt (EL j (vals ++ xs))) /\
-           (~EL j (pflags ++ flags) ==>
-             ?b cap aid.
-               op_prov G1 (EL j (ops ++ newops)) = SOME (b,cap) /\
-               FLOOKUP t.vs_allocas aid = SOME (b,cap) /\
-               sa.cs_next_id <= aid /\ aid < sf.cs_next_id /\
-               lo <= b /\ b+cap <= t.vs_alloca_next /\ b <= w2n (EL j ws1) /\
-               w2n (EL j ws1) + type_memory_size rt <= b+cap /\
-               (!mem. mem_agree_outside tn1.t_mem t.vs_memory mem ==>
-                 val_in_memory rt (EL j (vals ++ xs)) (w2n (EL j ws1)) mem) /\
-               (!n lb sz. local_region cenv ee.scopes t n lb sz ==>
-                 b+cap <= lb \/ lb+sz <= b) /\
-               (case pin of NONE => T | SOME (rb,pb,pk) =>
-                 b+cap <= pb \/ pb+pk <= b)))) /\
-       (case pin of NONE => T | SOME (rb,b,k) =>
-         FLOOKUP G1 rb = SOME (b,k) /\ op_taint tn1 (Var rb) = {} /\
-         lookup_var rb t = SOME (n2w b) /\
-         FLOOKUP t.vs_allocas sa.cs_next_id = SOME (b,k) /\
-         sa.cs_next_id < sf.cs_next_id /\ lo <= b /\ b+k <= t.vs_alloca_next /\
-         not_fresh_at sf rb /\
-         (!n lb sz. local_region cenv ee.scopes t n lb sz ==>
-           b+k <= lb \/ lb+sz <= b)) /\
-       wb_frame cenv es0 ee sa s0 t /\
-       ghost_kept_at lo cenv es0 sa G0 tn0 s0 G1 tn1 /\
-       alloca_history func t /\ sa.cs_next_id <= sf.cs_next_id /\
-       sa.cs_next_var <= sf.cs_next_var /\
-       (!n b sz. local_region cenv es0.scopes s0 n b sz <=>
-          local_region cenv ee.scopes t n b sz) /\
-       s0.vs_alloca_next <= t.vs_alloca_next /\
-       MAP FDOM es0.scopes = MAP FDOM ee.scopes /\
-       return_buf_frame d cenv sf t /\ ~t.vs_halted /\
-       t.vs_current_bb = sf.cs_current_bb /\
-       t.vs_inst_idx = LENGTH sf.cs_current_insts /\
-       (!H. valid_horizon cx st0 H ee.storage_trace ==>
-         stmt_state_rel H ctx func cenv cx ee t /\
-         storage_well_formed_on cx ee (FST H) /\
-         ghost_inv_at (DF H) lo d cenv cx ee G1 tn1 t) /\
-       gas_admissible (f xs) P ee ==>
-       gas_outcome_full_mods
-         (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-         cenv.ce_modules cx st0 (f xs) (ee,t,G1,tn1) Q R) ==>
-    gas_outcome_full_mods
-      (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      cenv.ce_modules cx st0 (vyperState$bind (eval_exprs cx es) f) (esi,s,G,tn) Q R
-Proof
-  cheat
-QED
 
 Theorem intcall_args_stmt_state_rel_push[local]:
   stmt_state_rel H ctx func cenv (cx with stk updated_by CONS (NONE,name)) es s <=>

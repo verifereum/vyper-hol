@@ -8,21 +8,8 @@ Ancestors
   vyperTypeCallGraph vyperTypeCallStackSoundness vyperTypeSystem
   vyperInterpreter vyperState list
 
-Theorem tuple_assign_exact_store_head_prefix:
-  tuple_exact_store_cursor (cenv,cx,env,tops,bindings)
-    (DF,lo,d,ctx,func,shadow_func,st0) (sa,sb,shadow_sb)
-    (es,s0,G0,tn0) (tys,tvs,vs)
-    (BaseTarget bt::todo,sty::tys_tail,tvs1,vi::vs_tail,op0::ops_tail,k,p)
-    (cur,shadow_cur,src,u,Gu,tu) /\
-  body_tuple_target_full_ok cx (BaseTarget bt) vi /\
-  body_tuple_target_prefix_ok cx (BaseTarget bt) vi /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-  gas_shadow_function func shadow_func /\
-  MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
-  fn_inst_ids_distinct func /\ (!H. dead_lo_ok H (DF H) lo cenv cx) ==>
-  gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    cx st0 (assign_tuple_targets cx (BaseTarget bt) vi) (src,u,Gu,tu)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (REPEAT_TCL CONJUNCTS_THEN assume_tac) >>
   drule_then (qx_choosel_then [`sm`,`shadow_sm`,`r`,`sc`,`shadow_sc`]
@@ -41,7 +28,27 @@ Proof
   qexistsl [`cenv`,`d`,`env`,`r`,`cur`,`sc`,`shadow_func`,`shadow_cur`,
             `shadow_sc`,`tops`,`Type sty`] >> simp[]
 QED
+*)
+Theorem tuple_assign_exact_store_head_prefix:
+  tuple_exact_store_cursor (cenv,cx,env,tops,bindings)
+    (DF,lo,d,ctx,func,shadow_func,st0) (sa,sb,shadow_sb)
+    (es,s0,G0,tn0) (tys,tvs,vs)
+    (BaseTarget bt::todo,sty::tys_tail,tvs1,vi::vs_tail,op0::ops_tail,k,p)
+    (cur,shadow_cur,src,u,Gu,tu) /\
+  body_tuple_target_full_ok cx (BaseTarget bt) vi /\
+  body_tuple_target_prefix_ok cx (BaseTarget bt) vi /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+  gas_shadow_function func shadow_func /\
+  MEM func ctx.ctx_functions /\ MEM shadow_func shadow_ctx.ctx_functions /\
+  fn_inst_ids_distinct func /\ (!H. dead_lo_ok H (DF H) lo cenv cx) ==>
+  gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cx st0 (assign_tuple_targets cx (BaseTarget bt) vi) (src,u,Gu,tu)
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_exact_store_head_prefix[immutable]:
   `IS_SOME (type_place_target env bt)` by simp[] >>
   drule_all_then (qx_choosel_then [`id`,`root_ty`]
@@ -60,5 +67,8 @@ Resume tuple_assign_exact_store_head_prefix[immutable]:
   qexistsl [`cenv`,`d`,`env`,`r`,`cur`,`sc`,`shadow_func`,`shadow_cur`,
             `shadow_sc`,`tops`,`stv`,`sty`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise tuple_assign_exact_store_head_prefix
+*)

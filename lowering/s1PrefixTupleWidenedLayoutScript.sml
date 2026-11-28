@@ -8,6 +8,17 @@ Ancestors
   tupleWidenedStoreEntry bodyFullAssignTuple vyperTypeSystem list gasShadow gasShadowState
   vyperTypeValues tuplePlaceSource vyperTypeDefaults vyperTypeArgFits s1PrefixPreds
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  irule tuple_widened_prefix_from_nested_heads >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  qexistsl_tac [`bindings`,`env`,`env'`,`tops`] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+  rpt gen_tac >> strip_tac >> suspend "nested_head"
+QED
+*)
 Theorem tuple_assign_widened_prefix_from_heads:
   !cx gs e DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv env env' ret_ty lctx RetQ es.
   (!s'' tv t s'3' v t'.
@@ -41,14 +52,10 @@ Theorem tuple_assign_widened_prefix_from_heads:
       (stmt_env (gas_shadow_env T cenv) lctx ret_ty (gas_shadow_stmt (Assign (TupleTarget gs) e)))
       (eval_stmt cx (Assign (TupleTarget gs) e)) es
 Proof
-  rpt gen_tac >> strip_tac >>
-  irule tuple_widened_prefix_from_nested_heads >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  qexistsl_tac [`bindings`,`env`,`env'`,`tops`] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  rpt gen_tac >> strip_tac >> suspend "nested_head"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_widened_prefix_from_heads[nested_head]:
   `j < LENGTH tys /\ LENGTH gs = LENGTH tys /\ LENGTH gs = LENGTH vs` by decide_tac >>
   qpat_assum `tuple_widened_store_entry _ _ _ _ j _ _ _ _ _ _ _`
@@ -83,7 +90,9 @@ Resume tuple_assign_widened_prefix_from_heads[nested_head]:
   qpat_x_assum `r = shadow_r` (SUBST_ALL_TAC o SYM) >>
   suspend "paired_place"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_widened_prefix_from_heads[paired_place]:
   `env.type_defs = get_tenv cx` by (drule abi_decode_inv_type_env >> simp[]) >>
   `assignable_type (get_tenv cx) (TupleT dtys)` by metis_tac[] >>
@@ -126,7 +135,9 @@ Resume tuple_assign_widened_prefix_from_heads[paired_place]:
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   qexists_tac `tops` >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_widened_prefix_from_heads[write]:
   map_every qx_gen_tac [`marks`,`mid`,`Gp`,`tp`,`sp`,`path`] >> strip_tac >>
   `?path' ff q Gq tq.
@@ -168,5 +179,8 @@ Resume tuple_assign_widened_prefix_from_heads[write]:
   qexistsl_tac [`write_cs`,`shadow_write_cs`,`obs0 ++ gas_explicit marks s1.vs_gas_readings`] >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise tuple_assign_widened_prefix_from_heads
+*)

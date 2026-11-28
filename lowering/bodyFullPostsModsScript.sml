@@ -534,16 +534,60 @@ Proof
        vv_place_ptr_mods_singleton]
 QED
 
+(* The widened state and ghost relations carry the linked frame. *)
+Theorem linked_immutable_frame_conj[local]:
+  (stmt_state_rel H ctx func cenv cx es s /\
+   immutable_frame_mods func cenv cx es s /\ P <=>
+   stmt_state_rel H ctx func cenv cx es s /\ P)
+Proof
+  Cases_on `stmt_state_rel H ctx func cenv cx es s` >> simp[] >>
+  drule stmt_state_rel_immutable_frame_mods >> simp[]
+QED
+
+Theorem linked_dead_lo_ok[local]:
+  dead_lo_ok_mods H D lo cenv cx <=> dead_lo_ok H D lo cenv cx
+Proof
+  simp[dead_lo_ok_mods_def, dead_lo_ok_def]
+QED
+
+Theorem linked_ghost_inv_at[local]:
+  ghost_inv_at_mods D lo d cenv cx es G tn s <=> ghost_inv_at D lo d cenv cx es G tn s
+Proof
+  simp[ghost_inv_at_mods_def, ghost_inv_at_def]
+QED
+
+Theorem linked_expr_post[local]:
+  expr_post_mods H ctx func cenv cx e es sa sb s0 es' v op s <=>
+  expr_post H ctx func cenv cx e es sa sb s0 es' v op s
+Proof
+  simp[expr_post_mods_def, expr_post_def] >>
+  metis_tac[stmt_state_rel_immutable_frame_mods]
+QED
+
+Theorem expr_sim_full_mods_widened:
+  expr_sim_full_mods cfg cenv cx ty e es <=> expr_sim_full cfg cenv cx ty e es
+Proof
+  PairCases_on `cfg` >>
+  simp[expr_sim_full_mods_def, expr_sim_full_def, linked_dead_lo_ok,
+       linked_ghost_inv_at, linked_immutable_frame_conj, linked_expr_post,
+       SF CONJ_ss]
+QED
+
+Theorem stmt_frag_full_mods_widened:
+  stmt_frag_full_mods cfg cx lctx RetQ cenv m shadow_m source es <=>
+  stmt_frag_full cfg cx lctx RetQ cenv m shadow_m source es
+Proof
+  PairCases_on `cfg` >>
+  simp[stmt_frag_full_mods_def, stmt_frag_full_def, linked_dead_lo_ok,
+       linked_ghost_inv_at, linked_immutable_frame_conj, SF CONJ_ss]
+QED
+
 Theorem expr_sim_full_mods_singleton:
   cenv.ce_modules = [(NONE,cx_tops cx)] /\ cenv.ce_module = NONE ==>
   (expr_sim_full_mods cfg cenv cx ty e es <=>
    expr_sim_full cfg cenv cx ty e es)
 Proof
-  strip_tac >> PairCases_on `cfg` >>
-  simp[expr_sim_full_mods_def, expr_sim_full_def,
-       GSYM gas_outcome_full_singleton_def,
-       dead_lo_ok_mods_singleton, ghost_inv_at_mods_singleton,
-       immutable_frame_conj_singleton, SF CONJ_ss, expr_post_mods_singleton]
+  simp[expr_sim_full_mods_widened]
 QED
 
 Theorem expr_vv_sim_full_mods_singleton:
@@ -584,14 +628,7 @@ Theorem stmt_frag_full_mods_singleton:
   (stmt_frag_full_mods cfg cx lctx RetQ cenv m shadow_m source es <=>
    stmt_frag_full cfg cx lctx RetQ cenv m shadow_m source es)
 Proof
-  strip_tac >>
-  PairCases_on `cfg` >>
-  ASM_SIMP_TAC bool_ss [stmt_frag_full_mods_def, stmt_frag_full_def,
-                       GSYM gas_outcome_full_singleton_def] >>
-  simp[cenv_top_ext_def,
-       compile_env_component_equality,
-       dead_lo_ok_mods_singleton, ghost_inv_at_mods_singleton,
-       immutable_frame_conj_singleton, SF CONJ_ss]
+  simp[stmt_frag_full_mods_widened]
 QED
 
 Theorem expr_sim_inv_mods_singleton:

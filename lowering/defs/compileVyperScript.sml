@@ -1726,55 +1726,52 @@ Definition deploy_internal_order_def:
       (case ctor of NONE => [] | SOME f => src_calls_fn f)
 End
 
-(* ints in the order of names, then the others in source order.  The
-   pipeline prunes those (prune_unit_fcg_unreachable): Python never emits
-   them. *)
+(* ints in the order of names, the internal functions reachable from the
+   exposed functions (or the constructor).  The others are left out, as
+   Python emits only reachable functions. *)
 Definition order_internals_def:
   order_internals names ints =
     FLAT (MAP (λn. FILTER (λ(mut, nr, rr, fname, fargs, dflts, ret, body).
-                             fname = n) ints) names) ++
-    FILTER (λ(mut, nr, rr, fname, fargs, dflts, ret, body). ¬MEM fname names)
-      ints
+                             fname = n) ints) names)
 End
+
+Theorem PERM_FILTER_disjoint[local]:
+  !P Q l. (!x. P x ==> ~Q x) ==>
+    PERM (FILTER P l ++ FILTER Q l) (FILTER (\x. P x \/ Q x) l)
+Proof
+  ntac 2 gen_tac >> Induct >> rw[] >> gvs[] >>
+  ONCE_REWRITE_TAC [sortingTheory.PERM_SYM] >>
+  simp[sortingTheory.PERM_CONS_EQ_APPEND] >>
+  qexistsl_tac [`FILTER P l`, `FILTER Q l`] >>
+  simp[Once sortingTheory.PERM_SYM]
+QED
 
 Theorem PERM_key_order[local]:
   !names l. ALL_DISTINCT names ==>
-    PERM (FLAT (MAP (\n. FILTER (\x. k x = n) l) names) ++
-          FILTER (\x. ~MEM (k x) names) l) l
+    PERM (FLAT (MAP (\n. FILTER (\x. k x = n) l) names))
+         (FILTER (\x. MEM (k x) names) l)
 Proof
-  Induct
-  >- (simp[] >> TRY (Induct_on `l` >> simp[])) >>
+  Induct >- simp[listTheory.FILTER_EQ_NIL] >>
   rpt strip_tac >> fs[] >>
-  first_x_assum (qspec_then `FILTER (\x. k x <> h) l` mp_tac) >>
-  simp[rich_listTheory.FILTER_FILTER] >>
-  `FLAT (MAP (\n. FILTER (\x. k x = n /\ k x <> h) l) names) =
-   FLAT (MAP (\n. FILTER (\x. k x = n) l) names)`
-    by (AP_TERM_TAC >> irule listTheory.MAP_CONG >> rw[] >>
-        simp[rich_listTheory.FILTER_EQ] >> rw[] >> metis_tac[]) >>
-  `FILTER (\x. ~MEM (k x) names /\ k x <> h) l =
-   FILTER (\x. k x <> h /\ ~MEM (k x) names) l`
-    by (simp[rich_listTheory.FILTER_EQ] >> metis_tac[]) >>
-  simp[] >> strip_tac >>
   irule sortingTheory.PERM_TRANS >>
-  qexists_tac `FILTER (\x. k x = h) l ++ FILTER (\x. k x <> h) l` >>
-  conj_tac
-  >- ASM_REWRITE_TAC [GSYM listTheory.APPEND_ASSOC, sortingTheory.PERM_APPEND_IFF] >>
-  ONCE_REWRITE_TAC [sortingTheory.PERM_SYM] >>
-  `FILTER (\x. k x <> h) l = FILTER ($~ o (\x. k x = h)) l`
-    by simp[combinTheory.o_DEF] >>
-  simp[sortingTheory.PERM_SPLIT]
+  qexists_tac `FILTER (\x. k x = h) l ++ FILTER (\x. MEM (k x) names) l` >>
+  conj_tac >- simp[sortingTheory.PERM_APPEND_IFF] >>
+  qspecl_then [`\x. k x = h`, `\x. MEM (k x) names`, `l`] mp_tac
+    PERM_FILTER_disjoint >>
+  simp[]
 QED
 
 Theorem order_internals_key[local]:
   order_internals names ints =
-    FLAT (MAP (\n. FILTER (\x. FST (SND (SND (SND x))) = n) ints) names) ++
-    FILTER (\x. ~MEM (FST (SND (SND (SND x)))) names) ints
+    FLAT (MAP (\n. FILTER (\x. FST (SND (SND (SND x))) = n) ints) names)
 Proof
   simp[order_internals_def, pairTheory.LAMBDA_PROD]
 QED
 
 Theorem MEM_order_internals[simp]:
-  !names ints x. MEM x (order_internals names ints) <=> MEM x ints
+  !names ints x.
+    MEM x (order_internals names ints) <=>
+    MEM x ints /\ MEM (FST (SND (SND (SND x)))) names
 Proof
   rw[order_internals_key, listTheory.MEM_FLAT, listTheory.MEM_MAP,
      listTheory.MEM_FILTER, PULL_EXISTS] >>
@@ -1782,7 +1779,9 @@ Proof
 QED
 
 Theorem PERM_order_internals:
-  !names ints. ALL_DISTINCT names ==> PERM (order_internals names ints) ints
+  !names ints. ALL_DISTINCT names ==>
+    PERM (order_internals names ints)
+      (FILTER (\x. MEM (FST (SND (SND (SND x)))) names) ints)
 Proof
   simp[order_internals_key, PERM_key_order]
 QED
@@ -1798,19 +1797,58 @@ Proof
 QED
 
 Theorem PERM_order_runtime_internals:
-  !tops ints. PERM (order_internals (runtime_internal_order tops ints) ints) ints
+  !tops ints.
+    PERM (order_internals (runtime_internal_order tops ints) ints)
+      (FILTER (\x. MEM (FST (SND (SND (SND x))))
+                      (runtime_internal_order tops ints)) ints)
 Proof
-  simp[PERM_order_internals, runtime_internal_order_def,
-       reach_internals_distinct]
+  rpt gen_tac >> irule PERM_order_internals >>
+  simp[runtime_internal_order_def, reach_internals_distinct]
 QED
 
 Theorem PERM_order_deploy_internals:
-  !ctor ints. PERM (order_internals (deploy_internal_order ctor ints) ints) ints
+  !ctor ints.
+    PERM (order_internals (deploy_internal_order ctor ints) ints)
+      (FILTER (\x. MEM (FST (SND (SND (SND x))))
+                      (deploy_internal_order ctor ints)) ints)
 Proof
-  simp[PERM_order_internals, deploy_internal_order_def,
-       reach_internals_distinct]
+  rpt gen_tac >> irule PERM_order_internals >>
+  simp[deploy_internal_order_def, reach_internals_distinct]
 QED
 
+(* Selecting from functions with distinct keys keeps the keys distinct. *)
+Theorem ALL_DISTINCT_order_internals[local]:
+  !f names ints. ALL_DISTINCT names /\ ALL_DISTINCT (MAP f ints) ==>
+    ALL_DISTINCT (MAP f (order_internals names ints))
+Proof
+  rpt strip_tac >>
+  `PERM (order_internals names ints)
+     (FILTER (\x. MEM (FST (SND (SND (SND x)))) names) ints)` by
+    simp[PERM_order_internals] >>
+  qmatch_asmsub_abbrev_tac `PERM _ (FILTER P ints)` >>
+  `PERM ints (FILTER P ints ++ FILTER ($~ o P) ints)` by
+    simp[sortingTheory.PERM_SPLIT] >>
+  `ALL_DISTINCT (MAP f (FILTER P ints))` by
+    metis_tac[sortingTheory.PERM_MAP, sortingTheory.ALL_DISTINCT_PERM,
+              listTheory.MAP_APPEND, listTheory.ALL_DISTINCT_APPEND] >>
+  metis_tac[sortingTheory.PERM_MAP, sortingTheory.ALL_DISTINCT_PERM]
+QED
+
+Theorem ALL_DISTINCT_order_runtime_internals:
+  !f tops ints. ALL_DISTINCT (MAP f ints) ==>
+    ALL_DISTINCT (MAP f (order_internals (runtime_internal_order tops ints) ints))
+Proof
+  rpt strip_tac >> irule ALL_DISTINCT_order_internals >>
+  simp[runtime_internal_order_def, reach_internals_distinct]
+QED
+
+Theorem ALL_DISTINCT_order_deploy_internals:
+  !f ctor ints. ALL_DISTINCT (MAP f ints) ==>
+    ALL_DISTINCT (MAP f (order_internals (deploy_internal_order ctor ints) ints))
+Proof
+  rpt strip_tac >> irule ALL_DISTINCT_order_internals >>
+  simp[deploy_internal_order_def, reach_internals_distinct]
+QED
 (* ===== Policy-driven complete-unit lowering ===== *)
 
 (* Package runtime metadata from source, but keep the raw lowering result atomic.

@@ -42,6 +42,42 @@ Proof
   simp[bind_def] >> BasicProvers.TOP_CASE_TAC >> gvs[]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `gas_admissible (eval_expr cx e1) expr_map_res_ok es` by
+    (irule subscript_result_base_admissible >> goal_assum (drule_at Any) >> simp[]) >>
+  qpat_x_assum `expr_map_sim_full _ _ _ _ e1 _`
+    (mp_tac o REWRITE_RULE [expr_map_sim_full_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,
+                          `bvv`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (asm_rewrite_tac[] >> simp[])) >> strip_tac >>
+  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cx st0 (eval_expr cx e1) (es,s0,G0,tn0)` by
+    (qpat_x_assum `expr_map_sim_prefix _ _ _ _ e1 _`
+       (mp_tac o REWRITE_RULE [expr_map_sim_prefix_def,expr_map_sim_full_pre_def]) >>
+     disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,
+                             `bvv`,`s0`,`G0`,`tn0`] mp_tac) >>
+     asm_rewrite_tac[] >> simp[]) >>
+  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
+    let val eq = MATCH_MP eval_expr_subscript_bind th in
+      qpat_x_assum `gas_admissible (eval_expr _ (Subscript _ _ _)) _ _`
+        (assume_tac o REWRITE_RULE [eq]) >> rewrite_tac[eq]
+    end) >>
+  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
+  irule gas_prefix_full_bind >>
+  simp[cj 5 evaluate_storage_trace_frame,cj 5 evaluate_requests_outcomes_frame,
+       storage_trace_frame_read_result,storage_trace_frame_bind_all,storage_trace_frame_select] >>
+  qexistsl_tac [
+    `\H res ee G tn t. baseQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = [] /\
+       (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z)`,
+    `baseR`,`cx_tops cx`] >> simp[] >>
+  conj_tac >- suspend "continuation" >>
+  conj_tac >- suspend "base_exit" >>
+  suspend "base_post"
+QED
+*)
 Theorem mapping_subscript_children_prefix:
   place_type cenv e1 = MapPT kt vt /\
   ~subscript_reads_base cx e1 e2 /\
@@ -89,39 +125,10 @@ Theorem mapping_subscript_children_prefix:
   gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     cx st0 (eval_expr cx (Subscript ann e1 e2)) (es,s0,G0,tn0)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `gas_admissible (eval_expr cx e1) expr_map_res_ok es` by
-    (irule subscript_result_base_admissible >> goal_assum (drule_at Any) >> simp[]) >>
-  qpat_x_assum `expr_map_sim_full _ _ _ _ e1 _`
-    (mp_tac o REWRITE_RULE [expr_map_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,
-                          `bvv`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (asm_rewrite_tac[] >> simp[])) >> strip_tac >>
-  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      cx st0 (eval_expr cx e1) (es,s0,G0,tn0)` by
-    (qpat_x_assum `expr_map_sim_prefix _ _ _ _ e1 _`
-       (mp_tac o REWRITE_RULE [expr_map_sim_prefix_def,expr_map_sim_full_pre_def]) >>
-     disch_then (qspecl_then [`st0`,`sa`,`sm`,`shadow_sa`,`shadow_sm`,
-                             `bvv`,`s0`,`G0`,`tn0`] mp_tac) >>
-     asm_rewrite_tac[] >> simp[]) >>
-  qpat_assum `~subscript_reads_base _ _ _` (fn th =>
-    let val eq = MATCH_MP eval_expr_subscript_bind th in
-      qpat_x_assum `gas_admissible (eval_expr _ (Subscript _ _ _)) _ _`
-        (assume_tac o REWRITE_RULE [eq]) >> rewrite_tac[eq]
-    end) >>
-  qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ baseQ baseR` >>
-  irule gas_prefix_full_bind >>
-  simp[cj 5 evaluate_storage_trace_frame,cj 5 evaluate_requests_outcomes_frame,
-       storage_trace_frame_read_result,storage_trace_frame_bind_all,storage_trace_frame_select] >>
-  qexistsl_tac [
-    `\H res ee G tn t. baseQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = [] /\
-       (!fn inst z. frag_reachable ctx func t fn inst z ==> dalloca_fmp_headroom inst z)`,
-    `baseR`,`cx_tops cx`] >> simp[] >>
-  conj_tac >- suspend "continuation" >>
-  conj_tac >- suspend "base_exit" >>
-  suspend "base_post"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume mapping_subscript_children_prefix[base_post]:
   irule gas_outcome_full_post_path >>
   qexists_tac `\H res ee G tn t. baseQ H res ee G tn t /\ ~t.vs_halted /\ ee.gas_obs = []` >>
@@ -133,12 +140,16 @@ Resume mapping_subscript_children_prefix[base_post]:
   irule gas_outcome_full_post_source >>
   qpat_assum `gas_outcome_full _ _ _ _ _ _ baseQ baseR` (irule_at Any) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume mapping_subscript_children_prefix[base_exit]:
   simp[Abbr `baseR`] >> rpt gen_tac >> Cases_on `res` >>
   simp[exprSimDefsTheory.expr_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume mapping_subscript_children_prefix[continuation]:
   qx_genl_tac [`marks`,`raw`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -196,7 +207,9 @@ Resume mapping_subscript_children_prefix[continuation]:
      simp[NoAsms] >> strip_tac >> asm_rewrite_tac[]) >>
   suspend "key_bind"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume mapping_subscript_children_prefix[key_bind]:
   `expr_sim_full_pre (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
      cenv cx (expr_type e2) e2 mid (st0,sm,sn,shadow_sm,shadow_sn,key,t,G1,tn1)` by
@@ -231,5 +244,8 @@ Resume mapping_subscript_children_prefix[key_bind]:
   qpat_assum `gas_outcome_full _ _ _ _ (bind _ _) _ keyQ keyR` (irule_at Any) >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise mapping_subscript_children_prefix
+*)

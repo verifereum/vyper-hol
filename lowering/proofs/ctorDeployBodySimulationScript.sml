@@ -4,7 +4,7 @@ Ancestors
   bodyFullShadowBodyInv
   ctorDeployLoweringFrame ctorDeployLoweringSourceOk
   ctorDeployMemoryRunPtrFrameRet ctorDeployLoweringDefs ctorReturnFrame
-  bodySimFullMain bodyFullPreds bodySimFull bodyAbiDecodeTarget bodyLoopCalls
+  bodySimFullMain bodyFullPreds bodySimFull bodyAbiDecodeTarget bodyLoopCalls bodyCallLiveness
   e2eDeployDefs ctorDeployDefs compileEnv emitHelper
   vyperStorageLayoutSafety vyperLookupStorage vyperContext
   vyperInterpreter vyperState ctorDeployDeadLoad
@@ -72,7 +72,9 @@ Proof
     (qpat_x_assum `deploy_ctor_code _ _ _ _ _` mp_tac >>
      simp[deploy_ctor_code_def, new_block_def] >> strip_tac >> gvs[]) >>
   `cenv.ce_modules = [(NONE,tops)]` by
-    fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def] >>
+    (drule_then
+       (ACCEPT_TAC o MATCH_MP bodyInvCodePropsTheory.contract_inv_cenv_modules)
+       bodySimTheory.body_inv_contract) >>
   `frame_ret_ok_full
      ((\H. deploy_dead H tops runtime_bc am tx), imm_len tops, NONE,
       dunit.cu_context, shadow_ctx, [], func, shadow_func)
@@ -114,6 +116,19 @@ Proof
        (drule_all_then ACCEPT_TAC bodyLoopCallsTheory.checked_deploy_body_loop_calls_ok) >>
      drule_all deploy_ctor_constant_cells >> strip_tac >>
      drule_all_then ACCEPT_TAC bodyLoopCallsTheory.checked_subst_consts_loop_calls_ok) >>
+  `IS_SOME (vyperTypeContract$check_contract F
+     (deploy_evaluation_context tops am tx).layouts
+     (deploy_evaluation_context tops am tx).txn.target [(NONE,tops)])` by
+    simp[deploy_evaluation_context_def, initial_evaluation_context_def,
+         optionTheory.IS_SOME_EXISTS] >>
+  `EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (vyperTypeCallGraph$int_calls_stmts body)` by
+    (`body = subst_consts_stmts (module_consts_env tops []) source_body` by
+       metis_tac[deploy_ctor_entry_selection_agrees] >>
+     qpat_assum `body = subst_consts_stmts _ source_body` SUBST1_TAC >>
+     qpat_assum `check_contract F _ _ _ = SOME _`
+       (rewrite_tac o single o CONJUNCT2 o MATCH_MP checked_singleton_subst_int_calls) >>
+     drule_then ACCEPT_TAC singleton_deploy_body_calls_live) >>
   qspecl_then [`\H. deploy_dead H tops runtime_bc am tx`, `imm_len tops`,
     `NONE`, `[]`, `tops`, `bindings`, `dunit.cu_context`, `shadow_ctx`,
     `func`, `shadow_func`, `cenv`, `deploy_evaluation_context tops am tx`,

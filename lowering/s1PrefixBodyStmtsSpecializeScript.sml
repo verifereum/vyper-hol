@@ -1,12 +1,15 @@
 (* Specialization of the statement-list clause of prefix simulation. *)
 Theory s1PrefixBodyStmtsSpecialize
 Ancestors
-  s1PrefixPreds bodyLoopCalls contractInvContextProps bodyFullPreds bodySim alist
+  bodyCallLiveness s1PrefixPreds bodyLoopCalls contractInvContextProps bodyFullPreds bodySim alist
 
 val _ = Parse.hide "body";
 
 Theorem body_stmts_sim_prefix_from_list_clause:
   (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+                 IS_SOME (vyperTypeContract$check_contract F cx.layouts cx.txn.target [(NONE,tops)]) /\
+                 EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+                   (vyperTypeCallGraph$int_calls_stmts ss) /\
                  struct_args_unique tops /\
                  (!vis mut nr raw fn args dflts ret body.
                     MEM (FunctionDecl vis mut nr raw fn args dflts ret body) tops ==>
@@ -17,6 +20,8 @@ Theorem body_stmts_sim_prefix_from_list_clause:
   !DF lo d PG tops bindings ctx shadow_ctx func shadow_func cenv cx env env'
    ret_ty lctx RetQ ss es.
     body_inv tops ctx cenv cx /\
+    EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (vyperTypeCallGraph$int_calls_stmts ss) /\
     shadow_body_inv tops ctx shadow_ctx /\ struct_args_unique tops /\
     supported_stmts tops bindings ss /\
     (!vis mut nr raw fn args dflts ret body.
@@ -47,7 +52,8 @@ Proof
         (subst_consts_stmts (module_consts_env tops []) body)` by
     (qpat_assum `body_const_cells_agree _ _ _ _`
        (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_def]) >>
-     `cx_tops cx = tops` by fs[ALOOKUP_def] >>
+     `cx_tops cx = tops` by
+       drule_then (ACCEPT_TAC o CONJUNCT2) bodyInvCodePropsTheory.body_inv_main_code >>
      rpt strip_tac >>
      drule checked_subst_consts_loop_calls_ok >>
      simp[] >> disch_then irule >> gvs[] >> metis_tac[]) >>
@@ -55,7 +61,8 @@ Proof
     (asm "list_clause" irule >>
      drule_then assume_tac body_inv_contract >>
      drule_then assume_tac contract_inv_singleton_source_modules >>
-     simp[] >> first_assum ACCEPT_TAC) >>
+     drule_then assume_tac body_const_cells_agree_runtime_check >> simp[] >>
+     first_assum ACCEPT_TAC) >>
   qpat_x_assum `body_stmts_prefix_ok _ _`
     (irule o REWRITE_RULE [body_stmts_prefix_ok_def]) >>
   metis_tac[]

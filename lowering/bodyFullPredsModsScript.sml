@@ -8,6 +8,7 @@ Ancestors
   gasShadow gasContext bodySimFull vyperInterpreter vyperTypeSystem vyperTypeCallGraph
   vyperTypeCallStackSoundness vyperState vyperContext vyperAST
   vyperTypeInvariants list alist option pair finite_map
+  targetPlaceSim[qualified] targetPlaceSimCasesBase[qualified]
   vyperSubscriptOverlap[qualified]
 
 val _ = Parse.hide "body";
@@ -258,6 +259,29 @@ Theorem expr_body_pre_mods_singleton[local]:
    expr_body_pre cenv cx env e es)
 Proof
   expr_pre_mods_singleton_tac expr_body_pre_split_def expr_body_pre_mods_def
+QED
+
+Theorem target_indices_pre_mods_singleton:
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+  cenv.ce_module = NONE /\ immutable_section_layout_mods [(NONE,tops)] cenv ==>
+  !bt. target_indices_pre_mods [(NONE,tops)] cenv cx env bt <=>
+       target_indices_pre cenv cx env bt
+Proof
+  strip_tac >> recInduct targetPlaceSimCasesBaseTheory.base_assignment_target_induct >>
+  simp[targetPlaceSimTheory.target_indices_pre_mods_def,
+       targetPlaceSimTheory.target_indices_pre_def,
+       expr_sim_inv_mods_singleton, expr_body_pre_mods_singleton]
+QED
+
+Theorem target_pre_mods_singleton:
+  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+  cenv.ce_module = NONE /\ immutable_section_layout_mods [(NONE,tops)] cenv ==>
+  (target_pre_mods [(NONE,tops)] cenv cx env bt es <=>
+   target_pre cenv cx env bt es)
+Proof
+  simp[targetPlaceSimTheory.target_pre_mods_def, targetPlaceSimTheory.target_pre_def,
+       target_indices_pre_mods_singleton,
+       expr_sim_inv_mods_singleton]
 QED
 
 Theorem expr_map_pre_mods_singleton[local]:

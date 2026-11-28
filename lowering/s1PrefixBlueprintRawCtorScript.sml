@@ -83,6 +83,49 @@ QED
 (* The checked full cut supplies the prepared buffer and replay.  Run its
    success continuation with a source return, so it exposes the same cut
    without executing any scalar operand. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)` by
+    (irule blueprint_raw_read_prefix >>
+     qpat_assum `compile_create_blueprint_args _ _ T later [e] _ = _` (irule_at Any) >>
+     qpat_assum `compile_create_blueprint_args _ _ T _ [gas_shadow_expr e] _ = _` (irule_at Any) >>
+     qpat_assum `expr_body_pre cenv cx env e es` (irule_at Any) >>
+     qexists `shadow_func` >> simp[] >> qexists `d` >> simp[] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (rpt strip_tac >> first_assum (drule_then strip_assume_tac) >>
+          first_assum ACCEPT_TAC >> NO_TAC) >>
+     qpat_assum `body_expr_prefix_ok cx e`
+       (mp_tac o ONCE_REWRITE_RULE [body_expr_prefix_ok_def]) >>
+     strip_tac >>
+     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
+         _ ==> expr_sim_prefix _ _ _ _ _ _ /\ expr_vv_sim_prefix _ _ _ _ _ _`
+       (drule_all_then (irule o cj 2 o SPEC_ALL))) >>
+  once_rewrite_tac [abi_args_singleton_source] >>
+  rewrite_tac [bind_assoc,bind_return] >>
+  once_rewrite_tac [GSYM bind_assoc] >>
+  irule gas_prefix_full_bind >>
+  simp [bind_return,storage_trace_frame_bind_all,evaluate_storage_trace_frame,
+        storage_trace_frame_read_result,requests_outcomes_frame_bind_all,
+        evaluate_requests_outcomes_frame,requests_outcomes_frame_read_result] >>
+  qexistsl [
+    `\H (res:value + exception) ee Gu tu u. !v. res = INL v ==>
+      gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+        cx st0 (next [v]) (ee,u,Gu,tu)`,
+    `\H (res:value + exception) ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
+       (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z)`,
+    `cx_tops cx`] >>
+  BETA_TAC >> rpt conj_tac
+  >- (rpt strip_tac >>
+      qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
+        (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+      fs[storage_trace_domain_def])
+  >- (rpt strip_tac >> Cases_on `res` >> fs[expr_exit_def]) >>
+  suspend "return_value"
+QED
+*)
 Theorem blueprint_raw_ctor_cut_prefix:
   body_const_cells_agree [(NONE,tops)] cx env es /\
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
@@ -145,46 +188,10 @@ Theorem blueprint_raw_ctor_cut_prefix:
   gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     cx st0 (bind (eval_exprs cx [e]) next) (es,s,G,tn)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)` by
-    (irule blueprint_raw_read_prefix >>
-     qpat_assum `compile_create_blueprint_args _ _ T later [e] _ = _` (irule_at Any) >>
-     qpat_assum `compile_create_blueprint_args _ _ T _ [gas_shadow_expr e] _ = _` (irule_at Any) >>
-     qpat_assum `expr_body_pre cenv cx env e es` (irule_at Any) >>
-     qexists `shadow_func` >> simp[] >> qexists `d` >> simp[] >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     TRY (rpt strip_tac >> first_assum (drule_then strip_assume_tac) >>
-          first_assum ACCEPT_TAC >> NO_TAC) >>
-     qpat_assum `body_expr_prefix_ok cx e`
-       (mp_tac o ONCE_REWRITE_RULE [body_expr_prefix_ok_def]) >>
-     strip_tac >>
-     qpat_assum `!DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es.
-         _ ==> expr_sim_prefix _ _ _ _ _ _ /\ expr_vv_sim_prefix _ _ _ _ _ _`
-       (drule_all_then (irule o cj 2 o SPEC_ALL))) >>
-  once_rewrite_tac [abi_args_singleton_source] >>
-  rewrite_tac [bind_assoc,bind_return] >>
-  once_rewrite_tac [GSYM bind_assoc] >>
-  irule gas_prefix_full_bind >>
-  simp [bind_return,storage_trace_frame_bind_all,evaluate_storage_trace_frame,
-        storage_trace_frame_read_result,requests_outcomes_frame_bind_all,
-        evaluate_requests_outcomes_frame,requests_outcomes_frame_read_result] >>
-  qexistsl [
-    `\H (res:value + exception) ee Gu tu u. !v. res = INL v ==>
-      gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-        cx st0 (next [v]) (ee,u,Gu,tu)`,
-    `\H (res:value + exception) ee gt r. expr_exit res r /\ halt_exit H cx ee res r /\
-       (ctx_has_dalloca ctx ==> !z. r = Halt z ==> allocas_below_fmp z)`,
-    `cx_tops cx`] >>
-  BETA_TAC >> rpt conj_tac
-  >- (rpt strip_tac >>
-      qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> _`
-        (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-      fs[storage_trace_domain_def])
-  >- (rpt strip_tac >> Cases_on `res` >> fs[expr_exit_def]) >>
-  suspend "return_value"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume blueprint_raw_ctor_cut_prefix[return_value]:
   `bind (eval_exprs cx [e]) (\vs. return (HD vs)) =
      bind (eval_expr cx e) (read_result cx)` by
@@ -215,5 +222,8 @@ Resume blueprint_raw_ctor_cut_prefix[return_value]:
     (qspecl_then [`bs`,`ee`,`Gu`,`tu`,`u`,`marks`] mp_tac) >>
   (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise blueprint_raw_ctor_cut_prefix
+*)

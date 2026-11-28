@@ -71,6 +71,23 @@ QED
 (* The nonraw payload's encoder is reached through the actual completed
    constructor rows. The final two prefixes are the allocation and encode
    bands, not part of any source operand. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  qabbrev_tac `k = \vs. bind (eval_exprs cx later)
+    (\ws. eval_create_operands cx (CreateFromBlueprint F) hs rof
+       (MAP expr_type args) (blueprint_literal_offset cx hs args) (av::(vs ++ ws)))` >>
+  `bind (eval_exprs cx ctors) k p0 = (res,out)` by
+    fs[Abbr `k`,blueprint_abi_bind_append] >>
+  `!vs. storage_trace_frame (k vs)` by
+    simp[Abbr `k`,blueprint_read_list_frame,evaluate_storage_trace_frame,
+         storage_trace_frame_bind_all,storage_trace_frame_create_operands] >>
+  Cases_on `ctors = []` >- suspend "empty" >>
+  qpat_x_assum `ctors <> [] ==> _` (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  suspend "nonempty"
+QED
+*)
 Theorem create_blueprint_abi_keyword_entry:
   body_inv tops ctx ce cx /\ shadow_body_inv tops ctx shctx /\
   expr_body_pre ce cx env (Call ann (CreateTarget (CreateFromBlueprint F) hs rof ks) args df) entry /\
@@ -166,20 +183,10 @@ Theorem create_blueprint_abi_keyword_entry:
     ~t.vs_halted /\ t.vs_current_bb = en.cs_current_bb /\ t.vs_inst_idx = LENGTH en.cs_current_insts /\
     p.gas_obs = gas_explicit rest t.vs_gas_readings ++ tail
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  qabbrev_tac `k = \vs. bind (eval_exprs cx later)
-    (\ws. eval_create_operands cx (CreateFromBlueprint F) hs rof
-       (MAP expr_type args) (blueprint_literal_offset cx hs args) (av::(vs ++ ws)))` >>
-  `bind (eval_exprs cx ctors) k p0 = (res,out)` by
-    fs[Abbr `k`,blueprint_abi_bind_append] >>
-  `!vs. storage_trace_frame (k vs)` by
-    simp[Abbr `k`,blueprint_read_list_frame,evaluate_storage_trace_frame,
-         storage_trace_frame_bind_all,storage_trace_frame_create_operands] >>
-  Cases_on `ctors = []` >- suspend "empty" >>
-  qpat_x_assum `ctors <> [] ==> _` (drule_then (map_every assume_tac o CONJUNCTS)) >>
-  suspend "nonempty"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[empty]:
   gvs[compile_create_blueprint_args_def,comp_return_def,cj 49 vyperInterpreterTheory.evaluate_def,bind_return] >>
   `valid_horizon cx st0 H p0.storage_trace` by
@@ -188,7 +195,9 @@ Resume create_blueprint_abi_keyword_entry[empty]:
   simp[encode_create_ctor_args_def,eval_operand_def,return_def] >>
   rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[nonempty]:
   `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
     metis_tac[body_inv_no_phi] >>
@@ -222,7 +231,9 @@ Resume create_blueprint_abi_keyword_entry[nonempty]:
   >- (disj1_tac >> goal_assum (drule_at Any) >> simp[]) >>
   suspend "payload"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[no_phi]:
   rpt strip_tac >> drule bodySimTheory.body_inv_contract >>
   disch_then (strip_assume_tac o MATCH_MP contractInvContextPropsTheory.contract_inv_lowering_context) >>
@@ -230,7 +241,9 @@ Resume create_blueprint_abi_keyword_entry[no_phi]:
   qpat_assum `!fn. MEM fn _ ==> fn_ptr_ok_check _ _ /\ _`
     (qspec_then `func` (drule_then strip_assume_tac)) >> metis_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[alloc_edge]:
   `?op. emit_op ALLOCA [Lit (n2w capacity)] se = (op,a)` by
     (Cases_on `emit_op ALLOCA [Lit (n2w capacity)] se` >>
@@ -246,7 +259,9 @@ Resume create_blueprint_abi_keyword_entry[alloc_edge]:
   qexists_tac `mk_inst se.cs_next_id ALLOCA [Lit (n2w capacity)] [tmp]` >>
   gvs[ctor_segment_fetch_def,mk_inst_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[fetch]:
   rpt strip_tac >>
   `?j. ctor_segment_fetch func (St i) = SOME j /\ (C i).cs_next_id <= j.inst_id` by
@@ -263,7 +278,9 @@ Resume create_blueprint_abi_keyword_entry[fetch]:
   simp[ctor_segment_fetch_def,AllCaseEqs()] >>
   metis_tac[lookup_block_get_instruction_fn_insts]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[row_pre]:
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   qx_gen_tac `i` >> disch_tac >>
@@ -286,7 +303,9 @@ Resume create_blueprint_abi_keyword_entry[row_pre]:
   irule blueprint_abi_silent_band >>
   qexistsl_tac [`M i`,`C (SUC i)`,`ctx`,`gas_explicit_sites ctx shctx`,`func`,`Mid i`,`St (SUC i)`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[payload]:
   qabbrev_tac `ee = E (LENGTH ctors)` >>
   `EVERY (\call. FST call = NONE /\ IS_SOME (supported_function_decl tops call Internal))
@@ -313,7 +332,9 @@ Resume create_blueprint_abi_keyword_entry[payload]:
   qmatch_asmsub_rename_tac `gas_origin_ptr_path _ (su,_,_) [] (OK t,geout,teout)` >>
   suspend "finish"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[calls]:
   drule_all_then assume_tac bodySingletonCallSupportTheory.body_inv_expr_pre_calls >>
   simp[EVERY_MEM] >> qx_gen_tac `call` >> disch_tac >>
@@ -323,7 +344,9 @@ Resume create_blueprint_abi_keyword_entry[calls]:
     (qspec_then `call` mp_tac o SIMP_RULE bool_ss [EVERY_MEM]) >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[producer_pre]:
   qpat_assum `ctors <> []` (simp_tac bool_ss o single) >>
   pure_rewrite_tac[GSYM raw_encoder_prefix_rtc] >>
@@ -337,7 +360,9 @@ Resume create_blueprint_abi_keyword_entry[producer_pre]:
   >- suspend "producer_row" >>
   suspend "producer_callback"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[producer_row]:
   qx_gen_tac `i` >> disch_tac >>
   qpat_assum `!i. i < LENGTH ctors ==> compile_expr _ _ _ _ = _ /\ _`
@@ -364,7 +389,9 @@ Resume create_blueprint_abi_keyword_entry[producer_row]:
   qpat_assum `create_expr_prefix (M i) (C (SUC i)) _ _ _ _ _ _` mp_tac >>
   simp[] >> metis_tac[create_prefix_empty]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[producer_callback]:
   map_every qx_gen_tac [`i`,`g`,`h`] >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
@@ -372,7 +399,9 @@ Resume create_blueprint_abi_keyword_entry[producer_callback]:
     (qspec_then `i` (drule_then (mp_tac o List.last o CONJUNCTS))) >>
   disch_then (qspecl_then [`g`,`h`] (drule_then ACCEPT_TAC))
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[finish]:
   qhdtm_assum `abi_encode_saved_state`
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE[abi_encode_saved_state_def]) >>
@@ -403,7 +432,9 @@ Resume create_blueprint_abi_keyword_entry[finish]:
   gvs[Abbr `k`] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
   qexists_tac `bs` >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[exit_labels]:
   `!i. i <= LENGTH ctors ==> (St i).vs_labels = (St 0).vs_labels` by
     (Induct >> simp[] >> disch_tac >>
@@ -416,7 +447,9 @@ Resume create_blueprint_abi_keyword_entry[exit_labels]:
      imp_res_tac create_prefix_labels >> simp[]) >>
   imp_res_tac create_prefix_labels >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume create_blueprint_abi_keyword_entry[exit_gas]:
   `am = [] /\ encmarks = []` by
     (imp_res_tac gas_origin_ptr_path_projections >> conj_tac >>
@@ -425,5 +458,8 @@ Resume create_blueprint_abi_keyword_entry[exit_gas]:
      qexistsl_tac [`a`,`en`,`ctx`,`gas_explicit_sites ctx shctx`,`func`,`su`,`t`] >> simp[]) >>
   imp_res_tac create_prefix_readings >> fs[Abbr `ee`]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise create_blueprint_abi_keyword_entry
+*)

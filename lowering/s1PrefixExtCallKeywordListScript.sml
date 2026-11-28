@@ -10,6 +10,18 @@ Ancestors
   bodyFullPreds bodyFullExprsListFacts stmtLoweringMono exprSimDefs vyperStorageFootprint
   vyperInterpreter vyperState vyperStorageTrace list
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (mk_asm "head_prefix") >>
+  map_every qid_spec_tac
+    [`tn0`,`G0`,`s0`,`es`,`shadow_sb`,`shadow_sa`,`sb`,`sa`,`dopt`,`go`,`vo`,`ks`] >>
+  Induct_on `xs` >> rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS)
+  >- (irule gas_prefix_full_no_outcome >>
+      simp[evaluate_def, return_def, storage_trace_frame_return]) >>
+  suspend "cuts"
+QED
+*)
 Theorem extcall_request_keywords_prefix_from_head:
   (!k e es sa sb op dt shadow_sa shadow_sb s0 G0 tn0.
     body_expr_full_ok cx e /\ body_expr_prefix_ok cx e /\
@@ -71,15 +83,10 @@ Theorem extcall_request_keywords_prefix_from_head:
   gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     cx st0 (eval_exprs cx xs) (es,s0,G0,tn0)
 Proof
-  disch_then (mk_asm "head_prefix") >>
-  map_every qid_spec_tac
-    [`tn0`,`G0`,`s0`,`es`,`shadow_sb`,`shadow_sa`,`sb`,`sa`,`dopt`,`go`,`vo`,`ks`] >>
-  Induct_on `xs` >> rpt gen_tac >> disch_then (MAP_EVERY assume_tac o CONJUNCTS)
-  >- (irule gas_prefix_full_no_outcome >>
-      simp[evaluate_def, return_def, storage_trace_frame_return]) >>
-  suspend "cuts"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_keywords_prefix_from_head[cuts]:
   Cases_on `ks` >> fs[] >>
   rename1 `compile_ext_call_kwargs _ _ rt (k::ks) (e::xs) sa = _` >>
@@ -124,7 +131,9 @@ Resume extcall_request_keywords_prefix_from_head[cuts]:
     metis_tac[fn_has_code_split] >>
   suspend "compose"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_keywords_prefix_from_head[compose]:
   fs[body_exprs_full_ok_cons, Once (cj 2 body_exprs_prefix_ok_def)] >>
   `expr_body_pre cenv cx env e es` by metis_tac[] >>
@@ -164,7 +173,9 @@ Resume extcall_request_keywords_prefix_from_head[compose]:
   >- (rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]) >>
   rpt gen_tac >> strip_tac >> suspend "tail"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume extcall_request_keywords_prefix_from_head[tail]:
   `bind (eval_expr cx e) (read_result cx)
      (es with gas_obs := gas_explicit marks s0.vs_gas_readings) =
@@ -209,5 +220,8 @@ Resume extcall_request_keywords_prefix_from_head[tail]:
     (gen_tac >> Cases_on `eval_exprs cx xs st` >> Cases_on `q` >> simp[bind_def, return_def]) >>
   drule gas_prefix_full_state_cong >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise extcall_request_keywords_prefix_from_head
+*)

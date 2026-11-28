@@ -615,6 +615,8 @@ Proof
     (gvs[] >> drule_all deploy_ctor_body_substitution >> simp[]) >>
   qpat_x_assum `body = subst_consts_stmts _ body'` kall_tac >>
   drule deploy_ctor_return_metadata >> strip_tac >>
+  `cenv.ce_modules = [(NONE,tops)]` by
+    (drule_all deploy_ctor_body_inv >> simp[body_inv_def, cenv_module_pins_def]) >>
   drule_all deploy_ctor_immutable_size >> strip_tac >>
   qspecl_then [`tops`, `am`, `tx`, `mut`, `nr`, `body`, `body'`, `am_c`, `es0`,
     `rpolicy`, `runtime_bc`, `dunit`, `cenv`, `nkey`, `ut`, `imm`,

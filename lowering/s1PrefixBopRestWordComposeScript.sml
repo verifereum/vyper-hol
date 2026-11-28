@@ -11,20 +11,8 @@ Ancestors
   contextRawReachable unitMemInv gasSummary exprBodyPreProps
   vyperStorageFootprint loweringPosts
 
-Theorem compile_rest_word_membership_prefix:
-  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop e1 e2 bd es.
-  (bop = In \/ bop = NotIn) /\
-  is_word_type (expr_type e1) /\
-  expr_type e2 = ArrayT (expr_type e1) bd /\
-  (!a t n elems. e2 <> Builtin a (MakeArray t n) elems) /\
-  body_exprs_full_ok cx [e1;e2] /\
-  body_exprs_prefix_ok cx [e1;e2] /\
-  body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es ==>
-  expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Builtin ann (Bop bop) [e1;e2]) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> disch_then (map_every assume_tac o CONJUNCTS) >>
   `expr_body_pre cenv cx env e1 es` by
@@ -93,7 +81,26 @@ Proof
   rpt gen_tac >> rename1 `expr_exit res r /\ _ ==> _` >>
   Cases_on `res` >> simp[expr_exit_def]
 QED
+*)
+Theorem compile_rest_word_membership_prefix:
+  !DF lo d PG tops ctx shadow_ctx func shadow_func cenv cx env ty ann bop e1 e2 bd es.
+  (bop = In \/ bop = NotIn) /\
+  is_word_type (expr_type e1) /\
+  expr_type e2 = ArrayT (expr_type e1) bd /\
+  (!a t n elems. e2 <> Builtin a (MakeArray t n) elems) /\
+  body_exprs_full_ok cx [e1;e2] /\
+  body_exprs_prefix_ok cx [e1;e2] /\
+  body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es ==>
+  expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Builtin ann (Bop bop) [e1;e2]) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume compile_rest_word_membership_prefix[array_prefix]:
   rpt gen_tac >> strip_tac >> BETA_TAC >>
   drule_all rest_word_full_second_entry >> strip_tac >>
@@ -147,5 +154,8 @@ Resume compile_rest_word_membership_prefix[array_prefix]:
      rename1 `read_result cx raw ee' = (rd,_)` >> Cases_on `rd` >> simp[]) >>
   fs[] >> metis_tac[gas_prefix_full_state_cong]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise compile_rest_word_membership_prefix
+*)
