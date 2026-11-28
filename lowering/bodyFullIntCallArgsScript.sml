@@ -7530,11 +7530,17 @@ Proof
 QED
 *)
 Theorem intcall_args_failed_lock_invoke_outcome[local]:
-  body_inv tops ctx cenv cx /\ ctx_inst_ids_distinct ctx /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (contract_inv mods exps ctx cenv cx /\
+   module_body_inv mods caller_src caller_tops cenv cx) /\
+  ctx_inst_ids_distinct ctx /\
+  ALOOKUP mods src = SOME tops /\
+  (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+  ((src = NONE /\ mods = [(NONE,tops)]) \/
+    MEM (src,name) (linked_live_functions mods exps)) /\
+  (!H. dead_lo_ok_mods H (DF H) lo cenv cx) /\
   (!H. valid_horizon cx st0 H ed.storage_trace ==>
-    intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm
+    intcall_entry_full_mods (DF,lo,d) H mods src tops ctx func cenv cx tenv name es sa sm
       vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) ed.scopes penv rtv
       (ed with scopes := [penv]) u G tn) /\
   (?H. valid_horizon cx st0 H ed.storage_trace) /\
@@ -7544,8 +7550,8 @@ Theorem intcall_args_failed_lock_invoke_outcome[local]:
        expr_exit res r /\ halt_exit H cx ee res r /\
        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s) ==>
        R H res ee gt r) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 source (ed,u,G,tn) Q R
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    mods cx st0 source (ed,u,G,tn) Q R
 Proof
   cheat
 QED
@@ -7597,8 +7603,9 @@ QED
 *)
 Theorem args_defaults_restore_expr_sim_inv[local]:
   expr_sim_inv_mods mods ce cx env before /\
-  expr_sim_inv_mods mods (cenv_without_defaults ce name)
-    (cx with stk updated_by CONS (NONE,name)) (env with current_src := NONE) after ==>
+  expr_sim_inv_mods mods
+    (cenv_without_defaults (ce with ce_module := src) (nsid_to_string (src,name)))
+    (cx with stk updated_by CONS (src,name)) (env with current_src := src) after ==>
   expr_sim_inv_mods mods ce cx env after
 Proof
   cheat
@@ -7729,13 +7736,13 @@ QED
 *)
 Theorem args_return_buffer_geometry[local]:
   (ret <> NoneT ==> 0 < type_memory_size tv) /\
-  get_module_code cx NONE = SOME tops /\
+  get_module_code cx src = SOME tops /\
   expr_sim_inv_mods mods ce cx env es /\
-  ce.ce_struct_fields = make_struct_fields_map tops /\
+  ce.ce_struct_fields = make_struct_fields_map_mods mods /\
   evaluate_type (get_tenv cx) ret = SOME tv /\
   compute_func_info
-    (\k. MAP (FST o SND) (get_struct_fields (make_struct_fields_map tops) k))
-    ret (type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ret)
+    (\k. MAP (FST o SND) (get_struct_fields (make_struct_fields_map_mods mods) k))
+    ret (type_mem_bytes (get_struct_fields (make_struct_fields_map_mods mods)) ret)
     ty_args = (nrc,rbs,pvs) ==>
   ((nrc = 0 /\ ret <> NoneT) <=> nrc = 0 /\ 0 < rbs) /\
   (nrc = 0 /\ 0 < rbs ==> rbs = type_memory_size tv)
@@ -8530,26 +8537,37 @@ QED
 *)
 Theorem intcall_args_defaults_source_setup[local]:
   (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-  body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
-  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+   module_body_inv mods caller_src caller_tops cenv cx) /\
+  body_const_cells_agree mods cx tenv es0 /\
+  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
   EVERY (\e. expr_body_pre_mods mods cenv cx tenv e es0) es /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  ALOOKUP mods src = SOME tops /\
+  (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+  ((src = NONE /\ mods = [(NONE,tops)]) \/
+    MEM (src,name) (linked_live_functions mods exps)) /\
   expr_sim_inv_mods mods cenv cx tenv ee /\
   eval_exprs cx es (es0 with gas_obs := obs) = (INL xs,ee with gas_obs := []) /\
   length_skip = LENGTH dflts - (LENGTH args - LENGTH es) /\
-  cxd = cx with stk updated_by CONS (NONE,name) /\
-  ds = DROP length_skip (subst_consts_exprs (module_consts_env tops []) dflts) ==>
-  body_inv tops ctx (cenv_without_defaults cenv name) cxd /\
-  expr_sim_inv_mods mods (cenv_without_defaults cenv name) cxd (tenv with current_src := NONE) ee /\
-  EVERY (\e. expr_body_pre_mods mods (cenv_without_defaults cenv name) cxd
-      (tenv with current_src := NONE) e ee) ds /\
-  body_const_cells_agree [(NONE,tops)] cxd (tenv with current_src := NONE) ee /\
+  cxd = cx with stk updated_by CONS (src,name) /\
+  ds = DROP length_skip (subst_consts_exprs_mods (consts_env_mods mods) dflts) /\
+  ~supported_exprs_exists (const_name_root_mods mods) ds ==>
+  contract_inv mods exps ctx
+    (cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name))) cxd /\
+  module_body_inv mods src tops
+    (cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name))) cxd /\
+  expr_sim_inv_mods mods
+    (cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name)))
+    cxd (tenv with current_src := src) ee /\
+  EVERY (\e. expr_body_pre_mods mods
+    (cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name)))
+    cxd (tenv with current_src := src) e ee) ds /\
+  body_const_cells_agree mods cxd (tenv with current_src := src) ee /\
   (!gs scs. eval_exprs cxd ds (ee with <|gas_obs := gs; scopes := scs|>) =
     eval_exprs cxd (DROP length_skip dflts) (ee with <|gas_obs := gs; scopes := scs|>)) /\
   supported_pure_exprs tops ds /\
-  well_typed_exprs (defaults_env (tenv with current_src := NONE)) ds /\
+  well_typed_exprs (defaults_env (tenv with current_src := src)) ds /\
   (!s res fin. eval_exprs cxd ds s = (res,fin) ==> fin.scopes = s.scopes) /\
   (!s scs. eval_exprs cxd ds (s with scopes := scs) =
     (FST (eval_exprs cxd ds s), SND (eval_exprs cxd ds s) with scopes := scs)) /\
@@ -8648,17 +8666,17 @@ Proof
 QED
 *)
 Theorem intcall_args_defaults_machine_setup[local]:
-  cxd = cx with stk updated_by CONS (NONE,name) /\
-  dc = cenv_without_defaults cenv name /\
+  cxd = cx with stk updated_by CONS (src,name) /\
+  dc = cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name)) /\
   compile_stage_intcall_args compile_expr cenv es supplied_flags supplied_tys st2 = (sup_ops,st2a) /\
-  compile_stage_intcall_args compile_expr (cenv_without_defaults cenv (nsid_to_string (NONE,name)))
+  compile_stage_intcall_args compile_expr (cenv_without_defaults cenv (nsid_to_string (src,name)))
     ds flags (DROP (LENGTH es) (TAKE (LENGTH args)
-      (cenv.ce_func_param_types (nsid_to_string (NONE,name))))) st2a = (def_ops,st3) /\
+      (cenv.ce_func_param_types (nsid_to_string (src,name))))) st2a = (def_ops,st3) /\
   compile_stage_intcall_args compile_expr
-    (gas_shadow_env T (cenv_without_defaults cenv (nsid_to_string (NONE,name))))
+    (gas_shadow_env T (cenv_without_defaults cenv (nsid_to_string (src,name))))
     (MAP gas_shadow_expr ds) flags (DROP (LENGTH es) (TAKE (LENGTH args)
-      (cenv.ce_func_param_types (nsid_to_string (NONE,name))))) sh_st2a = (def_ops,sh_st3) /\
-  cenv.ce_func_param_types name = MAP SND args /\
+      (cenv.ce_func_param_types (nsid_to_string (src,name))))) sh_st2a = (def_ops,sh_st3) /\
+  cenv.ce_func_param_types (nsid_to_string (src,name)) = MAP SND args /\
   local_ptrs_reserved cenv st2 /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st2 x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st2 x) /\
@@ -8667,7 +8685,7 @@ Theorem intcall_args_defaults_machine_setup[local]:
   gas_path ctx func entry (LENGTH (marks:bool list)) (OK t) /\
   (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
   (!fn inst u. frag_reachable ctx func entry fn inst u ==> dalloca_fmp_headroom inst u) /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok_mods H (DF H) lo cenv cx) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
      stmt_state_rel H ctx func cenv cx ee t /\
      storage_well_formed_on cx ee (FST H) /\
@@ -8682,7 +8700,7 @@ Theorem intcall_args_defaults_machine_setup[local]:
   return_buf_frame d dc st2a t /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
   (!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u) /\
-  (!H. dead_lo_ok H (DF H) lo dc cxd) /\
+  (!H. dead_lo_ok_mods H (DF H) lo dc cxd) /\
   (!H. valid_horizon cxd st0 H ee.storage_trace ==>
      stmt_state_rel H ctx func dc cxd ee t /\
      storage_well_formed_on cxd ee (FST H) /\
@@ -8719,27 +8737,31 @@ QED
 *)
 Theorem intcall_args_defaults_stage_setup:
   (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
-  body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
-  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+   module_body_inv mods caller_src caller_tops cenv cx) /\
+  body_const_cells_agree mods cx tenv es0 /\
+  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
   EVERY (\e. expr_body_pre_mods mods cenv cx tenv e es0) es /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  ALOOKUP mods src = SOME tops /\
+  (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+  ((src = NONE /\ mods = [(NONE,tops)]) \/
+    MEM (src,name) (linked_live_functions mods exps)) /\
   expr_sim_inv_mods mods cenv cx tenv ee /\
   eval_exprs cx es (es0 with gas_obs := obs) = (INL xs,ee with gas_obs := []) /\
   length_skip = LENGTH dflts - (LENGTH args - LENGTH es) /\
-  cxd = cx with stk updated_by CONS (NONE,name) /\
-  dc = cenv_without_defaults cenv name /\
-  ds = DROP length_skip (subst_consts_exprs (module_consts_env tops []) dflts) /\
+  cxd = cx with stk updated_by CONS (src,name) /\
+  dc = cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name)) /\
+  ds = DROP length_skip (subst_consts_exprs_mods (consts_env_mods mods) dflts) /\
   compile_stage_intcall_args compile_expr cenv es supplied_flags supplied_tys st2 = (sup_ops,st2a) /\
-  compile_stage_intcall_args compile_expr (cenv_without_defaults cenv (nsid_to_string (NONE,name)))
+  compile_stage_intcall_args compile_expr (cenv_without_defaults cenv (nsid_to_string (src,name)))
     ds flags (DROP (LENGTH es) (TAKE (LENGTH args)
-      (cenv.ce_func_param_types (nsid_to_string (NONE,name))))) st2a = (def_ops,st3) /\
+      (cenv.ce_func_param_types (nsid_to_string (src,name))))) st2a = (def_ops,st3) /\
   compile_stage_intcall_args compile_expr
-    (gas_shadow_env T (cenv_without_defaults cenv (nsid_to_string (NONE,name))))
+    (gas_shadow_env T (cenv_without_defaults cenv (nsid_to_string (src,name))))
     (MAP gas_shadow_expr ds) flags (DROP (LENGTH es) (TAKE (LENGTH args)
-      (cenv.ce_func_param_types (nsid_to_string (NONE,name))))) sh_st2a = (def_ops,sh_st3) /\
-  cenv.ce_func_param_types name = MAP SND args /\
+      (cenv.ce_func_param_types (nsid_to_string (src,name))))) sh_st2a = (def_ops,sh_st3) /\
+  cenv.ce_func_param_types (nsid_to_string (src,name)) = MAP SND args /\
   local_ptrs_reserved cenv st2 /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at st2 x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at st2 x) /\
@@ -8748,20 +8770,20 @@ Theorem intcall_args_defaults_stage_setup:
   gas_path ctx func entry (LENGTH (marks:bool list)) (OK t) /\
   (!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
   (!fn inst u. frag_reachable ctx func entry fn inst u ==> dalloca_fmp_headroom inst u) /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  (!H. dead_lo_ok_mods H (DF H) lo cenv cx) /\
   (!H. valid_horizon cx st0 H ee.storage_trace ==>
      stmt_state_rel H ctx func cenv cx ee t /\
      storage_well_formed_on cx ee (FST H) /\
      ghost_inv_at (DF H) lo d cenv cx ee G tn t) ==>
   (contract_inv mods exps ctx dc cxd /\
-     module_body_inv mods dc.ce_module tops dc cxd) /\
-  expr_sim_inv_mods mods dc cxd (tenv with current_src := NONE) ee /\
-  EVERY (\e. expr_body_pre_mods mods dc cxd (tenv with current_src := NONE) e ee) ds /\
-  body_const_cells_agree [(NONE,tops)] cxd (tenv with current_src := NONE) ee /\
+     module_body_inv mods src tops dc cxd) /\
+  expr_sim_inv_mods mods dc cxd (tenv with current_src := src) ee /\
+  EVERY (\e. expr_body_pre_mods mods dc cxd (tenv with current_src := src) e ee) ds /\
+  body_const_cells_agree mods cxd (tenv with current_src := src) ee /\
   (!gs scs. eval_exprs cxd ds (ee with <|gas_obs := gs; scopes := scs|>) =
     eval_exprs cxd (DROP length_skip dflts) (ee with <|gas_obs := gs; scopes := scs|>)) /\
   supported_pure_exprs tops ds /\
-  well_typed_exprs (defaults_env (tenv with current_src := NONE)) ds /\
+  well_typed_exprs (defaults_env (tenv with current_src := src)) ds /\
   (!s res fin. eval_exprs cxd ds s = (res,fin) ==> fin.scopes = s.scopes) /\
   (!s scs. eval_exprs cxd ds (s with scopes := scs) =
     (FST (eval_exprs cxd ds s), SND (eval_exprs cxd ds s) with scopes := scs)) /\
@@ -8786,7 +8808,7 @@ Theorem intcall_args_defaults_stage_setup:
   return_buf_frame d dc st2a t /\
   (ctx_has_dalloca ctx ==> allocas_below_fmp t) /\
   (!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u) /\
-  (!H. dead_lo_ok H (DF H) lo dc cxd) /\
+  (!H. dead_lo_ok_mods H (DF H) lo dc cxd) /\
   (!H. valid_horizon cxd st0 H ee.storage_trace ==>
      stmt_state_rel H ctx func dc cxd ee t /\
      storage_well_formed_on cxd ee (FST H) /\
@@ -9383,17 +9405,22 @@ Proof
 QED
 *)
 Theorem intcall_args_supplied_stage_setup:
-  body_inv tops ctx cenv cx /\
-  body_const_cells_agree [(NONE,tops)] cx tenv es0 /\
-  expr_body_pre_mods [(NONE,tops)] cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
+  (contract_inv mods exps ctx cenv cx /\
+   module_body_inv mods caller_src caller_tops cenv cx) /\
+  body_const_cells_agree mods cx tenv es0 /\
+  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  ALOOKUP mods src = SOME tops /\
+  (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+  ((src = NONE /\ mods = [(NONE,tops)]) \/
+    MEM (src,name) (linked_live_functions mods exps)) /\
   LENGTH args - LENGTH dflts <= LENGTH es /\ LENGTH es <= LENGTH args /\
   (!v. cs_appends (kc v)) /\
-  comp_bind (compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt))
+  comp_bind (compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt))
     kc sa = (out,sb) /\
   comp_bind (compile_expr (gas_shadow_env T cenv) ty
-      (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)))
+      (gas_shadow_expr (Call ann (IntCall (src,name)) es dflt)))
     kc shadow_sa = (out,shadow_sb) /\
   gas_shadow_state sa shadow_sa /\
   MEM func ctx.ctx_functions /\
@@ -9411,71 +9438,65 @@ Theorem intcall_args_supplied_stage_setup:
     ghost_inv_at (DF H) lo d cenv cx es0 G0 tn0 s0) /\
   ~s0.vs_halted /\ s0.vs_current_bb = sa.cs_current_bb /\
   s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-  ?art imms A roots compiled_dflts ds vv sm shadow_vv shadow_sm rc' rbs pvs buf_n
+  ?compiled_dflts ds vv sm shadow_vv shadow_sm rc' rbs pvs buf_n
    st2 st2a st3 sh_st2 sh_st2a sh_st3 sup_ops def_ops sh_def_ops entry Ga tna pin.
-    get_module_code cx NONE = SOME tops /\ cx_tops cx = tops /\
-    call_evaluation_safe cx ((NONE,name)::int_calls_exprs es) /\
-    ~MEM (NONE,name) cx.stk /\ LENGTH args - LENGTH es <= LENGTH dflts /\
-    check_contract cx.in_deploy cx.layouts cx.txn.target [(NONE,tops)] = SOME art /\
-    ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
-    constants_fold_module [(NONE,tops)] imms NONE tops FEMPTY = SOME A /\
-    frame_maps tenv art /\
-    const_subst_context roots cx tenv (module_consts_env tops []) [(NONE,tops)] art /\
-    const_cells_agree roots es0 /\
-    compiled_dflts = subst_consts_exprs (module_consts_env tops []) dflts /\
+    get_module_code cx src = SOME tops /\ ALOOKUP mods src = SOME tops /\
+    call_evaluation_safe cx ((src,name)::int_calls_exprs es) /\
+    ~MEM (src,name) cx.stk /\ LENGTH args - LENGTH es <= LENGTH dflts /\
+    compiled_dflts = subst_consts_exprs_mods (consts_env_mods mods) dflts /\
     MAP expr_type compiled_dflts = MAP expr_type dflts /\
     LENGTH compiled_dflts = LENGTH dflts /\
     (!k. int_calls_exprs (DROP k compiled_dflts) = int_calls_exprs (DROP k dflts)) /\
-    ~supported_exprs_exists (const_name_root_mods [(NONE,tops)]) compiled_dflts /\
+    ~supported_exprs_exists (const_name_root_mods mods) compiled_dflts /\
     (!target. supported_exprs_exists (expr_abi_decode_target_root target) compiled_dflts ==>
       supported_exprs_exists (expr_abi_decode_target_root target) dflts) /\
     ds = DROP (LENGTH dflts - (LENGTH args - LENGTH es)) compiled_dflts /\
-    omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es) =
+    omitted_defaults cenv (nsid_to_string (src,name)) (LENGTH es) =
       DROP (LENGTH dflts - (LENGTH args - LENGTH es)) compiled_dflts /\
-    LENGTH (omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es)) =
+    LENGTH (omitted_defaults cenv (nsid_to_string (src,name)) (LENGTH es)) =
       LENGTH args - LENGTH es /\
-    compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
+    compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt) sa = (vv,sm) /\
     kc vv sm = (out,sb) /\
     compile_expr (gas_shadow_env T cenv) ty
-      (gas_shadow_expr (Call ann (IntCall (NONE,name)) es dflt)) shadow_sa = (shadow_vv,shadow_sm) /\
-    cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc',rbs,pvs) /\
+      (gas_shadow_expr (Call ann (IntCall (src,name)) es dflt)) shadow_sa = (shadow_vv,shadow_sm) /\
+    cenv.ce_func_info (nsid_to_string (src,name)) = (rc',rbs,pvs) /\
     compile_stage_intcall_args compile_expr cenv es pvs
-      (TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string (NONE,name))))
+      (TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string (src,name))))
       st2 = (sup_ops,st2a) /\
     compile_stage_intcall_args compile_expr cenv es
       (TAKE (LENGTH es) pvs) (TAKE (LENGTH es) (MAP SND args)) st2 = (sup_ops,st2a) /\
     compile_stage_intcall_args compile_expr (gas_shadow_env T cenv) (MAP gas_shadow_expr es)
       (TAKE (LENGTH es) pvs) (TAKE (LENGTH es) (MAP SND args)) sh_st2 = (sup_ops,sh_st2a) /\
     compile_stage_intcall_args compile_expr
-      (cenv_without_defaults cenv (nsid_to_string (NONE,name))) ds (DROP (LENGTH es) pvs)
-      (DROP (LENGTH es) (TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string (NONE,name)))))
+      (cenv_without_defaults cenv (nsid_to_string (src,name))) ds (DROP (LENGTH es) pvs)
+      (DROP (LENGTH es) (TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string (src,name)))))
       st2a = (def_ops,st3) /\
     compile_stage_intcall_args compile_expr
-      (gas_shadow_env T (cenv_without_defaults cenv (nsid_to_string (NONE,name))))
+      (gas_shadow_env T (cenv_without_defaults cenv (nsid_to_string (src,name))))
       (MAP gas_shadow_expr ds) (DROP (LENGTH es) pvs)
-      (DROP (LENGTH es) (TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string (NONE,name)))))
+      (DROP (LENGTH es) (TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string (src,name)))))
       sh_st2a = (sh_def_ops,sh_st3) /\ sh_def_ops = def_ops /\
     (0 < rc' ==> ?rbuf results st4 u.
       compile_alloc_buffer (32 * rc') sa = (rbuf,st2) /\
       emit_multi_op INVOKE
-        (Label (internal_fn_label (cenv.ce_func_ids (nsid_to_string (NONE,name)))
-          (nsid_to_string (NONE,name)) (cenv.ce_func_param_types (nsid_to_string (NONE,name)))
+        (Label (internal_fn_label (cenv.ce_func_ids (nsid_to_string (src,name)))
+          (nsid_to_string (src,name)) (cenv.ce_func_param_types (nsid_to_string (src,name)))
           cenv.ce_is_ctor) :: (sup_ops ++ def_ops)) rc' st3 = (results,st4) /\
       store_multi_results rbuf.buf_operand results 0 st4 = (u,sm) /\
-      vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (NONE,name))) (base_ptr rbuf)) /\
+      vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (src,name))) (base_ptr rbuf)) /\
     (rc' = 0 /\ 0 < rbs ==> ?rbuf u.
       compile_alloc_buffer rbs sa = (rbuf,st2) /\
       emit_void INVOKE
-        (Label (internal_fn_label (cenv.ce_func_ids (nsid_to_string (NONE,name)))
-          (nsid_to_string (NONE,name)) (cenv.ce_func_param_types (nsid_to_string (NONE,name)))
+        (Label (internal_fn_label (cenv.ce_func_ids (nsid_to_string (src,name)))
+          (nsid_to_string (src,name)) (cenv.ce_func_param_types (nsid_to_string (src,name)))
           cenv.ce_is_ctor) :: rbuf.buf_operand :: (sup_ops ++ def_ops)) st3 = (u,sm) /\
-      vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (NONE,name))) (base_ptr rbuf)) /\
+      vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (src,name))) (base_ptr rbuf)) /\
     (rc' = 0 /\ rbs = 0 ==> ?u. st2 = sa /\
       emit_void INVOKE
-        (Label (internal_fn_label (cenv.ce_func_ids (nsid_to_string (NONE,name)))
-          (nsid_to_string (NONE,name)) (cenv.ce_func_param_types (nsid_to_string (NONE,name)))
+        (Label (internal_fn_label (cenv.ce_func_ids (nsid_to_string (src,name)))
+          (nsid_to_string (src,name)) (cenv.ce_func_param_types (nsid_to_string (src,name)))
           cenv.ce_is_ctor) :: (sup_ops ++ def_ops)) st3 = (u,sm) /\
-      vv = StackValue (cenv.ce_func_return_type (nsid_to_string (NONE,name))) (Lit 0w)) /\
+      vv = StackValue (cenv.ce_func_return_type (nsid_to_string (src,name))) (Lit 0w)) /\
     gas_shadow_state st2 sh_st2 /\ gas_shadow_state st2a sh_st2a /\ gas_shadow_state st3 sh_st3 /\
     cs_extends sa st2 /\ cs_extends st2 st2a /\ cs_extends st2a st3 /\
     cs_extends st3 sm /\ cs_extends sm sb /\
@@ -9485,20 +9506,20 @@ Theorem intcall_args_supplied_stage_setup:
     fn_has_code st2a st3 func /\ fn_has_code st3 sm func /\
     fn_has_code shadow_sa sh_st2 shadow_func /\ fn_has_code sh_st2 sh_st2a shadow_func /\
     fn_has_code sh_st2a sh_st3 shadow_func /\ fn_has_code sh_st3 shadow_sm shadow_func /\
-    cenv.ce_func_param_types (nsid_to_string (NONE,name)) = MAP SND args /\
-    cenv.ce_func_ids = build_func_ids 0 tops /\
-    cenv.ce_func_info (nsid_to_string (NONE,name)) =
+    cenv.ce_func_param_types (nsid_to_string (src,name)) = MAP SND args /\
+    cenv.ce_func_ids = build_func_ids_mods 0 mods /\
+    cenv.ce_func_info (nsid_to_string (src,name)) =
       compute_func_info
-        (\n. MAP (FST o SND) (get_struct_fields (make_struct_fields_map tops) n))
-        ret (type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ret) (MAP SND args) /\
-    ALL_DISTINCT (supported_function_names tops) /\ supported_program tops /\
+        (\n. MAP (FST o SND) (get_struct_fields (make_struct_fields_map_mods mods) n))
+        ret (type_mem_bytes (get_struct_fields (make_struct_fields_map_mods mods)) ret) (MAP SND args) /\
+    (src = NONE ==> ALL_DISTINCT (supported_function_names tops) /\ supported_program tops) /\
     pvs = compute_pass_via_stack (MAP SND args) rc' /\ LENGTH pvs = LENGTH args /\
     (!i. i < LENGTH args /\ EL i pvs ==> is_word_type (EL i (MAP SND args))) /\
-    expr_sim_inv_mods [(NONE,tops)] cenv cx tenv es0 /\ env_consistent tenv cx es0 /\ tenv.type_defs = get_tenv cx /\
+    expr_sim_inv_mods mods cenv cx tenv es0 /\ env_consistent tenv cx es0 /\ tenv.type_defs = get_tenv cx /\
     LIST_REL (type_widens_to (get_tenv cx)) (MAP expr_type es) (TAKE (LENGTH es) (MAP SND args)) /\
     EVERY (supported_default_expression tops) dflts /\
     EVERY (\t. type_memory_bytes cenv t < 2 ** 64) (MAP SND args) /\
-    EVERY (\e. expr_body_pre_mods [(NONE,tops)] cenv cx tenv e es0) es /\
+    EVERY (\e. expr_body_pre_mods mods cenv cx tenv e es0) es /\
     type_memory_bytes cenv ret < 2 ** 64 /\ rc' <= 2 /\ rbs < 2 ** 64 /\
     allocas_from lo s0 /\ lo <= s0.vs_alloca_next /\
     buf_n = (if 0 < rc' then 32 * rc' else rbs) /\ buf_n < dimword (:256) /\
@@ -11579,60 +11600,64 @@ QED
 *)
 Theorem intcall_args_after_defaults_data:
   (* Caller preparation and compile layout. *)
-  well_typed_expr tenv (Call ann (IntCall (NONE,name)) es dflt) /\
+  well_typed_expr tenv (Call ann (IntCall (src,name)) es dflt) /\
   (contract_inv mods exps ctx cenv cx /\
-     module_body_inv mods cenv.ce_module tops cenv cx) /\
+   module_body_inv mods caller_src caller_tops cenv cx) /\
   expr_sim_inv_mods mods cenv cx tenv es0 /\
-  ~MEM (NONE,name) cx.stk /\
-  get_module_code cx NONE = SOME tops /\
+  ~MEM (src,name) cx.stk /\
+  get_module_code cx src = SOME tops /\
   lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
+  ALOOKUP mods src = SOME tops /\
+  (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) tops /\
+  ((src = NONE /\ mods = [(NONE,tops)]) \/
+    MEM (src,name) (linked_live_functions mods exps)) /\
   evaluate_type (get_tenv cx) ret = SOME rtv /\
-  call_evaluation_safe cx ((NONE,name)::int_calls_exprs es) /\
+  call_evaluation_safe cx ((src,name)::int_calls_exprs es) /\
   (!e. P (INR e) ==> expr_vv_res_ok (INR e)) /\
-  compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
+  compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt) sa = (vv,sm) /\
   kc vv sm = (out,sb) /\
   fn_has_code sa sb func /\ fn_has_code sa st2 func /\ fn_has_code st3 sm func /\
   cs_extends sa st2 /\ cs_extends st2 st2a /\ cs_extends st2a st3 /\
   cs_extends st3 sm /\ cs_extends sm sb /\
   MEM func ctx.ctx_functions /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\
-  cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc',rbs,pvs) /\
-  cenv.ce_func_info (nsid_to_string (NONE,name)) =
+  cenv.ce_func_info (nsid_to_string (src,name)) = (rc',rbs,pvs) /\
+  cenv.ce_func_info (nsid_to_string (src,name)) =
     compute_func_info
-      (\n. MAP (FST o SND) (get_struct_fields (make_struct_fields_map tops) n))
-      ret (type_mem_bytes (get_struct_fields (make_struct_fields_map tops)) ret)
+      (\n. MAP (FST o SND) (get_struct_fields (make_struct_fields_map_mods mods) n))
+      ret (type_mem_bytes (get_struct_fields (make_struct_fields_map_mods mods)) ret)
       (MAP SND args) /\
-  cenv.ce_func_param_types (nsid_to_string (NONE,name)) = MAP SND args /\
+  cenv.ce_func_param_types (nsid_to_string (src,name)) = MAP SND args /\
   pvs = compute_pass_via_stack (MAP SND args) rc' /\
   (!i. i < LENGTH args /\ EL i pvs ==> is_word_type (EL i (MAP SND args))) /\
   EVERY (\t. type_memory_bytes cenv t < 2 ** 64) (MAP SND args) /\
   LENGTH es <= LENGTH args /\
-  LENGTH (omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es)) =
+  LENGTH (omitted_defaults cenv (nsid_to_string (src,name)) (LENGTH es)) =
     LENGTH args - LENGTH es /\
-  ds = omitted_defaults cenv (nsid_to_string (NONE,name)) (LENGTH es) /\
+  ds = omitted_defaults cenv (nsid_to_string (src,name)) (LENGTH es) /\
   compile_stage_intcall_args compile_expr cenv es pvs
-    (TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string (NONE,name)))) st2 =
+    (TAKE (LENGTH args) (cenv.ce_func_param_types (nsid_to_string (src,name)))) st2 =
       (sup_ops,st2a) /\
   compile_stage_intcall_args compile_expr
-    (cenv_without_defaults cenv (nsid_to_string (NONE,name))) ds (DROP (LENGTH es) pvs)
+    (cenv_without_defaults cenv (nsid_to_string (src,name))) ds (DROP (LENGTH es) pvs)
     (DROP (LENGTH es) (TAKE (LENGTH args)
-      (cenv.ce_func_param_types (nsid_to_string (NONE,name))))) st2a = (def_ops,st3) /\
-  ilabel = internal_fn_label (cenv.ce_func_ids (nsid_to_string (NONE,name)))
-    (nsid_to_string (NONE,name)) (cenv.ce_func_param_types (nsid_to_string (NONE,name)))
+      (cenv.ce_func_param_types (nsid_to_string (src,name))))) st2a = (def_ops,st3) /\
+  ilabel = internal_fn_label (cenv.ce_func_ids (nsid_to_string (src,name)))
+    (nsid_to_string (src,name)) (cenv.ce_func_param_types (nsid_to_string (src,name)))
     cenv.ce_is_ctor /\
   (0 < rc' ==> ?rb results mid ignored.
      compile_alloc_buffer (32 * rc') sa = (rb,st2) /\
      emit_multi_op INVOKE (Label ilabel::(sup_ops ++ def_ops)) rc' st3 = (results,mid) /\
      store_multi_results rb.buf_operand results 0 mid = (ignored,sm) /\
-     vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (NONE,name))) (base_ptr rb)) /\
+     vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (src,name))) (base_ptr rb)) /\
   (rc' = 0 /\ 0 < rbs ==> ?rb ignored.
      compile_alloc_buffer rbs sa = (rb,st2) /\
      emit_void INVOKE (Label ilabel::rb.buf_operand::(sup_ops ++ def_ops)) st3 = (ignored,sm) /\
-     vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (NONE,name))) (base_ptr rb)) /\
+     vv = LocatedValue (cenv.ce_func_return_type (nsid_to_string (src,name))) (base_ptr rb)) /\
   (rc' = 0 /\ rbs = 0 ==> ?ignored. st2 = sa /\
      emit_void INVOKE (Label ilabel::(sup_ops ++ def_ops)) st3 = (ignored,sm) /\
-     vv = StackValue (cenv.ce_func_return_type (nsid_to_string (NONE,name))) (Lit 0w)) /\
+     vv = StackValue (cenv.ce_func_return_type (nsid_to_string (src,name))) (Lit 0w)) /\
   (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG)
        (s0,G0,tn0) [] (OK entry,Ga,tna)) /\
   (0 < rc' \/ 0 < rbs ==> ?rb q (w:bytes32).
@@ -11645,11 +11670,11 @@ Theorem intcall_args_after_defaults_data:
       (INL xs,ee with gas_obs := tail)) /\
   gas_path ctx func entry (LENGTH marks) (OK t) /\
   expr_sim_inv_mods mods cenv cx tenv ee /\
-  cxd = cx with stk updated_by CONS (NONE,name) /\
+  cxd = cx with stk updated_by CONS (src,name) /\
   supported_pure_exprs tops ds /\
-  well_typed_exprs (defaults_env (tenv with current_src := NONE)) ds /\
-  well_typed_exprs (tenv with current_src := NONE) ds /\
-  body_const_cells_agree [(NONE,tops)] cxd (tenv with current_src := NONE) ee /\
+  well_typed_exprs (defaults_env (tenv with current_src := src)) ds /\
+  well_typed_exprs (tenv with current_src := src) ds /\
+  body_const_cells_agree mods cxd (tenv with current_src := src) ee /\
   (!gs scs. eval_exprs cxd ds (ee with <|gas_obs := gs; scopes := scs|>) =
     eval_exprs cxd (DROP (LENGTH dflts - (LENGTH args - LENGTH es)) dflts)
       (ee with <|gas_obs := gs; scopes := scs|>)) /\
@@ -11660,7 +11685,7 @@ Theorem intcall_args_after_defaults_data:
        bind (lift_option_type (evaluate_type (get_tenv cx) ret)
                 "IntCall eval ret") (\rtv.
        ignore_bind (lock_if_nr cx nr (is_view_mut mut))
-         (bind (push_function (NONE,name) penv cx) (\cxf.
+         (bind (push_function (src,name) penv cx) (\cxf.
           bind (finally_unless_halt
             (finally
               (try (ignore_bind (eval_stmts cxf ss) (return NoneV)) handle_function)
@@ -11674,7 +11699,9 @@ Theorem intcall_args_after_defaults_data:
       (INL dvs,ed with gas_obs := tail)) /\
   gas_path ctx func t (LENGTH dm) (OK u) /\
   storage_trace_domain cxd st0 ed.storage_trace /\
-  expr_sim_inv_mods mods (cenv_without_defaults cenv name) cxd (tenv with current_src := NONE) ed /\
+  expr_sim_inv_mods mods
+    (cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name)))
+    cxd (tenv with current_src := src) ed /\
   LENGTH wd = LENGTH ([] ++ sup_ops ++ def_ops) /\
   LENGTH (TAKE (LENGTH es) (MAP SND args) ++ DROP (LENGTH es) (MAP SND args)) =
     LENGTH ([] ++ sup_ops ++ def_ops) /\
@@ -11707,45 +11734,54 @@ Theorem intcall_args_after_defaults_data:
         b <= w2n (EL j wd) /\ w2n (EL j wd) + type_memory_size rt <= b+cap /\
         (!mem. mem_agree_outside tnd.t_mem u.vs_memory mem ==>
           val_in_memory rt (EL j (xs ++ dvs)) (w2n (EL j wd)) mem) /\
-        (!n lb sz. local_region (cenv_without_defaults cenv name) ed.scopes u n lb sz ==>
-          b+cap <= lb \/ lb+sz <= b) /\
+        (!n lb sz. local_region
+           (cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name)))
+           ed.scopes u n lb sz ==> b+cap <= lb \/ lb+sz <= b) /\
         (case pin of NONE => T | SOME (rb,pb,pk) => b+cap <= pb \/ pb+pk <= b))) /\
   (case pin of NONE => T | SOME (rb,b,k) =>
     FLOOKUP Gd rb = SOME (b,k) /\ op_taint tnd (Var rb) = {} /\
     lookup_var rb u = SOME (n2w b) /\ FLOOKUP u.vs_allocas sa.cs_next_id = SOME (b,k) /\
     sa.cs_next_id < st3.cs_next_id /\ lo <= b /\ b+k <= u.vs_alloca_next /\
     not_fresh_at st3 rb /\
-    (!n lb sz. local_region (cenv_without_defaults cenv name) ed.scopes u n lb sz ==>
-      b+k <= lb \/ lb+sz <= b)) /\
-  wb_frame (cenv_without_defaults cenv name) es0 ed sa s0 u /\
-  ghost_kept_at lo (cenv_without_defaults cenv name) es0 sa G0 tn0 s0 Gd tnd /\
+    (!n lb sz. local_region
+       (cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name)))
+       ed.scopes u n lb sz ==> b+k <= lb \/ lb+sz <= b)) /\
+  wb_frame (cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name)))
+    es0 ed sa s0 u /\
+  ghost_kept_at lo
+    (cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name)))
+    es0 sa G0 tn0 s0 Gd tnd /\
   alloca_history func u /\ s0.vs_alloca_next <= u.vs_alloca_next /\
   ~u.vs_halted /\ u.vs_current_bb = st3.cs_current_bb /\
   u.vs_inst_idx = LENGTH st3.cs_current_insts /\
   (!H. valid_horizon cxd st0 H ed.storage_trace ==>
-    stmt_state_rel H ctx func (cenv_without_defaults cenv name) cxd ed u /\
+    stmt_state_rel H ctx func
+      (cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name)))
+      cxd ed u /\
     storage_well_formed_on cxd ed (FST H) /\
-    ghost_inv_at (DF H) lo d (cenv_without_defaults cenv name) cxd ed Gd tnd u) /\
+    ghost_inv_at (DF H) lo d
+      (cenv_without_defaults (cenv with ce_module := src) (nsid_to_string (src,name)))
+      cxd ed Gd tnd u) /\
   gas_admissible ((\dvs src. after_defaults src.scopes dvs src) dvs) P ed ==>
   ?penv tv.
      ~u.vs_halted /\
-     compile_expr cenv ty (Call ann (IntCall (NONE,name)) es dflt) sa = (vv,sm) /\
+     compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt) sa = (vv,sm) /\
      kc vv sm = (out,sb) /\
      (!locked. lock_if_nr cx nr (is_view_mut mut) ed = (INL (),locked) ==>
        !tail. after_defaults ed.scopes dvs (ed with gas_obs := tail) =
-         bind (intcall_rest cx name mut nr ss ed.scopes tv) f
+         bind (intcall_rest_at cx src name mut nr ss ed.scopes tv) f
            ((ed with scopes := [penv]) with gas_obs := tail)) /\
      (!err failed. lock_if_nr cx nr (is_view_mut mut) ed = (INR err,failed) ==>
        !tail. after_defaults ed.scopes dvs (ed with gas_obs := tail) =
          (INR err,failed with <|scopes := ed.scopes; gas_obs := tail|>)) /\
      (!H. valid_horizon cx st0 H ed.storage_trace ==>
-       intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm
+       intcall_entry_full_mods (DF,lo,d) H mods src tops ctx func cenv cx tenv name es sa sm
          vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) ed.scopes penv tv
          (ed with scopes := [penv]) u Gd tnd) /\
-     body_const_cells_agree [(NONE,tops)] cx tenv (ed with scopes := [penv]) /\
+     body_const_cells_agree mods cx tenv (ed with scopes := [penv]) /\
      (!i. active_inst func i u ==> frag_reachable ctx func s0 func i u) /\
      (?H. valid_horizon cx st0 H ed.storage_trace) /\
-     gas_admissible (bind (intcall_rest cx name mut nr ss ed.scopes tv) f)
+     gas_admissible (bind (intcall_rest_at cx src name mut nr ss ed.scopes tv) f)
        P (ed with scopes := [penv])
 Proof
   cheat
