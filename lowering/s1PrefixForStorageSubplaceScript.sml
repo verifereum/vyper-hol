@@ -176,7 +176,7 @@ Theorem compile_for_storage_subplace_array_frag_prefix_from_cuts:
      (!H. valid_horizon cx st0 H es.storage_trace ==> stmt_state_rel H ctx func cenv cx es s0) /\
      ((?av. rv = Value (ArrayV av)) \/ (?src name path. rv = PlaceR (ImmutablePlace src name path))) /\
      (!av. read_result cx rv em = (INL (ArrayV av),em) ==>
-        for_nonslot_code_frame cenv cx env ctx func id e loop_body
+        for_nonslot_code_frame [(NONE,tops)] cenv cx env ctx func id e loop_body
           (case vv_location vv of NONE => LocMemory | SOME l => l) rv vv av em u) /\
      (!vs. (!tail. array_iterator_results cx (expr_type e) rv (em with gas_obs := tail) =
                      (INL vs,em with gas_obs := tail)) /\

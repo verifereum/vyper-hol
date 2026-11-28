@@ -72,7 +72,7 @@ Definition tuple_widened_store_entry_def:
 End
 
 Theorem tuple_widened_store_entry_slices:
-  tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+  tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
     (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) i c sh src s G tn obs ==>
   compile_tuple_store_all cenv (DROP i tys) (DROP i gs) (DROP i elems) c = ((),sb) /\
   compile_tuple_store_all (gas_shadow_env T cenv) (DROP i tys)

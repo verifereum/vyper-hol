@@ -43,7 +43,7 @@ Theorem for_array_snapshot_continue_prefix:
      stmt_state_rel H ctx func c cx es s0) /\
   ((?av. rv = Value (ArrayV av)) \/ (?src name path. rv = PlaceR (ImmutablePlace src name path))) /\
   (!av. read_result cx rv em = (INL (ArrayV av),em) ==>
-     for_nonslot_code_frame c cx env ctx func id e loop_body
+     for_nonslot_code_frame [(NONE,tops)] c cx env ctx func id e loop_body
        (case vv_location vv of NONE => LocMemory | SOME l => l) rv vv av em u) /\
   (!vs. (!tail. array_iterator_results cx (expr_type e) rv (em with gas_obs := tail) =
                   (INL vs,em with gas_obs := tail)) /\

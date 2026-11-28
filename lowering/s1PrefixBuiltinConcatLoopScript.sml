@@ -50,7 +50,7 @@ Theorem concat_args_sim_prefix:
   !args P k DF lo d ctx shadow_ctx PG tops func shadow_func cenv cx env st0
     es sa sb shadow_sa shadow_sb s0 G0 tn0 dv ov ow binst B bsz oinst.
     concat_loop_ready args P k DF lo d ctx shadow_ctx PG
-      tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
+      [(NONE,tops)] [] tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
       s0 G0 tn0 dv ov ow binst B bsz oinst /\
     body_exprs_prefix_ok cx args ==>
     gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)

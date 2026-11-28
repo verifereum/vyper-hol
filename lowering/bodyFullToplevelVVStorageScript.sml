@@ -164,7 +164,7 @@ QED
 Theorem toplevel_slot_base_vv_full:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
-  well_typed_expr env e /\ ~const_name_root cx e /\ array_slot_base cenv e ==>
+  well_typed_expr env e /\ ~const_name_root_mods mods e /\ array_slot_base cenv e ==>
   expr_vv_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty e es
 Proof
   cheat

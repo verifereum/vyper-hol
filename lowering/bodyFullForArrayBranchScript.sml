@@ -509,7 +509,7 @@ Theorem compile_for_nonslot_array_frag_full:
     expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
-    ~supported_expr_exists (const_name_root cx) e /\
+    ~supported_expr_exists (const_name_root_mods mods) e /\
     stmt_exprs_ok cenv (For id typ (Array e) n body) /\
     (~(?ty nid. e = TopLevelName ty nid) ==>
      !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
@@ -566,7 +566,7 @@ Theorem for_array_expr_cut_frag_full:
   body_const_cells_agree mods cx env es /\
   expr_sim_inv_mods mods cenv cx env es /\ ce_locals_declared cenv env /\ locals_alloc_ok cenv env /\
   type_stmt env ret_ty (For id typ (Array e) n loop_body) = SOME env' /\
-  ~supported_expr_exists (const_name_root cx) e /\
+  ~supported_expr_exists (const_name_root_mods mods) e /\
   stmt_exprs_ok cenv (For id typ (Array e) n loop_body) /\
   call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n loop_body)) /\
   frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv ret_ty /\

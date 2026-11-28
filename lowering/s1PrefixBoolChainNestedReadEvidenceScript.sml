@@ -7,7 +7,7 @@ Ancestors
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
-  `bool_chain_full_ok cx (bool_chain_operands p (n - 1) e)` by
+  `bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (bool_chain_operands p (n - 1) e)` by
     (irule body_expr_full_ok_bool_chain_operands >> simp[]) >>
   irule bool_chain_nested_prefix_of_smaller >>
   qhdtm_assum `expr_vv_sim_full_pre` (irule_at Any) >>

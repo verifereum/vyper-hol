@@ -203,7 +203,7 @@ Theorem selected_array_code_frame:
   evaluate_type (get_tenv cx) (ArrayT typ bd) = SOME (ArrayTV tyv bd) /\
   post_value_type c e = ArrayT typ bd ==>
   !a. read_result cx (PlaceR (ImmutablePlace src name path)) em = (INL (ArrayV a),em) ==>
-  for_nonslot_code_frame c cx env ctx func id e body
+  for_nonslot_code_frame mods c cx env ctx func id e body
     (case vv_location vv of NONE => LocMemory | SOME l => l)
     (PlaceR (ImmutablePlace src name path)) vv a em u
 Proof

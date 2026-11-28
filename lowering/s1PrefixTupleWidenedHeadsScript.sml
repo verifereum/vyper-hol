@@ -109,7 +109,7 @@ Theorem tuple_widened_prefix_from_nested_heads:
     gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
     MEM shadow_func shadow_ctx.ctx_functions /\ fn_inst_ids_distinct func /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-    tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+    tuple_widened_store_entry [] (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
       (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) j c0 sh0 src0 s1 G1 tn1 obs0 /\
     storage_trace_domain cx st0 src0.storage_trace /\
     (!H. valid_horizon cx st0 H src0.storage_trace ==>
@@ -120,7 +120,7 @@ Theorem tuple_widened_prefix_from_nested_heads:
     gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) (cx_tops cx) cx st0
       (assign_tuple_targets cx (EL j gs) (EL j vs)) (src0,s1,G1,tn1)
       (\H res mid G2 tn2 s2. ?c2 sh2 obs2.
-        tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+        tuple_widened_store_entry [] (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
           (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
           (SUC j) c2 sh2 mid s2 G2 tn2 obs2)
       (\H res ee gt r. ISR res) /\
@@ -188,7 +188,7 @@ Resume tuple_widened_prefix_from_nested_heads[rhs_success]:
   irule gas_prefix_full_zero_prefix_guarded >> simp[evaluate_storage_trace_frame] >>
   qexistsl_tac [`Gf`,`t`,`tf`] >> conj_tac
   >- (gen_tac >> disch_tac >> first_assum MATCH_ACCEPT_TAC) >>
-  qpat_assum `tuple_widened_store_entry _ _ _ _ 0 ss shadow_ss ee t Gf tf []`
+  qpat_assum `tuple_widened_store_entry _ _ _ _ _ 0 ss shadow_ss ee t Gf tf []`
     (mp_then Any irule
       (Q.INST [`i` |-> `0`] tuple_store_widened_prefix_from_heads |> REWRITE_RULE[DROP_0])) >>
   simp[] >> qexistsl_tac [`stmt_res_ok lctx`,`cx_tops cx`] >> simp[] >>
@@ -242,13 +242,13 @@ Resume tuple_widened_prefix_from_nested_heads[direct_name]:
      strip_tac >> first_x_assum (qspec_then `j` mp_tac) >>
      simp[tuple_target_base_type,well_typed_target_def]) >>
   `~s1.vs_halted` by
-    (qpat_assum `tuple_widened_store_entry _ _ _ _ j _ _ src0 s1 _ _ _` mp_tac >>
+    (qpat_assum `tuple_widened_store_entry _ _ _ _ _ j _ _ src0 s1 _ _ _` mp_tac >>
      simp[NoAsms,tuple_widened_store_entry_def]) >>
   drule_all tuple_widened_immutable_name_advance >>
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]
     (qx_choosel_then [`wc`,`swc`,`ff`,`q`,`Gq`,`tq`] strip_assume_tac)) >>
   `ff with gas_obs := [] = ff` by
-    (qpat_assum `tuple_widened_store_entry _ _ _ _ (SUC j) _ _ ff q _ _ _` mp_tac >>
+    (qpat_assum `tuple_widened_store_entry _ _ _ _ _ (SUC j) _ _ ff q _ _ _` mp_tac >>
      simp[NoAsms,tuple_widened_store_entry_def,evaluation_state_component_equality]) >>
   pure_asm_rewrite_tac[] >> conj_tac
   >- (irule gas_outcome_full_pure >> simp[] >>
@@ -269,7 +269,7 @@ Resume tuple_widened_prefix_from_nested_heads[nested_callback]:
   `storage_trace_domain cx st0 src0.storage_trace /\
    (!H. valid_horizon cx st0 H src0.storage_trace ==>
       storage_well_formed_on cx src0 (FST H))` by
-    (qpat_assum `tuple_widened_store_entry _ _ _ _ j _ _ src0 s1 _ _ _` mp_tac >>
+    (qpat_assum `tuple_widened_store_entry _ _ _ _ _ j _ _ src0 s1 _ _ _` mp_tac >>
      simp[NoAsms,tuple_widened_store_entry_def] >> metis_tac[]) >>
   first_assum irule >> simp[] >>
   rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE metis_tac[])
@@ -279,7 +279,7 @@ QED
 (* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_widened_prefix_from_nested_heads[regular_head]:
   `!bt. EL j gs = BaseTarget bt ==> ~immutable_root cx bt` by simp[] >>
-  qpat_assum `tuple_widened_store_entry _ _ _ _ j _ _ src0 s1 _ _ _`
+  qpat_assum `tuple_widened_store_entry _ _ _ _ _ j _ _ src0 s1 _ _ _`
     (mp_then Any mp_tac tuple_widened_place_head_parts) >>
   disch_then (qspecl_then [`tops`,`shadow_ctx`,`e`,`dtys`,`bindings`,`PG`] mp_tac) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
@@ -344,7 +344,7 @@ Resume tuple_widened_prefix_from_nested_heads[regular_outcome]:
        (INL (),ff with gas_obs := tail)) /\
      (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (sp,Gp,tp) [] (OK q,Gq,tq)) /\
-     tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+     tuple_widened_store_entry [] (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
        (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
        (SUC j) write_cs shadow_write_cs ff q Gq tq (obs0 ++ gas_explicit headmarks s1.vs_gas_readings)) \/
    ((!tail. write_place cx p (EL j vs) (mid with gas_obs := tail) =
@@ -377,9 +377,9 @@ QED
 
 (* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_widened_prefix_from_nested_heads[write_success]:
-  rename1 `tuple_widened_store_entry _ _ _ _ (SUC j) _ _ ff q Gq tq _` >>
+  rename1 `tuple_widened_store_entry _ _ _ _ _ (SUC j) _ _ ff q Gq tq _` >>
   `ff with gas_obs := [] = ff` by
-    (qpat_assum `tuple_widened_store_entry _ _ _ _ (SUC j) _ _ ff q _ _ _` mp_tac >>
+    (qpat_assum `tuple_widened_store_entry _ _ _ _ _ (SUC j) _ _ ff q _ _ _` mp_tac >>
      simp[NoAsms,tuple_widened_store_entry_def,evaluation_state_component_equality]) >>
   irule gas_outcome_full_pure >> simp[] >>
   qexistsl_tac [`Gq`,`ff`,`INL ()`,`q`,`tq`] >> simp[Abbr `storeQ`] >>

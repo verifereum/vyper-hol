@@ -10,7 +10,7 @@ Ancestors
   finite_map list arithmetic words
 
 Theorem intcall_entry_full_provenance_disjoint:
-  intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es sa sb
+  intcall_entry_full_mods (DF, lo, d) H mods NONE tops ctx func cenv cx tenv name es sa sb
     vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst /\
@@ -22,7 +22,7 @@ Theorem intcall_entry_full_provenance_disjoint:
   !off asz. MEM (SOME (off,asz)) (MAP (op_prov G) arg_ops) ==>
     regions_disjoint b sz off asz
 Proof
-  rw[intcall_entry_full_def] >> metis_tac[]
+  rw[intcall_entry_full_mods_def] >> metis_tac[]
 QED
 
 
@@ -567,7 +567,7 @@ fun intcall_callee_caller_memory_bytes_tac entry_tac completed_byte byte_bound_t
 Theorem intcall_callee_caller_memory_bytes:
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!H. valid_horizon cx st0 H es1.storage_trace ==>
-    intcall_entry_full (DF, lo, d) H tops ctx func cenv cx tenv name es sa sb
+    intcall_entry_full_mods (DF, lo, d) H mods NONE tops ctx func cenv cx tenv name es sa sb
       vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn) /\
   gas_invoke_entry (ctx,func) t callee entered /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
@@ -586,11 +586,11 @@ Theorem intcall_callee_caller_memory_bytes:
     mem_bytes_at b sz s'.vs_memory = mem_bytes_at b sz t.vs_memory
 Proof
   intcall_callee_caller_memory_bytes_tac
-    (`intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sb
+    (`intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sb
     vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn` by
       (qpat_assum `!K. valid_horizon cx st0 K es1.storage_trace ==> _`
          (mp_tac o Q.SPEC `H`) >> simp[]))
-    intcall_entry_full_completed_byte
+    intcall_entry_full_completed_byte_mods
     (`lo = if cenv.ce_is_ctor then imm_len_mods cenv.ce_modules else 0` by
        metis_tac[dead_lo_ok_def] >>
      Cases_on `cenv.ce_is_ctor` >> gvs[] >> decide_tac)

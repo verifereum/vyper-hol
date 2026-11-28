@@ -63,7 +63,7 @@ Definition for_captured_storage_live_def:
 End
 
 Theorem for_captured_storage_live_child:
-  for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
+  for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
     (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
     (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,ee,G,tn,s) /\
   valid_horizon cx st0 H ee.storage_trace ==>

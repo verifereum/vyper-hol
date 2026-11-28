@@ -426,7 +426,7 @@ Proof
 QED
 
 Theorem intcall_entry_invoke_ptr:
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+  intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es
     sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
   lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
   get_instruction bb t.vs_inst_idx = SOME inst /\
@@ -436,8 +436,8 @@ Theorem intcall_entry_invoke_ptr:
   ptr_inst_ok (DF H) lo 0 ctx func G tn inst t
 Proof
   strip_tac >>
-  qhdtm_x_assum `intcall_entry_full`
-    (strip_assume_tac o PURE_REWRITE_RULE [intcall_entry_full_def]) >>
+  qhdtm_x_assum `intcall_entry_full_mods`
+    (strip_assume_tac o PURE_REWRITE_RULE [intcall_entry_full_mods_def]) >>
   qhdtm_x_assum `ghost_inv_at`
     (assume_tac o cj 7 o PURE_REWRITE_RULE [bodyPtrDefsTheory.ghost_inv_at_def]) >>
   `EVERY (\op. op_taint tn op = {}) arg_ops` by
@@ -522,7 +522,7 @@ Theorem intcall_return_noncompleted:
     (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
     (!H. valid_horizon cx st0 H es1.storage_trace ==>
-       intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+       intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es
          sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn) /\
     (?H. valid_horizon cx st0 H es1.storage_trace) /\
     cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\

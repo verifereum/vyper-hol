@@ -43,7 +43,7 @@ Theorem for_nonslot_array_round_prefix_contracts_at:
   supported_stmt tops bindings (For id fty (Array e) n loop_body) /\
   type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
   stmt_exprs_ok c (For id fty (Array e) n loop_body) /\
-  for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em u /\
+  for_nonslot_code_frame [(NONE,tops)] c cx env ctx func id e loop_body loc rv vv av em u /\
   stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) n loop_body) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id fty (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\

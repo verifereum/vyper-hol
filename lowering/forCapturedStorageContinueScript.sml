@@ -125,7 +125,7 @@ Theorem for_captured_storage_continue_rounds_cut:
       (\H res eb GG tt z. res = INL () /\ eb.gas_obs = [] /\
         ?v j. eb = for_captured_storage_round_scope id tyv (ei with gas_obs := []) v /\
           read_result cx a ei = (INL v,ei) /\
-          for_captured_storage_round_entry (DF,lo,d,ctx,func)
+          for_captured_storage_round_entry exps (DF,lo,d,ctx,func)
             (cx,c,bc,extend_local env id typ F,sb0,loop_body)
             (es with gas_obs := obs,sa,s0,G0,tn0) (idx,p,dst,lvo,len,inst,nb) (H,eb,j,z,GG,tt) /\
           eval_operand bop z = SOME slot /\ op_taint tt bop = {} /\ a::rs = DROP j vs)
@@ -296,7 +296,7 @@ Resume for_captured_storage_continue_rounds_cut[rounds]:
        [`body_inv tops ctx c cx`,`MEM func ctx.ctx_functions`] >>
      POP_ASSUM_LIST (K ALL_TAC) >> metis_tac[body_inv_no_phi]) >>
   qabbrev_tac `Live = \H k rs ee GG tt s.
-    for_captured_storage_live (DF,lo,d,ctx,func,cx,c,id,env,typ,loop_body)
+    for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c,id,env,typ,loop_body)
       (start,sa,s0,G0,tn0) (em,se,bop,tr,slot,tyv,bd,vs,len)
       (lvo,idx,cond) (p,dst,nb,sd) (H,k,rs,ee,GG,tt,s)` >>
   qabbrev_tac `Inv = \H rs ee GG tt s.
@@ -312,7 +312,7 @@ QED
 (* SCRATCH MEASUREMENT: original continuation.
 Resume for_captured_storage_continue_rounds_cut[static]:
   `~z.vs_halted` by
-    (qpat_assum `!H. valid_horizon _ _ H em.storage_trace ==> _ /\ for_captured_storage_live _ _ _ _ _ _`
+    (qpat_assum `!H. valid_horizon _ _ H em.storage_trace ==> _ /\ for_captured_storage_live _ _ _ _ _ _ _`
        (qspec_then `H0` (drule_then (strip_assume_tac o
          REWRITE_RULE [forCapturedStorageLiveTheory.for_captured_storage_live_def] o CONJUNCT2))) >>
      first_assum ACCEPT_TAC) >>
@@ -548,7 +548,7 @@ Resume for_captured_storage_continue_rounds_cut[package]:
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >-
     (gen_tac >> strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H em.storage_trace ==> _ /\ for_captured_storage_live _ _ _ _ _ _`
+     qpat_assum `!H. valid_horizon _ _ H em.storage_trace ==> _ /\ for_captured_storage_live _ _ _ _ _ _ _`
        (qspec_then `H` (drule_then strip_assume_tac)) >>
      conj_tac >- first_assum ACCEPT_TAC >> simp[NoAsms,Abbr `Inv`] >>
      conj_tac >- first_assum ACCEPT_TAC >>
@@ -642,7 +642,7 @@ Resume for_captured_storage_continue_rounds_cut[cons_stages]:
       (\H res eb GG tt z. res = INL () /\ eb.gas_obs = [] /\
         ?v j. eb = for_captured_storage_round_scope id tyv (ei with gas_obs := []) v /\
           read_result cx a ei = (INL v,ei) /\
-          for_captured_storage_round_entry (DF,lo,d,ctx,func)
+          for_captured_storage_round_entry exps (DF,lo,d,ctx,func)
             (cx,c,bc,extend_local env id typ F,sbCopy,loop_body)
             (start,sa,s0,G0,tn0) (idx,p,dst,lvo,len,ai,nb) (H,eb,j,z,GG,tt) /\
           eval_operand bop z = SOME slot /\ op_taint tt bop = {} /\ a::rs = DROP j vs)
@@ -680,7 +680,7 @@ Resume for_captured_storage_continue_rounds_cut[extra]:
     (`valid_horizon cx st0 (storage_trace_horizon ei.storage_trace) ei.storage_trace` by
        (qpat_assum `storage_trace_domain cx st0 ei.storage_trace`
           (ACCEPT_TAC o REWRITE_RULE [storage_trace_domain_def])) >>
-     qpat_assum `!H. valid_horizon _ _ H ei.storage_trace ==> for_captured_storage_live _ _ _ _ _ _`
+     qpat_assum `!H. valid_horizon _ _ H ei.storage_trace ==> for_captured_storage_live _ _ _ _ _ _ _`
        (qspec_then `storage_trace_horizon ei.storage_trace`
           (drule_then (strip_assume_tac o
             REWRITE_RULE [forCapturedStorageLiveTheory.for_captured_storage_live_def]))) >>
@@ -749,7 +749,7 @@ Resume for_captured_storage_continue_rounds_cut[head_static]:
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac >-
     (gen_tac >> disch_tac >> qexists `len - SUC (LENGTH rs)` >>
-     qpat_assum `!H. valid_horizon _ _ H ei.storage_trace ==> for_captured_storage_live _ _ _ _ _ _`
+     qpat_assum `!H. valid_horizon _ _ H ei.storage_trace ==> for_captured_storage_live _ _ _ _ _ _ _`
        (drule_then ACCEPT_TAC)) >>
   first_assum ACCEPT_TAC
 QED

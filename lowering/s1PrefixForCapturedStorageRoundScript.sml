@@ -72,7 +72,7 @@ Theorem for_captured_storage_round_from_head_prefix:
       (\H res eb GG tt z. res = INL () /\ eb.gas_obs = [] /\
         ?v j. eb = for_captured_storage_round_scope id tyv (es with gas_obs := []) v /\
           read_result cx a es = (INL v,es) /\
-          for_captured_storage_round_entry (DF,lo,d,ctx,func)
+          for_captured_storage_round_entry [] (DF,lo,d,ctx,func)
             (cx,c0,bc,extend_local env id typ F,sb0,stmts) (e0,sa0,s0,G0,tn0)
             (idx,p,dst,lvo,len,inst,nb) (H,eb,j,z,GG,tt) /\
           eval_operand bop z = SOME slot /\ op_taint tt bop = {} /\ a::rs = DROP j vs)
@@ -136,7 +136,7 @@ Resume for_captured_storage_round_from_head_prefix[body_entry]:
        (qspec_then `H` (drule_then mp_tac)) >>
      disch_then (strip_assume_tac o REWRITE_RULE[for_captured_storage_round_entry_def]) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `for_captured_storage_round_entry _ _ _ _ _`
+  qpat_x_assum `for_captured_storage_round_entry _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE[for_captured_storage_round_entry_def]) >>
   `body_const_cells_agree [(NONE,cx_tops cx)] cx env ei` by simp[Abbr `ei`] >>
   qpat_assum `eb = ei with scopes := _` (fn eq =>

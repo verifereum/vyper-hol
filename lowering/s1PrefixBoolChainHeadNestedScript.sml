@@ -10,7 +10,7 @@ Ancestors
   exprBodyPreProps exprSimHyps boolChainCodeLayout compileEnv vyperContext vyperTypeSystem exprLowering vyperInterpreter vyperAST list
 
 Theorem bool_chain_full_from_members[local]:
-  !xs. EVERY (body_expr_full_ok cx) xs ==> bool_chain_full_ok cx xs
+  !xs. EVERY (body_expr_full_ok cx) xs ==> bool_chain_full_ok [(NONE,cx_tops cx)] [] cx xs
 Proof
   Induct_on `xs` >> simp[bool_chain_full_ok_def]
 QED
@@ -37,7 +37,7 @@ Proof
   `EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
       (int_calls_expr x0)` by
     (res_tac >> fs[int_calls_expr_def, EVERY_APPEND]) >>
-  `bool_chain_full_ok cx (bool_chain_operands p (n - 1) x0)` by
+  `bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (bool_chain_operands p (n - 1) x0)` by
     (irule bool_chain_full_from_members >>
      qpat_assum `EVERY _ (int_calls_expr x0)`
        (fn th => assume_tac (MATCH_MP (Q.SPECL [`n - 1`, `p`, `x0`]

@@ -12,6 +12,7 @@
 
 Theory stmtSimReturn
 Ancestors
+  bodyFullPostsMods
   gasOutcomeFullBindMods
   stmtSimProps
   exprSimProps
@@ -1176,13 +1177,14 @@ Proof
 QED
 
 Theorem frame_ret_ok_full_retq_weaken[local]:
-  frame_ret_ok_full ps cx RetQ cenv ty /\
+  frame_ret_ok_full_mods mods ps cx RetQ cenv ty /\
   (!H v ee gt r. RetQ H v ee gt r ==> RetQ' H v ee gt r) ==>
-  frame_ret_ok_full ps cx RetQ' cenv ty
+  frame_ret_ok_full_mods mods ps cx RetQ' cenv ty
 Proof
-  PairCases_on `ps` >> pure_rewrite_tac[frame_ret_ok_full_def] >>
+  PairCases_on `ps` >> pure_rewrite_tac[frame_ret_ok_full_mods_def] >>
   strip_tac >> rpt gen_tac >> strip_tac >>
   first_x_assum drule_all >> strip_tac >>
+  fs[stmt_frag_full_mods_widened] >>
   irule stmt_frag_full_retq_weaken >>
   goal_assum (drule_at Any) >> simp[]
 QED
@@ -1230,7 +1232,7 @@ Theorem internal_frame_ret_none_full_taint:
     cenv.ce_returns_count = 0 /\
     ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
       ~cx.txn.is_static) ==>
-    frame_ret_ok_full
+    frame_ret_ok_full_mods mods
       (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
       (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r /\
         !ir u. r = IntRet ir u /\
@@ -1249,7 +1251,7 @@ Theorem internal_frame_ret_none_full:
     cenv.ce_returns_count = 0 /\
     ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
       ~cx.txn.is_static) ==>
-    frame_ret_ok_full
+    frame_ret_ok_full_mods mods
       (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
       (\H v ee gt r. intret_q H func cenv cx ret_tv v ee r) cenv NoneT
 Proof
@@ -1639,7 +1641,7 @@ Theorem internal_frame_ret_word_full_taint:
     is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
     ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
       ~cx.txn.is_static) ==>
-    frame_ret_ok_full
+    frame_ret_ok_full_mods mods
       (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
       (\H v ee gt r. intret_q H func cenv cx tv v ee r /\
         !ir u. r = IntRet ir u /\
@@ -1659,7 +1661,7 @@ Theorem internal_frame_ret_word_full:
     is_word_type ty /\ evaluate_type (get_tenv cx) ty = SOME tv /\
     ((FST cenv.ce_nonreentrant /\ ~SND (SND (SND cenv.ce_nonreentrant))) ==>
       ~cx.txn.is_static) ==>
-    frame_ret_ok_full
+    frame_ret_ok_full_mods mods
       (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func) cx
       (\H v ee gt r. intret_q H func cenv cx tv v ee r) cenv ty
 Proof

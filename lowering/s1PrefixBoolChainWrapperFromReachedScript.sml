@@ -15,7 +15,7 @@ Theorem bool_chain_wrapper_prefix_from_reached:
      body_expr_prefix_ok cx e /\
     EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
       (vyperTypeCallGraph$int_calls_expr e) /\
-     bool_chain_full_ok cx (bool_chain_operands p (n - 1) e) /\
+     bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (bool_chain_operands p (n - 1) e) /\
      body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
      body_const_cells_agree [(NONE,tops)] cx env es /\
      expr_body_pre cenv cx env (Builtin (BaseT BoolT) (BoolChain p n) [e]) es /\

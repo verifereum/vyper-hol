@@ -22,9 +22,9 @@ Proof
   qabbrev_tac `H0 = storage_trace_horizon ei.storage_trace` >>
   `valid_horizon cx st0 H0 ei.storage_trace` by
     simp[Abbr `H0`, GSYM storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> for_captured_storage_live _ _ _ _ _ _ /\ _`
+  qpat_assum `!H. valid_horizon _ _ H _ ==> for_captured_storage_live _ _ _ _ _ _ _ /\ _`
     (qspec_then `H0` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
-  qpat_assum `for_captured_storage_live _ _ _ _ _ (H0,k,_,_,_,_,_)`
+  qpat_assum `for_captured_storage_live _ _ _ _ _ _ (H0,k,_,_,_,_,_)`
     (strip_assume_tac o REWRITE_RULE [for_captured_storage_live_def]) >>
   `return_buf_sep d c0 ei u` by
     (irule return_buf_sep_transport >> conj_tac
@@ -55,7 +55,7 @@ Proof
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   conj_tac
   >- (gen_tac >> disch_tac >>
-      qpat_assum `!H. valid_horizon _ _ H _ ==> for_captured_storage_live _ _ _ _ _ _ /\ _`
+      qpat_assum `!H. valid_horizon _ _ H _ ==> for_captured_storage_live _ _ _ _ _ _ _ /\ _`
         (qspec_then `H` mp_tac) >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
       rpt conj_tac >> first_assum ACCEPT_TAC) >>
   rpt conj_tac >> first_assum ACCEPT_TAC
@@ -121,7 +121,7 @@ Theorem for_captured_storage_head_full:
   sbExpr.cs_next_var <= sa.cs_next_var /\ local_ptrs_reserved c0 sa0 /\
   storage_trace_domain cx st0 ei.storage_trace /\
   (!H. valid_horizon cx st0 H ei.storage_trace ==>
-       ?k. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,body)
+       ?k. for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,body)
          (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
          (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,ei,G,tn,s)) /\
   gas_admissible (eval_for cx tyv id body (a::rs)) (stmt_res_ok lctx) ei ==>

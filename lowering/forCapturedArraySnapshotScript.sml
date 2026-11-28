@@ -235,7 +235,7 @@ Theorem for_array_snapshot_length_setup:
      stmt_state_rel H ctx func c cx es s0) /\
   ((?av. rv = Value (ArrayV av)) \/ (?src name path. rv = PlaceR (ImmutablePlace src name path))) /\
   (!av. read_result cx rv em = (INL (ArrayV av),em) ==>
-     for_nonslot_code_frame c cx env ctx func id e loop_body
+     for_nonslot_code_frame mods c cx env ctx func id e loop_body
        (case vv_location vv of NONE => LocMemory | SOME l => l) rv vv av em u) ==>
   ?she0 loc len_op sl bc saD saA xd capacity aidItem
    entry cond bod incr exit idx invalid valid done_var next_var
@@ -267,7 +267,7 @@ Theorem for_array_snapshot_length_setup:
     (!name path. rv = PlaceR (MemoryPlace name path) ==>
        ?ent. lookup_scopes name em.scopes = SOME ent /\
          evaluate_subscripts ent.type ent.value path = INL (ArrayV av)) /\
-    for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em tL /\
+    for_nonslot_code_frame mods c cx env ctx func id e loop_body loc rv vv av em tL /\
     (!fn inst t. frag_reachable ctx func tL fn inst t ==> dalloca_fmp_headroom inst t) /\
     return_buf_sep d c em tL /\
     eval_operand len_op tL = SOME (n2w (LENGTH vs)) /\ op_taint tnL len_op = {} /\
@@ -462,8 +462,8 @@ Resume for_array_snapshot_length_setup[round_frame]:
      qpat_assum `!D. gas_origin_ptr_path _ (u,Gu,tu) [] (OK tL,GL,tnL)`
        (qspec_then `DF H0` assume_tac) >>
      rpt strip_tac >> drule_all_then ACCEPT_TAC gas_origin_ptr_path_dalloca_fmp_headroom) >>
-  `for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em tL` by
-    (`for_nonslot_code_frame c cx env ctx func id e loop_body loc rv vv av em u` by
+  `for_nonslot_code_frame mods c cx env ctx func id e loop_body loc rv vv av em tL` by
+    (`for_nonslot_code_frame mods c cx env ctx func id e loop_body loc rv vv av em u` by
        (qpat_assum `loc = case vv_location vv of NONE => LocMemory | SOME l => l` SUBST1_TAC >> simp[]) >>
      qpat_x_assum `for_nonslot_code_frame _ _ _ _ _ _ _ _ _ _ _ _ _ _`
        (mp_tac o REWRITE_RULE [for_nonslot_code_frame_def]) >>
@@ -547,7 +547,7 @@ Theorem for_array_snapshot_continue_full:
      stmt_state_rel H ctx func c cx es s0) /\
   ((?av. rv = Value (ArrayV av)) \/ (?src name path. rv = PlaceR (ImmutablePlace src name path))) /\
   (!av. read_result cx rv em = (INL (ArrayV av),em) ==>
-     for_nonslot_code_frame c cx env ctx func id e loop_body
+     for_nonslot_code_frame mods c cx env ctx func id e loop_body
        (case vv_location vv of NONE => LocMemory | SOME l => l) rv vv av em u) /\
   (!vs. (!tail. array_iterator_results cx (expr_type e) rv (em with gas_obs := tail) =
                   (INL vs,em with gas_obs := tail)) /\

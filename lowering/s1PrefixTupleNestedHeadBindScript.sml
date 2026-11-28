@@ -55,13 +55,13 @@ Theorem tuple_widened_nested_head_bind:
       (!H. valid_horizon cx st0 H fin.storage_trace ==>
         gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (sp,Gp,tp) [] (OK q,Gf,tf')) /\
       (?c2 sh2 obs2.
-        tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+        tuple_widened_store_entry [] (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
           (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
           (SUC j) c2 sh2 fin q Gf tf' obs2)) ==>
   gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
     (assign_tuple_targets cx (EL j gs) (EL j vs)) (src,s,G,tn)
     (\H res mid G2 tn2 s2. ?c2 sh2 obs2.
-      tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+      tuple_widened_store_entry [] (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
         (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
         (SUC j) c2 sh2 mid s2 G2 tn2 obs2)
     (\H res ee gt r. ISR res) /\

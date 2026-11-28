@@ -36,7 +36,7 @@ Theorem bool_chain_dispatch_observation:
      body_exprs_prefix_ok cx args) /\
   builtin_args_length_ok (BoolChain p n) (LENGTH args) ==>
   ?e. args = [e] /\ body_expr_prefix_ok cx e /\
-      bool_chain_full_ok cx (bool_chain_operands p (n - 1) e)
+      bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (bool_chain_operands p (n - 1) e)
 Proof
   cheat
 QED
@@ -49,10 +49,10 @@ Theorem bool_chain_dispatch_observation_at_test:
    else
      e = IfExp (BaseT BoolT) c (Literal (BaseT BoolT) (BoolL T)) residual) /\
   body_expr_prefix_ok cx e /\
-  bool_chain_full_ok cx (bool_chain_operands p (SUC k) e) ==>
+  bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (bool_chain_operands p (SUC k) e) ==>
   body_expr_full_ok cx c /\
   ((?s tv s'. eval_expr cx c s = (INL tv,s')) ==>
-   bool_chain_full_ok cx (bool_chain_operands p k residual)) /\
+   bool_chain_full_ok [(NONE,cx_tops cx)] [] cx (bool_chain_operands p k residual)) /\
   body_expr_prefix_ok cx e
 Proof
   Cases_on `p` >> fs[] >> strip_tac >>

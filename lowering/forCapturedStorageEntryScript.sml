@@ -191,7 +191,7 @@ Theorem for_captured_storage_initial_full:
     len = LENGTH vs /\ len <= bound_length bd /\
     (!H. valid_horizon cx st0 H em.storage_trace ==>
       gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK t,G1,tn1) /\
-      for_captured_storage_live (DF,lo,d,ctx,func,cx,c,id,env,typ,loop_body)
+      for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c,id,env,typ,loop_body)
         (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
         (lvo,idx,cond) (p,dst,nb,sd) (H,0,vs,em,G1,tn1,t))
 Proof

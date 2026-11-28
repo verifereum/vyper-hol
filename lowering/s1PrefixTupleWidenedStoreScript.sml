@@ -32,13 +32,13 @@ QED
 
 Theorem tuple_store_widened_prefix_from_heads:
   LENGTH gs = LENGTH vs /\
-  tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+  tuple_widened_store_entry [] (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
     (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) i c sh src s G tn obs /\
   body_tuple_targets_prefix_ok cx (DROP i gs) (DROP i vs) /\
   gas_admissible (assign_tuple_target_list cx (DROP i gs) (DROP i vs)) ok src /\
   (!j c0 sh0 src0 s1 G1 tn1 obs0.
     j < LENGTH gs /\
-    tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+    tuple_widened_store_entry [] (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
       (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) j c0 sh0 src0 s1 G1 tn1 obs0 /\
     gas_admissible (assign_tuple_target_list cx (DROP j gs) (DROP j vs)) ok src0 /\
     body_tuple_target_full_ok cx (EL j gs) (EL j vs) /\
@@ -46,7 +46,7 @@ Theorem tuple_store_widened_prefix_from_heads:
     gas_outcome_full (DF,lo,explicit,ctx,func,PG) tops cx st0
       (assign_tuple_targets cx (EL j gs) (EL j vs)) (src0,s1,G1,tn1)
       (\H res mid G2 tn2 s2. ?c2 sh2 obs2.
-        tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+        tuple_widened_store_entry [] (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
           (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
           (SUC j) c2 sh2 mid s2 G2 tn2 obs2)
       (\H res ee gt r. ISR res) /\
@@ -56,9 +56,9 @@ Theorem tuple_store_widened_prefix_from_heads:
     (assign_tuple_target_list cx (DROP i gs) (DROP i vs)) (src,s,G,tn)
 Proof
   strip_tac >>
-  qpat_assum `tuple_widened_store_entry _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_assum `tuple_widened_store_entry _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o ONCE_REWRITE_RULE[tuple_widened_store_entry_def]) >>
-  qabbrev_tac `entry = tuple_widened_store_entry
+  qabbrev_tac `entry = tuple_widened_store_entry []
     (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
     (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)` >>
   irule tuple_store_list_guarded_prefix >> simp[] >>

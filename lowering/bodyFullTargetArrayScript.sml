@@ -6,13 +6,15 @@
      target_array_tail_full -- subscript_tail_full when the base is an array *)
 Theory bodyFullTargetArray
 Ancestors
+  bodyInvSplit[qualified]
   bodyFullTargetArraySource bodyFullTargetArraySuffix
   bodyFullTargetSubscript bodyFullTargetDefs bodySimFull targetPlaceSim
   vyperTypeSystem vyperInterpreter vyperState
 
 Theorem target_array_tail_full:
-  body_inv tops ctx cenv cx /\
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  contract_inv mods exps ctx cenv cx /\
+  module_body_inv mods cenv.ce_module tops cenv cx /\
+  target_pre_mods mods cenv cx env (SubscriptTarget bt e) es /\
   type_place_target env bt = SOME (Type (ArrayT et bd)) ==>
   subscript_tail_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
     cenv cx env bt e es

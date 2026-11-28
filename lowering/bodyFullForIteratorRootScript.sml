@@ -116,7 +116,7 @@ Theorem supported_nested_iterator_root_kind:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ expr_sim_inv_mods mods cenv cx env es /\
   well_typed_expr env e /\ supported_expr tops e /\
-  ~supported_expr_exists (const_name_root cx) e /\
+  ~supported_expr_exists (const_name_root_mods mods) e /\
   (~(?ty nid. e = TopLevelName ty nid)) /\
   loop_iterator_place e = SOME t /\ target_root t = TopLevelNameTarget nid ==>
   IS_SOME (supported_immutable_type tops nid) \/

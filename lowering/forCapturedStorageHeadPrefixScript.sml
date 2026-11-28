@@ -7,7 +7,7 @@ Ancestors
   words finite_map list rich_list
 
 Theorem captured_live_index[local]:
-  for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
+  for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
     (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
     (lvo,idx,cond) (p,dst,nb,sd) (H,k,rs,ei,G,tn,s) ==>
   k = LENGTH vs - LENGTH rs
@@ -54,7 +54,7 @@ Theorem for_captured_storage_head_prefix:
   (!x cap. c0.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at sa0 x) /\
   storage_trace_domain cx st0 ei.storage_trace /\
   (!H. valid_horizon cx st0 H ei.storage_trace ==>
-       ?k. for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
+       ?k. for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
          (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
          (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,ei,G,tn,s)) ==>
   ?k u Gu tnu.
@@ -72,7 +72,7 @@ Theorem for_captured_storage_head_prefix:
     (eval_operand bop u = SOME slot /\ op_taint tnu bop = {} /\
      slot_copy_external saCopy bop) /\
     !H. valid_horizon cx st0 H ei.storage_trace ==>
-      for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
+      for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
         (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
         (lvo,idx,cond) (p,dst,nb,sd) (H,k,a::rs,ei,G,tn,s) /\
       storage_place_observed H (StoragePlace tr
@@ -125,13 +125,13 @@ Proof
     (qspec_then `H0` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (qx_choose_then `k` assume_tac) >>
-  qpat_assum `for_captured_storage_live _ _ _ _ _ (H0,k,_,_,_,_,_)`
+  qpat_assum `for_captured_storage_live _ _ _ _ _ _ (H0,k,_,_,_,_,_)`
     (mp_then Any assume_tac captured_live_index) >>
-  qpat_assum `for_captured_storage_live _ _ _ _ _ (H0,k,_,_,_,_,_)`
+  qpat_assum `for_captured_storage_live _ _ _ _ _ _ (H0,k,_,_,_,_,_)`
     (mp_then Any (qspec_then `st0` mp_tac) for_captured_storage_live_child) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   CONV_TAC (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV])) >> strip_tac >>
-  qpat_assum `for_captured_storage_live _ _ _ _ _ (H0,k,_,_,_,_,_)`
+  qpat_assum `for_captured_storage_live _ _ _ _ _ _ (H0,k,_,_,_,_,_)`
     (strip_assume_tac o REWRITE_RULE[for_captured_storage_live_def]) >>
   `allocas_from lo s` by
     (qpat_assum `ghost_inv_at (DF H0) _ _ _ _ _ _ _ _` mp_tac >>
@@ -180,7 +180,7 @@ Resume for_captured_storage_head_prefix[framed]:
   qpat_assum `!H. valid_horizon _ _ H _ ==> ?k. _` (qspec_then `H` mp_tac) >>
   (impl_tac >- first_assum ACCEPT_TAC) >>
   disch_then (qx_choose_then `j` assume_tac) >>
-  qpat_assum `for_captured_storage_live _ _ _ _ _ (H,j,_,_,_,_,_)`
+  qpat_assum `for_captured_storage_live _ _ _ _ _ _ (H,j,_,_,_,_,_)`
     (mp_then Any assume_tac captured_live_index) >>
   `j = k` by
     (qpat_assum `j = LENGTH vs - LENGTH (a::rs)` (rewrite_tac o single) >>
@@ -188,11 +188,11 @@ Resume for_captured_storage_head_prefix[framed]:
   qpat_x_assum `j = k` SUBST_ALL_TAC >>
   conj_tac >- first_assum ACCEPT_TAC >>
   conj_tac
-  >- (qpat_assum `for_captured_storage_live _ _ _ _ _ (H,k,_,_,_,_,_)`
+  >- (qpat_assum `for_captured_storage_live _ _ _ _ _ _ (H,k,_,_,_,_,_)`
         (mp_then Any (qspec_then `st0` mp_tac) for_captured_storage_live_child) >>
       (impl_tac >- first_assum ACCEPT_TAC) >>
       Cases_on `bd` >> simp[NoAsms, LET_THM]) >>
-  qpat_assum `for_captured_storage_live _ _ _ _ _ (H,k,_,_,_,_,_)`
+  qpat_assum `for_captured_storage_live _ _ _ _ _ _ (H,k,_,_,_,_,_)`
     (strip_assume_tac o REWRITE_RULE[for_captured_storage_live_def]) >>
   MATCH_MP_TAC (CONV_RULE (REDEPTH_CONV (FIRST_CONV [REWR_CONV LET_THM,BETA_CONV]))
     for_storage_array_head_prefix_transport_outside) >>

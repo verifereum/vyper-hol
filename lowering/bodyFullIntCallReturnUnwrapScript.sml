@@ -33,7 +33,7 @@ Proof
     (qpat_assum `!H. valid_horizon _ _ H es1.storage_trace ==> _`
        (qspec_then `H` mp_tac) >>
      (impl_tac >- first_assum ACCEPT_TAC) >>
-     pure_rewrite_tac[intcall_entry_full_def] >>
+     pure_rewrite_tac[intcall_entry_full_mods_def] >>
      strip_tac >> first_assum ACCEPT_TAC) >>
   qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ childQ childR` >>
   irule gas_outcome_full_bind_all >> rpt conj_tac
@@ -95,7 +95,7 @@ Theorem intcall_return_unwrap:
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!H. valid_horizon cx st0 H es1.storage_trace ==>
-    intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es
+    intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es
       sa sm vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn) /\
   (?H. valid_horizon cx st0 H es1.storage_trace) /\
   cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\

@@ -31,7 +31,7 @@ QED
 Theorem intcall_entry_invoke_continuation:
  !DF lo d H tops ctx func cenv cx tenv name es sa sm vv s0 es0 G0 tn0
    mut nr args ret ss rr prev penv rtv es1 t G tn rc rbs pvs bb inst.
- intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv s0 es0
+ intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv s0 es0
    G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
  fn_has_code sa sm func /\
  cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
@@ -57,8 +57,8 @@ Theorem intcall_entry_invoke_continuation:
            (base_ptr rbuf))
 Proof
   rpt gen_tac >> strip_tac >>
-  qhdtm_x_assum `intcall_entry_full` mp_tac >>
-  pure_rewrite_tac[intcall_entry_full_def] >>
+  qhdtm_x_assum `intcall_entry_full_mods` mp_tac >>
+  pure_rewrite_tac[intcall_entry_full_mods_def] >>
   disch_then (strip_assume_tac o cj 14) >>
   qpat_x_assum `!callee setup use_trans nkeys imm_len dflts lbl' ce params has_rb is_nr key trans view ctor imm_len' ss' rt. _` kall_tac >>
   gvs[] >> rename1 `LENGTH inst.inst_outputs = nret` >>
@@ -126,7 +126,7 @@ Finalise intcall_entry_invoke_continuation
 Theorem intcall_entry_invoke_arity:
  !DF lo d H tops ctx func cenv cx tenv name es sa sm vv s0 es0 G0 tn0
    mut nr args ret ss rr prev penv rtv es1 t G tn rc rbs pvs bb inst.
- intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv s0 es0
+ intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv s0 es0
    G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
  fn_has_code sa sm func /\
  cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\
@@ -161,8 +161,8 @@ Proof
  `evaluate_type (get_tenv cx) ret = SOME rtv /\
   ?dflts. lookup_callable_function cx.in_deploy name tops =
     SOME (mut,nr,args,dflts,ret,ss)` by
-   (qhdtm_assum `intcall_entry_full` mp_tac >>
-    pure_rewrite_tac[intcall_entry_full_def] >> metis_tac[]) >>
+   (qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+    pure_rewrite_tac[intcall_entry_full_mods_def] >> metis_tac[]) >>
  drule_all_then strip_assume_tac body_inv_expr_body_pre_mods >>
  drule_then assume_tac bodySimTheory.body_inv_contract >>
  drule_all_then strip_assume_tac
@@ -176,14 +176,15 @@ Theorem intcall_return_type_facts:
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn v.
  (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
+ ALOOKUP mods NONE = SOME tops /\
  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
- intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
+ intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv
    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
  safe_cast rtv v = SOME v ==>
  cenv.ce_func_return_type (nsid_to_string (NONE,name)) = ret /\
  evaluate_type (get_tenv cx) ret = SOME rtv /\ value_has_type rtv v /\
  type_widens_to (get_tenv cx) ret ann /\
- cenv.ce_struct_fields = make_struct_fields_map tops
+ cenv.ce_struct_fields = make_struct_fields_map_mods mods
 Proof
   cheat
 QED
@@ -197,8 +198,8 @@ Proof
  drule_all intcall_return_type_facts >> strip_tac >>
  `?dflts. lookup_callable_function cx.in_deploy name tops =
     SOME (mut,nr,args,dflts,ret,ss)` by
-   (qhdtm_assum `intcall_entry_full` mp_tac >>
-    pure_rewrite_tac[intcall_entry_full_def] >> metis_tac[]) >>
+   (qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+    pure_rewrite_tac[intcall_entry_full_mods_def] >> metis_tac[]) >>
  drule_all callable_func_info_in_env >> strip_tac >>
  `returns_stack_count
    (\n. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields n)) ret =
@@ -224,8 +225,9 @@ Theorem intcall_return_register_type_facts:
   DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn rc rbs pvs v.
  (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
+ ALOOKUP mods NONE = SOME tops /\
  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
- intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
+ intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv
    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
  cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\ 0 < rc /\
  safe_cast rtv v = SOME v ==>
@@ -236,7 +238,7 @@ Theorem intcall_return_register_type_facts:
  post_value_type cenv (Call ann (IntCall (NONE,name)) es dflt) = ret /\
  0 < returns_stack_count
    (\n. MAP (FST o SND) (get_struct_fields cenv.ce_struct_fields n)) ret /\
- cenv.ce_struct_fields = make_struct_fields_map tops
+ cenv.ce_struct_fields = make_struct_fields_map_mods mods
 Proof
   cheat
 QED
@@ -302,7 +304,7 @@ Theorem intcall_return_register_value_certificate:
  (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
  expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (NONE,name)) es dflt) es0 /\
- intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sm vv
+ intcall_entry_full_mods (DF,lo,d) H mods NONE tops ctx func cenv cx tenv name es sa sm vv
    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
  cenv.ce_func_info (nsid_to_string (NONE,name)) = (rc,rbs,pvs) /\ 0 < rc /\
  intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv rc NONE
@@ -433,8 +435,8 @@ QED
 (* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_return_register_value_certificate[pointer]:
  `FLOOKUP G root = SOME (off,rbuf.buf_size) /\ op_taint tn (Var root) = {}` by
-   (qhdtm_assum `intcall_entry_full` mp_tac >>
-    pure_rewrite_tac[intcall_entry_full_def] >> strip_tac >>
+   (qhdtm_assum `intcall_entry_full_mods` mp_tac >>
+    pure_rewrite_tac[intcall_entry_full_mods_def] >> strip_tac >>
     qpat_x_assum `!ty p buf. _`
       (qspecl_then [`cenv.ce_func_return_type (nsid_to_string (NONE,name))`,
          `base_ptr rbuf`,`rbuf`] mp_tac) >>
