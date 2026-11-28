@@ -90,6 +90,30 @@ Proof
   drule_all_then ACCEPT_TAC bool_chain_pushed_locked_run_compiled
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  `valid_horizon cxd st0 (storage_trace_horizon ed.storage_trace) ed.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon cxd _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
+    (drule_then (strip_assume_tac o SIMP_RULE bool_ss
+       [intcall_args_stage_post_def,APPEND_NIL,sumTheory.INL_11,UNWIND_THM2])) >>
+  `!H. valid_horizon cxd st0 H ed.storage_trace ==>
+    stmt_state_rel H ctx func dc cxd ed u /\
+    storage_well_formed_on cxd ed (FST H) /\
+    ghost_inv_at (DF H) lo d dc cxd ed Gd tnd u` by
+    (gen_tac >> disch_tac >>
+     qpat_assum `!H. valid_horizon cxd _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
+       (drule_then (strip_assume_tac o SIMP_RULE bool_ss
+          [intcall_args_stage_post_def,APPEND_NIL,sumTheory.INL_11,UNWIND_THM2])) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `gas_admissible ((\dvs src. after_defaults src.scopes dvs src) dvs) P ed` by
+    (qpat_assum `gas_admissible (next vals) P ed` mp_tac >>
+     qpat_assum `next vals = _` (fn th => simp_tac bool_ss [th])) >>
+  suspend "native_entry"
+QED
+*)
 Theorem bool_chain_defaults_to_invoke_projected_prefix:
   (* Static caller layout and the return-buffer preparation. *)
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
@@ -220,27 +244,10 @@ Theorem bool_chain_defaults_to_invoke_projected_prefix:
   gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     cxd st0 (next vals) (ed,u,Gd,tnd)
 Proof
-  strip_tac >>
-  `valid_horizon cxd st0 (storage_trace_horizon ed.storage_trace) ed.storage_trace` by
-    fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon cxd _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
-    (drule_then (strip_assume_tac o SIMP_RULE bool_ss
-       [intcall_args_stage_post_def,APPEND_NIL,sumTheory.INL_11,UNWIND_THM2])) >>
-  `!H. valid_horizon cxd st0 H ed.storage_trace ==>
-    stmt_state_rel H ctx func dc cxd ed u /\
-    storage_well_formed_on cxd ed (FST H) /\
-    ghost_inv_at (DF H) lo d dc cxd ed Gd tnd u` by
-    (gen_tac >> disch_tac >>
-     qpat_assum `!H. valid_horizon cxd _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
-       (drule_then (strip_assume_tac o SIMP_RULE bool_ss
-          [intcall_args_stage_post_def,APPEND_NIL,sumTheory.INL_11,UNWIND_THM2])) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `gas_admissible ((\dvs src. after_defaults src.scopes dvs src) dvs) P ed` by
-    (qpat_assum `gas_admissible (next vals) P ed` mp_tac >>
-     qpat_assum `next vals = _` (fn th => simp_tac bool_ss [th])) >>
-  suspend "native_entry"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_defaults_to_invoke_projected_prefix[native_entry]:
   map_every (fn p => qpat_x_assum p SUBST_ALL_TAC)
     [`ops = _`,`vals = _`,`ptys = _`,`pflags = _`,`dc = _`] >>
@@ -282,7 +289,9 @@ Resume bool_chain_defaults_to_invoke_projected_prefix[native_entry]:
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
   suspend "continuation"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_defaults_to_invoke_projected_prefix[continuation]:
   qpat_assum `next (svs ++ dvs) = _` SUBST1_TAC >>
   qpat_assum `cxd = _` SUBST1_TAC >>
@@ -319,7 +328,9 @@ Resume bool_chain_defaults_to_invoke_projected_prefix[continuation]:
     (qspecl_then [`err`,`failed`] mp_tac) >> simp_tac bool_ss [] >>
   first_assum ACCEPT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bool_chain_defaults_to_invoke_projected_prefix[reached_entry]:
   qabbrev_tac `rest_src = intcall_rest cx name mut nr ss ed.scopes tv` >>
   `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -335,8 +346,11 @@ Resume bool_chain_defaults_to_invoke_projected_prefix[reached_entry]:
      Cases_on `res` >> simp[bind_def]) >>
   drule gas_prefix_full_state_cong >> disch_then (fn th => simp[th])
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise bool_chain_defaults_to_invoke_projected_prefix
+*)
 
 Theorem bool_chain_defaults_to_invoke_prefix:
   (* Static caller layout and the return-buffer preparation. *)

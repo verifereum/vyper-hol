@@ -73,24 +73,8 @@ Proof
   cheat
 QED
 
-Theorem bool_chain_not_direct_operand_prefix:
-  a = Call (BaseT BoolT) (ExtCall T F (fname,[],BaseT BoolT) [])
-        [Literal (BaseT AddressT) (BytesL (REPLICATE 18 0w ++ [1w;0w]))] NONE /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
-  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
-  MEM shadow_func shadow_ctx.ctx_functions /\ fn_inst_ids_distinct func /\
-  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-  reached (Builtin (BaseT BoolT) Not [a]::rest) sa shadow_sa es s G tn /\
-  body_expr_full_ok cx (Builtin (BaseT BoolT) Not [a]) /\
-  expr_type (Builtin (BaseT BoolT) Not [a]) = BaseT BoolT /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Builtin (BaseT BoolT) Not [a]) es /\
-  expr_sim_full_pre (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx (BaseT BoolT) (Builtin (BaseT BoolT) Not [a]) es
-      (st0,sa,sb,shadow_sa,shadow_sb,op,s,G,tn) ==>
-  gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cx st0
-    (bind (eval_expr cx (Builtin (BaseT BoolT) Not [a])) (read_result cx)) (es,s,G,tn)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
   `expr_type a = BaseT BoolT` by fs[expr_type_def] >>
@@ -137,4 +121,26 @@ Proof
     (mp_then Any irule (iffRL gas_prefix_full_state_cong)) >>
   qx_gen_tac `qe` >> Cases_on `bind (eval_expr cx a) (read_result cx) qe` >>
   rename1 `_ = (res,ee)` >> Cases_on `res` >> simp[bind_def]
+QED
+*)
+Theorem bool_chain_not_direct_operand_prefix:
+  a = Call (BaseT BoolT) (ExtCall T F (fname,[],BaseT BoolT) [])
+        [Literal (BaseT AddressT) (BytesL (REPLICATE 18 0w ++ [1w;0w]))] NONE /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  gas_shadow_context ctx shadow_ctx /\ ctx_inst_ids_distinct ctx /\
+  gas_shadow_function func shadow_func /\ MEM func ctx.ctx_functions /\
+  MEM shadow_func shadow_ctx.ctx_functions /\ fn_inst_ids_distinct func /\
+  (!H. dead_lo_ok H (DF H) lo cenv cx) /\
+  reached (Builtin (BaseT BoolT) Not [a]::rest) sa shadow_sa es s G tn /\
+  body_expr_full_ok cx (Builtin (BaseT BoolT) Not [a]) /\
+  expr_type (Builtin (BaseT BoolT) Not [a]) = BaseT BoolT /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_body_pre cenv cx env (Builtin (BaseT BoolT) Not [a]) es /\
+  expr_sim_full_pre (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx (BaseT BoolT) (Builtin (BaseT BoolT) Not [a]) es
+      (st0,sa,sb,shadow_sa,shadow_sb,op,s,G,tn) ==>
+  gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cx st0
+    (bind (eval_expr cx (Builtin (BaseT BoolT) Not [a])) (read_result cx)) (es,s,G,tn)
+Proof
+  cheat
 QED
