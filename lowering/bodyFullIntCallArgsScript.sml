@@ -5993,11 +5993,12 @@ Proof
       `op_taint tn1 op = {} /\ op_prov G1 op = NONE` by fs[ptr_val_ok_def] >>
       `!x. op = Var x ==> not_fresh_at cu x` by
         (`expr_body_pre_mods mods cenv cx tenv e esi` by fs[] >>
-         qpat_assum `expr_body_pre_mods mods cenv cx tenv e esi` mp_tac >>
-         qpat_assum `lower_value compile_expr cenv (expr_type e) e si = (op,cu)` mp_tac >>
-         qpat_assum `is_word_type dty` mp_tac >>
-         qpat_assum `expr_type e = dty` mp_tac >>
-         metis_tac[intcall_args_expr_body_pre_mods_lower_value_word_shape]) >>
+         qpat_assum `expr_body_pre_mods mods cenv cx tenv e esi` (fn pre =>
+           qpat_assum `lower_value compile_expr cenv (expr_type e) e si = (op,cu)` (fn lowered =>
+             qpat_assum `is_word_type dty` (fn word =>
+               qpat_assum `expr_type e = dty` (fn expr_ty =>
+                 ACCEPT_TAC (MATCH_MP intcall_args_expr_body_pre_mods_lower_value_word_shape
+                   (CONJ pre (CONJ lowered (CONJ word expr_ty))))))))) >>
       `expr_sim_inv_mods mods cenv cx tenv mid /\
        value_runtime_typed tenv (expr_type e) v` by
         (`expr_body_pre_mods mods cenv cx tenv e
