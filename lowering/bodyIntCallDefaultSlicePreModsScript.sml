@@ -81,8 +81,7 @@ Theorem intcall_default_slice_pre_mods:
   ed = env with current_src := src /\ cd = ce with ce_module := src /\
   contract_inv mods exps ctx cd p /\
   expr_sim_inv_mods mods cd p ed mid /\ body_const_cells_agree mods p ed mid /\
-  exports_ok p.layouts p.txn.target mods exps /\
-  MEM (src,name) (linked_live_functions mods exps) /\
+  (mods = [(NONE,tops)] \/ MEM (src,name) (linked_live_functions mods exps)) /\
   ALOOKUP mods src = SOME tops /\
   MEM (FunctionDecl vis mut nr rawfn name args dflts ret ss) tops /\
   (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
@@ -124,7 +123,7 @@ Proof
   drule_all intcall_default_slice_domain_mods >>
   disch_then (qspec_then `n` mp_tac) >> simp[LET_THM] >> strip_tac >>
   `(src = NONE ==> supported_program tops)` by
-    (strip_tac >> gvs[] >> drule_all contract_inv_supported_module >> simp[]) >>
+    (disch_then SUBST_ALL_TAC >> drule_all contract_inv_supported_module >> simp[]) >>
   drule_all intcall_default_slice_support_mods >> strip_tac >>
   `env_context_consistent ed p` by
     (drule expr_sim_inv_mods_env >> simp[env_consistent_def]) >>
