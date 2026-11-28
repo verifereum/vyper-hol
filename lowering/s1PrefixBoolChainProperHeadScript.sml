@@ -10,6 +10,8 @@ Theorem bool_chain_proper_head_prefix:
      sf shadow_sf.
     builtin_args_length_ok (BoolChain p n) (LENGTH [e]) /\
     body_expr_prefix_ok cx e /\
+    EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (vyperTypeCallGraph$int_calls_expr e) /\
     bool_chain_full_ok cx (bool_chain_operands p (n - 1) e) /\
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     body_const_cells_agree [(NONE,tops)] cx env es /\

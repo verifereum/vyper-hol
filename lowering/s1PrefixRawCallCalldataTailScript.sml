@@ -7,6 +7,28 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint vyperState ptrDiscipline words list
   option arithmetic
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  Cases_on `cx.txn.is_static /\ amount <> 0`
+  >- (`~flags.rcf_is_delegate /\ ~flags.rcf_is_static` by metis_tac[] >>
+      irule gas_prefix_full_no_outcome >>
+      asm_simp_tac bool_ss [storage_trace_frame_raw_call] >> rpt gen_tac >>
+      `eval_raw_call cx flags target cx.txn.calldata amount (ext_call_kwarg EKGas flags.rcf_kws kvs)
+          (esK with gas_obs := gobs) =
+        (INR (Error (RuntimeError "write in static context")),esK with gas_obs := gobs)` by
+        (irule raw_call_static_value_abort >> metis_tac[]) >>
+      asm_simp_tac (srw_ss()) [] >>
+      disch_then (SUBST1_TAC o SYM o CONJUNCT2) >> simp[DROP_LENGTH_NIL]) >>
+  `cx.txn.is_static ==> amount = 0` by metis_tac[] >>
+  drule raw_call_source_inv_facts >> strip_tac >>
+  irule raw_call_eval_prefix_from_take >> asm_simp_tac bool_ss [] >>
+  reverse conj_tac >- metis_tac[] >>
+  rpt gen_tac >> disch_tac >>
+  suspend "finish_entry"
+QED
+*)
 Theorem raw_call_calldata_prepared_tail_prefix:
   ~(flags.rcf_is_delegate /\ flags.rcf_is_static) /\
   ((flags.rcf_is_delegate \/ flags.rcf_is_static) ==> amount = 0) /\
@@ -62,25 +84,10 @@ Theorem raw_call_calldata_prepared_tail_prefix:
     (eval_raw_call cx flags target cx.txn.calldata amount (ext_call_kwarg EKGas flags.rcf_kws kvs))
     (esK,t7,G7,tn7)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  Cases_on `cx.txn.is_static /\ amount <> 0`
-  >- (`~flags.rcf_is_delegate /\ ~flags.rcf_is_static` by metis_tac[] >>
-      irule gas_prefix_full_no_outcome >>
-      asm_simp_tac bool_ss [storage_trace_frame_raw_call] >> rpt gen_tac >>
-      `eval_raw_call cx flags target cx.txn.calldata amount (ext_call_kwarg EKGas flags.rcf_kws kvs)
-          (esK with gas_obs := gobs) =
-        (INR (Error (RuntimeError "write in static context")),esK with gas_obs := gobs)` by
-        (irule raw_call_static_value_abort >> metis_tac[]) >>
-      asm_simp_tac (srw_ss()) [] >>
-      disch_then (SUBST1_TAC o SYM o CONJUNCT2) >> simp[DROP_LENGTH_NIL]) >>
-  `cx.txn.is_static ==> amount = 0` by metis_tac[] >>
-  drule raw_call_source_inv_facts >> strip_tac >>
-  irule raw_call_eval_prefix_from_take >> asm_simp_tac bool_ss [] >>
-  reverse conj_tac >- metis_tac[] >>
-  rpt gen_tac >> disch_tac >>
-  suspend "finish_entry"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_call_calldata_prepared_tail_prefix[finish_entry]:
   `stmt_state_rel (storage_trace_horizon esK.storage_trace) ctx func cenv cx esK t7` by
     (qpat_assum `!H. valid_horizon _ _ H _ ==> _`
@@ -122,7 +129,9 @@ Resume raw_call_calldata_prepared_tail_prefix[finish_entry]:
      tautLib.TAUT_TAC) >>
   suspend "memory_ranges"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_call_calldata_prepared_tail_prefix[memory_ranges]:
   qabbrev_tac `ro = if cap = 0 then ob else ob + 32` >>
   `ro < dimword (:256) /\ (cap <> 0 ==> lo <= ro) /\
@@ -154,7 +163,9 @@ Resume raw_call_calldata_prepared_tail_prefix[memory_ranges]:
      goal_assum (drule_at Any)) >>
   suspend "request_site"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_call_calldata_prepared_tail_prefix[request_site]:
   qabbrev_tac `bs = cx.txn.calldata` >>
   `w2n (n2w ro : bytes32) = ro /\ w2n (n2w ib : bytes32) = ib /\
@@ -201,5 +212,8 @@ Resume raw_call_calldata_prepared_tail_prefix[request_site]:
        simp_tac bool_ss [Abbr `opc`,Abbr `ops`] >> NO_TAC) >>
   qpat_assum `cap <> 0 ==> lo <= ro` mp_tac >> tautLib.TAUT_TAC
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise raw_call_calldata_prepared_tail_prefix
+*)

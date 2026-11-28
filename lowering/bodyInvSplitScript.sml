@@ -143,7 +143,9 @@ Definition contract_inv_def[nocompute]:
          (FunctionDecl vis mut nr rr name args dflts ret ss) /\
        (cx.in_deploy ==> supported_deploy_declaration tops
          (FunctionDecl vis mut nr rr name args dflts ret ss))) /\
-    immutable_section_layout_mods mods cenv
+    immutable_section_layout_mods mods cenv /\
+    check_linked_state_ownership cx.layouts cx.txn.target mods
+      (linked_live_functions mods exps)
 End
 
 (* The body currently runs in src while using the unit's shared tables. *)

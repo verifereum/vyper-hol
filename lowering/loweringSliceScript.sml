@@ -485,8 +485,17 @@ QED
 (* An ALLOCA of func whose output is no live local's pointer, run fresh or
    again, keeps stmt_state_rel H and holds its region's base in its output.
    alloca_room keeps the base from wrapping. *)
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem stmt_state_rel_exec_alloca:
+  !H.
+  !func cenv cx es s inst p n s1 ctx.
+    stmt_state_rel H ctx func cenv cx es s /\
+    fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
+    inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit n] /\
+    inst.inst_outputs = [p] /\ not_local_ptr cenv es.scopes p /\
+    exec_alloca inst s n = OK s1 ==>
+    stmt_state_rel H ctx func cenv cx es s1 /\
+    ?w. lookup_var p s1 = SOME w /\
+        FLOOKUP s1.vs_allocas inst.inst_id = SOME (w2n w, w2n n)
 Proof
   gen_tac >>
   rpt gen_tac >> strip_tac >>
@@ -517,11 +526,33 @@ Proof
      impl_tac >- (fs[stmt_state_rel_def, state_rel_def] >>
                   metis_tac[not_local_ptr_scope]) >> simp[]) >>
   `alloca_inv s1` by metis_tac[alloca_inv_exec_alloca, stmt_state_rel_def] >>
-  `immutables_rel cenv cx.txn.target cenv.ce_module cenv.ce_is_ctor es s1` by
-    (irule immutable_relation_same_bytes >> qexists_tac `s` >>
-     qpat_x_assum `exec_alloca _ _ _ = _` mp_tac >>
+  `!src. src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src) ==>
+      immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s1` by
+    (rpt strip_tac >>
+     `immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s` by
+       (fs[stmt_state_rel_def, state_rel_def] >>
+        Cases_on `src = cenv.ce_module` >> gvs[] >>
+        Cases_on `ALOOKUP cenv.ce_modules src` >> gvs[] >>
+        first_assum ACCEPT_TAC) >>
+     `s1.vs_data_section = s.vs_data_section` by
+       (qpat_assum `exec_alloca _ _ _ = _` mp_tac >>
+        simp[exec_alloca_def, AllCaseEqs(), update_var_def, LET_THM] >> rw[] >>
+        fs[] >> gvs[exec_alloca_def, AllCaseEqs(), update_var_def, LET_THM]) >>
+     irule immutable_relation_same_bytes >> qexists_tac `s` >>
+     qpat_assum `exec_alloca _ _ _ = _` mp_tac >>
      simp[exec_alloca_def, AllCaseEqs(), update_var_def, LET_THM] >> rw[] >>
-     fs[stmt_state_rel_def, state_rel_def]) >>
+     fs[stmt_state_rel_def, state_rel_def] >>
+     metis_tac[exec_alloca_preserves_memory]) >>
+  `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+      immutable_alloca_sep func (cenv with ce_module := src) cx es s1` by
+    (rpt strip_tac >>
+     irule immutable_alloca_sep_exec_alloca >>
+     qexistsl_tac [`inst`, `n`, `s`] >>
+     fs[stmt_state_rel_def] >>
+     `not_local_ptr (cenv with ce_module := src) es.scopes p` by
+       fs[not_local_ptr_def] >>
+     rpt strip_tac >> qexists_tac `id` >>
+     drule_all local_region_exec_alloca >> simp[]) >>
   `state_rel H func cenv cx es s1` by
     (irule state_rel_frame >> conj_tac >- simp[] >>
      qexistsl_tac [`es`, `s`] >>
@@ -556,21 +587,6 @@ Proof
   fs[stmt_state_rel_def, update_var_def, lookup_var_def, FLOOKUP_UPDATE,
      wordsTheory.w2n_n2w] >>
   metis_tac[]
-QED
-*)
-Theorem stmt_state_rel_exec_alloca:
-  !H.
-  !func cenv cx es s inst p n s1 ctx.
-    stmt_state_rel H ctx func cenv cx es s /\
-    fn_inst_ids_distinct func /\ MEM inst (fn_insts func) /\
-    inst.inst_opcode = ALLOCA /\ inst.inst_operands = [Lit n] /\
-    inst.inst_outputs = [p] /\ not_local_ptr cenv es.scopes p /\
-    exec_alloca inst s n = OK s1 ==>
-    stmt_state_rel H ctx func cenv cx es s1 /\
-    ?w. lookup_var p s1 = SOME w /\
-        FLOOKUP s1.vs_allocas inst.inst_id = SOME (w2n w, w2n n)
-Proof
-  cheat
 QED
 
 (* Registering a new local whose region now holds its value: the state t

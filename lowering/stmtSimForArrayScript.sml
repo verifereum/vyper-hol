@@ -9,7 +9,7 @@ Ancestors
   emitHelperProps exprLoweringProps venomState emitHelper rich_list
   immutableMemoryFrame stmtSimDeclStore loweringSlice localPtrsProps
   stmtSimForArrayFrame valueEncodingTyping memoryValueEncoding list alist pair
-  exprSimHypsDefs exprSimProps
+  exprSimHypsDefs exprSimProps stateRelProj finite_map
 
 Theorem array_for_hypotheses:
   !tops bindings id ty e n body env ret_ty env' m arr.

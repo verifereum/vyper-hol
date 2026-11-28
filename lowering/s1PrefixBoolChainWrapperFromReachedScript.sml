@@ -4,7 +4,7 @@ Theory s1PrefixBoolChainWrapperFromReached
 Ancestors
   s1PrefixBoolChainWrapperEntry s1PrefixBoolChainUseSite
   s1PrefixBuiltinLeaves s1PrefixOfVV s1PrefixPreds s1PrefixDefs
-  boolChainSource boolChainCodeLayout
+  boolChainSource boolChainCodeLayout vyperTypeCallGraph
   gasShadowState compileEnv vyperAST vyperInterpreter vyperValueOperation venomState
 
 Theorem bool_chain_wrapper_prefix_from_reached:
@@ -13,6 +13,8 @@ Theorem bool_chain_wrapper_prefix_from_reached:
       sf shadow_sf.
      builtin_args_length_ok (BoolChain p n) (LENGTH [e]) /\
      body_expr_prefix_ok cx e /\
+    EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (vyperTypeCallGraph$int_calls_expr e) /\
      bool_chain_full_ok cx (bool_chain_operands p (n - 1) e) /\
      body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
      body_const_cells_agree [(NONE,tops)] cx env es /\
@@ -62,6 +64,9 @@ Theorem bool_chain_wrapper_prefix_from_reached:
               (s,G,tn) marks (OK u,G1,tn1)) ==>
           reached rest st shadow_st mid (jump_to st.cs_current_bb u) G1 tn1)) ==>
   !cx ann p n args.
+    (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+      EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+        (vyperTypeCallGraph$int_calls_expr (Builtin ann (BoolChain p n) args))) /\
     (!s'' x t.
        type_check (builtin_args_length_ok (BoolChain p n) (LENGTH args))
          "Builtin args" s'' = (INL x,t) /\
@@ -98,6 +103,10 @@ Proof
       qhdtm_assum `expr_vv_sim_full_pre` (irule_at Any) >>
       qhdtm_assum `body_const_cells_agree` (irule_at Any) >>
       `builtin_args_length_ok (BoolChain p n) (LENGTH [e])` by simp[] >>
+      `EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+          (int_calls_expr e)` by
+        (fs[bodyFullPredsTheory.body_const_cells_agree_def] >>
+         res_tac >> fs[int_calls_expr_def]) >>
       rpt conj_tac >> (first_assum ACCEPT_TAC ORELSE
         (rpt gen_tac >> strip_tac >>
          asm "certificate" (drule_all_then ACCEPT_TAC)))) >>

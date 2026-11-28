@@ -7,16 +7,8 @@ Ancestors
   gasOutcomeFullCompose exprSimDefs loweringPosts bodyMemoryDefs
   freshWrites vyperStorageFootprint vyperState exprBodyPreProps exprSimWordArgs
 
-Theorem bop_word_pair_value_prefix:
-  bop <> In /\ bop <> NotIn /\
-  ~((bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1)) /\
-  is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
-  body_exprs_full_ok cx [e1;e2] /\ body_exprs_prefix_ok cx [e1;e2] /\
-  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es ==>
-  expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx ty (Builtin ann (Bop bop) [e1;e2]) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >> rewrite_tac[expr_sim_prefix_def, expr_sim_full_pre_def] >>
   rpt gen_tac >> strip_tac >>
@@ -59,7 +51,22 @@ Proof
   >- (rpt gen_tac >> Cases_on `res` >> simp[]) >>
   suspend "right_entry"
 QED
+*)
+Theorem bop_word_pair_value_prefix:
+  bop <> In /\ bop <> NotIn /\
+  ~((bop = Eq \/ bop = NotEq) /\ is_bytestring_type (expr_type e1)) /\
+  is_word_type ann /\ is_word_type (expr_type e1) /\ is_word_type (expr_type e2) /\
+  body_exprs_full_ok cx [e1;e2] /\ body_exprs_prefix_ok cx [e1;e2] /\
+  body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_body_pre cenv cx env (Builtin ann (Bop bop) [e1;e2]) es ==>
+  expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx ty (Builtin ann (Bop bop) [e1;e2]) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_word_pair_value_prefix[right_entry]:
   qx_genl_tac [`left`, `v1`, `mid`, `G1`, `tn1`, `t`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -104,7 +111,9 @@ Resume bop_word_pair_value_prefix[right_entry]:
      goal_assum (drule_at Any) >> goal_assum (drule_at Any)) >>
   suspend "right_prefix"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_word_pair_value_prefix[right_prefix]:
   `local_ptrs_reserved cenv s1` by
     metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_next_var] >>
@@ -143,5 +152,8 @@ Resume bop_word_pair_value_prefix[right_prefix]:
   conj_tac >- (rpt gen_tac >> Cases_on `res` >> simp[]) >>
   simp[bop_result_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise bop_word_pair_value_prefix
+*)

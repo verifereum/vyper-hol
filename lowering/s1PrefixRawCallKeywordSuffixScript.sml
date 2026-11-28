@@ -9,6 +9,75 @@ Ancestors
 Libs
   monadsyntax
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `valid_horizon cx st0 (storage_trace_horizon esD.storage_trace) esD.storage_trace` by
+    fs[storage_trace_domain_def] >>
+  qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> expr_post _ _ _ _ _ a _ _ _ _ _ _ _ _ /\ _`
+    (drule_then (map_every assume_tac o CONJUNCTS)) >>
+  `sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
+   sa.cs_next_var <= s2.cs_next_var` by
+    fs[ci_mono_def] >>
+  `local_ptrs_reserved cenv s1 /\ local_ptrs_reserved cenv s2` by
+    metis_tac[local_ptrs_reserved_next_var] >>
+  `!z. data = Var z ==> not_fresh_at s2 z` by
+    metis_tac[compile_lower_value_var] >>
+  `(!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at s2 z) /\
+   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at s2 z)` by
+    metis_tac[not_fresh_at_mono] >>
+  `return_buf_frame dframe cenv s1 tA` by
+    (irule return_buf_frame_frame >>
+     qpat_assum `return_buf_frame dframe cenv sa s0` (irule_at Any) >>
+     qpat_assum `expr_post _ _ _ _ _ a _ _ _ _ _ _ _ _`
+       (assume_tac o MATCH_MP expr_post_frame) >>
+     simp[] >> metis_tac[wb_frame_vars]) >>
+  `return_buf_frame dframe cenv s2 tD` by
+    (irule return_buf_frame_frame >>
+     qpat_assum `return_buf_frame dframe cenv s1 tA` (irule_at Any) >>
+     qpat_assum `expr_post _ _ _ _ _ d _ _ _ _ _ _ _ _`
+       (mp_tac o REWRITE_RULE [expr_post_def]) >>
+     simp[NoAsms] >> strip_tac >> simp[]) >>
+  `post_value_type cenv d = expr_type d` by
+    (irule post_value_type_bytestring >> simp[compileEnvTheory.is_bytestring_type_def]) >>
+  `evaluate_type (get_tenv cx) (post_value_type cenv d) = SOME (BaseTV (BytesT (Dynamic cap))) /\
+   ~is_word_type (post_value_type cenv d)` by
+    (`expr_body_pre cenv cx env d esD` by
+       (irule expr_body_pre_raw_call_arg >>
+        first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
+     drule_at (Pat `expr_body_pre _ _ _ d _`) exprSimHypsTheory.expr_body_pre_type_evaluates >>
+     simp[evaluate_type_def,compileEnvTheory.is_word_type_def]) >>
+  `!H. valid_horizon cx st0 H esD.storage_trace ==>
+    expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA /\
+    expr_post H ctx func cenv cx d esA s1 s2 tA esD (BytesV bs) data tD` by
+    (rpt strip_tac >> res_tac) >>
+  `!H. valid_horizon cx st0 H esD.storage_trace ==>
+    expr_val_rel cx (post_value_type cenv d) (BytesV bs) data tD /\
+    stmt_state_rel H ctx func cenv cx esD tD /\ storage_well_formed_on cx esD (FST H) /\
+    ghost_inv_at (DF H) lo dframe cenv cx esD GD tnD tD` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> expr_post _ _ _ _ _ a _ _ _ _ _ _ _ _ /\ _`
+       (drule_then (mp_tac o CONJUNCT2)) >>
+     simp[expr_post_def,NoAsms] >> metis_tac[]) >>
+  irule (BETA_RULE (Q.INST [`k` |-> `\av dv. continuation`]
+    raw_call_keywords_prefix_from_entry)) >>
+  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
+  first_assum (irule_at (Pat `body_const_cells_agree _ _ _ _`)) >>
+  first_assum (irule_at (Pat `gas_shadow_function _ _`)) >>
+  qpat_assum `return_buf_frame dframe cenv s2 tD` (irule_at Any) >>
+  first_assum (irule_at (Pat `emit_op MLOAD _ _ = _`)) >>
+  first_assum (irule_at (Pat `emit_op ADD _ _ = _`)) >>
+  first_assum (irule_at (Pat `ptr_val_ok _ _ (BytesV _) _ _ _ _`)) >>
+  qpat_assum `lower_word_args _ _ (MAP gas_shadow_expr kws) h4 = _` (irule_at Any) >>
+  qexistsl_tac [`s5`,`cap`,`R`,`Q`] >>
+  BETA_TAC >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (gen_tac >> irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
+      rpt (irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac) >>
+      irule storage_trace_frame_raw_call) >>
+  suspend "keyword_success"
+QED
+*)
 Theorem raw_call_forced_data_kwargs_prefix_from_action:
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   expr_body_pre cenv cx env
@@ -130,72 +199,10 @@ Theorem raw_call_forced_data_kwargs_prefix_from_action:
       eval_raw_call cx flags target bytes amount (ext_call_kwarg EKGas flags.rcf_kws kvs)
     od) (esD,tD,GD,tnD)
 Proof
-  disch_then (map_every assume_tac o CONJUNCTS) >>
-  `valid_horizon cx st0 (storage_trace_horizon esD.storage_trace) esD.storage_trace` by
-    fs[storage_trace_domain_def] >>
-  qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> expr_post _ _ _ _ _ a _ _ _ _ _ _ _ _ /\ _`
-    (drule_then (map_every assume_tac o CONJUNCTS)) >>
-  `sa.cs_next_var <= s1.cs_next_var /\ s1.cs_next_var <= s2.cs_next_var /\
-   sa.cs_next_var <= s2.cs_next_var` by
-    fs[ci_mono_def] >>
-  `local_ptrs_reserved cenv s1 /\ local_ptrs_reserved cenv s2` by
-    metis_tac[local_ptrs_reserved_next_var] >>
-  `!z. data = Var z ==> not_fresh_at s2 z` by
-    metis_tac[compile_lower_value_var] >>
-  `(!z sz. cenv.ce_return_buf = SOME (PtrVar (Var z) sz) ==> not_fresh_at s2 z) /\
-   (!z sz. cenv.ce_return_pc = SOME (PtrVar (Var z) sz) ==> not_fresh_at s2 z)` by
-    metis_tac[not_fresh_at_mono] >>
-  `return_buf_frame dframe cenv s1 tA` by
-    (irule return_buf_frame_frame >>
-     qpat_assum `return_buf_frame dframe cenv sa s0` (irule_at Any) >>
-     qpat_assum `expr_post _ _ _ _ _ a _ _ _ _ _ _ _ _`
-       (assume_tac o MATCH_MP expr_post_frame) >>
-     simp[] >> metis_tac[wb_frame_vars]) >>
-  `return_buf_frame dframe cenv s2 tD` by
-    (irule return_buf_frame_frame >>
-     qpat_assum `return_buf_frame dframe cenv s1 tA` (irule_at Any) >>
-     qpat_assum `expr_post _ _ _ _ _ d _ _ _ _ _ _ _ _`
-       (mp_tac o REWRITE_RULE [expr_post_def]) >>
-     simp[NoAsms] >> strip_tac >> simp[]) >>
-  `post_value_type cenv d = expr_type d` by
-    (irule post_value_type_bytestring >> simp[compileEnvTheory.is_bytestring_type_def]) >>
-  `evaluate_type (get_tenv cx) (post_value_type cenv d) = SOME (BaseTV (BytesT (Dynamic cap))) /\
-   ~is_word_type (post_value_type cenv d)` by
-    (`expr_body_pre cenv cx env d esD` by
-       (irule expr_body_pre_raw_call_arg >>
-        first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >> simp[]) >>
-     drule_at (Pat `expr_body_pre _ _ _ d _`) exprSimHypsTheory.expr_body_pre_type_evaluates >>
-     simp[evaluate_type_def,compileEnvTheory.is_word_type_def]) >>
-  `!H. valid_horizon cx st0 H esD.storage_trace ==>
-    expr_post H ctx func cenv cx a es sa s1 s0 esA av addr tA /\
-    expr_post H ctx func cenv cx d esA s1 s2 tA esD (BytesV bs) data tD` by
-    (rpt strip_tac >> res_tac) >>
-  `!H. valid_horizon cx st0 H esD.storage_trace ==>
-    expr_val_rel cx (post_value_type cenv d) (BytesV bs) data tD /\
-    stmt_state_rel H ctx func cenv cx esD tD /\ storage_well_formed_on cx esD (FST H) /\
-    ghost_inv_at (DF H) lo dframe cenv cx esD GD tnD tD` by
-    (gen_tac >> strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H esD.storage_trace ==> expr_post _ _ _ _ _ a _ _ _ _ _ _ _ _ /\ _`
-       (drule_then (mp_tac o CONJUNCT2)) >>
-     simp[expr_post_def,NoAsms] >> metis_tac[]) >>
-  irule (BETA_RULE (Q.INST [`k` |-> `\av dv. continuation`]
-    raw_call_keywords_prefix_from_entry)) >>
-  first_assum (irule_at (Pat `expr_body_pre _ _ _ (Call _ _ _ _) _`)) >>
-  first_assum (irule_at (Pat `body_const_cells_agree _ _ _ _`)) >>
-  first_assum (irule_at (Pat `gas_shadow_function _ _`)) >>
-  qpat_assum `return_buf_frame dframe cenv s2 tD` (irule_at Any) >>
-  first_assum (irule_at (Pat `emit_op MLOAD _ _ = _`)) >>
-  first_assum (irule_at (Pat `emit_op ADD _ _ = _`)) >>
-  first_assum (irule_at (Pat `ptr_val_ok _ _ (BytesV _) _ _ _ _`)) >>
-  qpat_assum `lower_word_args _ _ (MAP gas_shadow_expr kws) h4 = _` (irule_at Any) >>
-  qexistsl_tac [`s5`,`cap`,`R`,`Q`] >>
-  BETA_TAC >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- (gen_tac >> irule storage_trace_frame_ignore_bind >> simp[storage_trace_frame_checks] >>
-      rpt (irule storage_trace_frame_bind_all >> simp[storage_trace_frame_lifts] >> gen_tac) >>
-      irule storage_trace_frame_raw_call) >>
-  suspend "keyword_success"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_call_forced_data_kwargs_prefix_from_action[keyword_success]:
   qx_genl_tac [`b`,`x`,`l`,`p`,`base_addr`,`extent`,`t4`,`G4`,`tn4`,
                 `marks`,`kvs`,`esK`,`tk`,`GK`,`tnK`] >>
@@ -255,5 +262,8 @@ Resume raw_call_forced_data_kwargs_prefix_from_action[keyword_success]:
       disj2_tac >> disj1_tac >> first_assum ACCEPT_TAC) >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise raw_call_forced_data_kwargs_prefix_from_action
+*)

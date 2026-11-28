@@ -5,7 +5,7 @@ Ancestors
   exprLowering emitHelper fragExec fragGasOriginPtr
   gasShadow gasShadowCompileBase gasShadowState gasExplicitSites gasSummary
   vyperAST vyperInterpreter vyperValueOperation vyperState vyperStorageFootprint
-  venomState
+  venomState vyperTypeCallGraph list
 
 Theorem bool_chain_actual_reached_induction:
   P (bool_chain_operands p (n - 1) e) sg shadow_sg es0 s0 G0 tn0 /\
@@ -52,4 +52,27 @@ Proof
       simp[Abbr `R`,bool_chain_actual_advance_def] >> strip_tac >>
       gvs[] >> metis_tac[]) >>
   simp[pairTheory.FORALL_PROD]
+QED
+
+Theorem bool_chain_operands_calls:
+  !n p e. EVERY P (int_calls_expr e) ==>
+    EVERY (\a. EVERY P (int_calls_expr a)) (bool_chain_operands p n e)
+Proof
+  Induct_on `n` >> rpt gen_tac >> Cases_on `e` >>
+  simp[bool_chain_operands_def, int_calls_expr_def, EVERY_APPEND] >>
+  rpt (COND_CASES_TAC >> gvs[]) >>
+  simp[int_calls_expr_def, EVERY_APPEND] >> metis_tac[]
+QED
+
+Theorem bool_chain_actual_reached_calls:
+  EVERY admissible (int_calls_expr e) /\
+  bool_chain_actual_reached cx cenv p rv xl sf shadow_sf DF lo ctx shadow_ctx
+    func PG st0 n e sg shadow_sg es0 s0 G0 tn0 xs sa shadow_sa es s G tn ==>
+  EVERY (\a. EVERY admissible (int_calls_expr a)) xs
+Proof
+  strip_tac >>
+  mp_tac (Q.INST [`P` |-> `\xs sa shadow_sa es s G tn.
+    EVERY (\a. EVERY admissible (int_calls_expr a)) xs`]
+    bool_chain_actual_reached_induction) >>
+  simp[bool_chain_operands_calls] >> disch_then (drule_then ACCEPT_TAC)
 QED

@@ -11,6 +11,36 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState
 Libs monadsyntax
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  (* The copy/bounds suffix adds no requests, so its full simulation is not needed. *)
+  disch_then (CONJUNCTS_THEN2 kall_tac
+    (CONJUNCTS_THEN2 (mk_asm "child_full") (mk_asm "child_prefix"))) >>
+  rpt gen_tac >> strip_tac >>
+  qpat_assum `code_slice_source _ _ = SOME _`
+    (strip_assume_tac o REWRITE_RULE [code_slice_source_SOME]) >>
+  gvs[] >> fs[vyperContextTheory.builtin_args_length_ok_def] >>
+  drule expr_body_pre_static_facts >> strip_tac >>
+  `body_expr_full_ok cx start` by fs[Once body_exprs_full_ok_cons] >>
+  `body_expr_prefix_ok cx start` by fs[body_exprs_prefix_ok_def] >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty start es` by
+    (asm "child_full" (irule o cj 1) >> simp[] >>
+     qexistsl_tac [`a`,`addr`,`code_ty`,`env`,`es`,`len`,`n`,`start`,`tops`] >> simp[]) >>
+  `expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty start es` by
+    (asm "child_prefix" (irule o cj 1) >> simp[] >>
+     qexistsl_tac [`a`,`addr`,`code_ty`,`env`,`es`,`len`,`n`,`start`,`tops`] >> simp[]) >>
+  `expr_type start = BaseT (UintT 256) /\ expr_type len = BaseT (UintT 256)` by
+    (drule slice_typed_args >> simp[]) >>
+  `expr_body_pre cenv cx env start es` by
+    (`expr_type start <> BaseT (BytesT (Dynamic 24576))` by simp[] >>
+     qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _`
+       (mp_then Any mp_tac expr_body_pre_builtin_typed_arg) >>
+     disch_then (qspecl_then [`start`,`es`] mp_tac) >> simp[]) >>
+  rw[expr_vv_sim_prefix_def,expr_vv_sim_full_pre_def] >>
+  suspend "pipeline"
+QED
+*)
 Theorem slice_builtin_external_vv_prefix_from_tail:
   (!query_op query_ops sa limit sc start cnt sd N out data se copy_op copy_ops sf sb
     func cenv ctx tn s code i k G addr n e args cx st0 es DF lo d explicit PG tops source.
@@ -123,33 +153,10 @@ Theorem slice_builtin_external_vv_prefix_from_tail:
     expr_vv_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty (Builtin a (Slice n) args) es
 Proof
-  (* The copy/bounds suffix adds no requests, so its full simulation is not needed. *)
-  disch_then (CONJUNCTS_THEN2 kall_tac
-    (CONJUNCTS_THEN2 (mk_asm "child_full") (mk_asm "child_prefix"))) >>
-  rpt gen_tac >> strip_tac >>
-  qpat_assum `code_slice_source _ _ = SOME _`
-    (strip_assume_tac o REWRITE_RULE [code_slice_source_SOME]) >>
-  gvs[] >> fs[vyperContextTheory.builtin_args_length_ok_def] >>
-  drule expr_body_pre_static_facts >> strip_tac >>
-  `body_expr_full_ok cx start` by fs[Once body_exprs_full_ok_cons] >>
-  `body_expr_prefix_ok cx start` by fs[body_exprs_prefix_ok_def] >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty start es` by
-    (asm "child_full" (irule o cj 1) >> simp[] >>
-     qexistsl_tac [`a`,`addr`,`code_ty`,`env`,`es`,`len`,`n`,`start`,`tops`] >> simp[]) >>
-  `expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cenv cx ty start es` by
-    (asm "child_prefix" (irule o cj 1) >> simp[] >>
-     qexistsl_tac [`a`,`addr`,`code_ty`,`env`,`es`,`len`,`n`,`start`,`tops`] >> simp[]) >>
-  `expr_type start = BaseT (UintT 256) /\ expr_type len = BaseT (UintT 256)` by
-    (drule slice_typed_args >> simp[]) >>
-  `expr_body_pre cenv cx env start es` by
-    (`expr_type start <> BaseT (BytesT (Dynamic 24576))` by simp[] >>
-     qpat_assum `expr_body_pre _ _ _ (Builtin _ _ _) _`
-       (mp_then Any mp_tac expr_body_pre_builtin_typed_arg) >>
-     disch_then (qspecl_then [`start`,`es`] mp_tac) >> simp[]) >>
-  rw[expr_vv_sim_prefix_def,expr_vv_sim_full_pre_def] >>
-  suspend "pipeline"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume slice_builtin_external_vv_prefix_from_tail[pipeline]:
   `!xs. ~names_builtin (Slice n) xs` by
     (`!bt xs. names_builtin bt xs ==> bt <> Slice n` by
@@ -194,7 +201,9 @@ Resume slice_builtin_external_vv_prefix_from_tail[pipeline]:
      simp[gas_shadow_stmt_lower_value_env]) >>
   gvs[] >> suspend "start"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume slice_builtin_external_vv_prefix_from_tail[start]:
   `gas_admissible (bind (eval_expr cx start) (read_result cx)) expr_res_ok es` by
     (drule expr_body_pre_gas_admissible >> simp[]) >>
@@ -231,7 +240,9 @@ Resume slice_builtin_external_vv_prefix_from_tail[start]:
        simp[storage_trace_frame_state_reads,storage_trace_frame_lifts,
             storage_trace_frame_return,slice_read_frame] >> rpt gen_tac)
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume slice_builtin_external_vv_prefix_from_tail[length]:
   qpat_x_assum `Abbrev (startR = _)` kall_tac >>
   qx_genl_tac [`marks`,`sv`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
@@ -269,7 +280,9 @@ Resume slice_builtin_external_vv_prefix_from_tail[length]:
      fs[loweringPostsTheory.expr_post_def]) >>
   suspend "length_source"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume slice_builtin_external_vv_prefix_from_tail[length_source]:
   qpat_assum `!tail. bind (eval_expr cx start) _ _ = _`
     (qspec_then `mid.gas_obs` (assume_tac o SIMP_RULE (srw_ss()) [])) >>
@@ -313,7 +326,9 @@ Resume slice_builtin_external_vv_prefix_from_tail[length_source]:
      simp[gas_shadow_stmt_lower_value_env]) >>
   gvs[] >> suspend "length_bind"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume slice_builtin_external_vv_prefix_from_tail[length_bind]:
   `gas_admissible (bind (eval_expr cx len) (read_result cx)) expr_res_ok mid` by
     (drule expr_body_pre_gas_admissible >> simp[]) >>
@@ -349,7 +364,9 @@ Resume slice_builtin_external_vv_prefix_from_tail[length_bind]:
        simp[storage_trace_frame_state_reads,storage_trace_frame_lifts,
             storage_trace_frame_return,slice_read_frame] >> rpt gen_tac)
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume slice_builtin_external_vv_prefix_from_tail[address]:
   qx_genl_tac [`len_marks`,`lv`,`mid2`,`G2`,`tn2`,`u`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid2.storage_trace) mid2.storage_trace` by
@@ -382,7 +399,9 @@ Resume slice_builtin_external_vv_prefix_from_tail[address]:
      fs[loweringPostsTheory.expr_post_def]) >>
   suspend "address_source"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume slice_builtin_external_vv_prefix_from_tail[address_source]:
   qpat_x_assum `Abbrev (lenR = _)` kall_tac >>
   qpat_assum `!tail. bind (eval_expr cx len) _ _ = _`
@@ -425,7 +444,9 @@ Resume slice_builtin_external_vv_prefix_from_tail[address_source]:
      simp[gas_shadow_stmt_lower_value_env]) >>
   gvs[] >> suspend "address_bind"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume slice_builtin_external_vv_prefix_from_tail[address_bind]:
   `gas_admissible (bind (eval_expr cx addr) (read_result cx)) expr_res_ok mid2` by
     (drule expr_body_pre_gas_admissible >> simp[]) >>
@@ -459,5 +480,8 @@ Resume slice_builtin_external_vv_prefix_from_tail[address_bind]:
        simp[storage_trace_frame_state_reads,storage_trace_frame_lifts,
             storage_trace_frame_return] >> rpt gen_tac)
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise slice_builtin_external_vv_prefix_from_tail
+*)

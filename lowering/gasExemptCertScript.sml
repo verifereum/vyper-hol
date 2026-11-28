@@ -151,8 +151,10 @@ Theorem read_result_no_exempt_error:
     read_result cx r st = (INR (Error err), st') ==>
     ~unspecified_behaviour_exempt tops err
 Proof
-  metis_tac[read_result_no_exempt_error_mods, gas_exempt_cert_singleton_def,
-            unspecified_behaviour_exempt_mods_singleton]
+  rpt gen_tac >> strip_tac >>
+  `~unspecified_behaviour_exempt_mods [(NONE,tops : toplevel list)] err` by
+    metis_tac[read_result_no_exempt_error_mods] >>
+  metis_tac[unspecified_behaviour_exempt_mods_singleton]
 QED
 
 Theorem gas_source_unforce_result:

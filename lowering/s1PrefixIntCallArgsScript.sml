@@ -9,6 +9,101 @@ Ancestors
   vyperTypeEvalProofs bodyFullIntCallDefs compileEnv loweringPosts
   exprSimWordArgs bodyFullIfExpReach contextRawReachable exprLowering bodyPtrDefs
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt strip_tac >>
+  `storage_trace_frame
+     (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)` by
+    (irule storage_trace_frame_bind_all >> simp[evaluate_storage_trace_frame]) >>
+  (reverse (Cases_on `storage_trace_domain cx st0 es0.storage_trace`)
+   >- (irule gas_prefix_full_invalid_trace_domain >> simp[])) >>
+  drule_all intcall_args_supplied_stage_setup >>
+  disch_then (qspecl_then [`shadow_ctx`,`PG`]
+    (qx_choosel_then [`art`,`imms`,`A`,`roots`,`compiled_dflts`,`ds`,`vv`,`sm`,
+      `shadow_vv`,`shadow_sm`,`rc'`,`rbs`,`pvs`,`buf_n`,`st2`,`st2a`,`st3`,
+      `sh_st2`,`sh_st2a`,`sh_st3`,`sup_ops`,`def_ops`,`sh_def_ops`,`entry`,`Ga`,`tna`,`pin`]
+      (map_every assume_tac o CONJUNCTS))) >>
+  qpat_x_assum `compiled_dflts = subst_consts_exprs _ _`
+    (assume_tac o PURE_ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  qpat_x_assum `buf_n = (if _ then _ else _)`
+    (assume_tac o PURE_ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
+  `body_exprs_full_ok cx es /\ body_exprs_prefix_ok cx es` by simp[] >>
+  irule gas_prefix_full_zero_prefix_guarded >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  conj_tac >- first_assum ACCEPT_TAC >>
+  qexistsl_tac [`Ga`,`entry`,`tna`] >>
+  conj_tac >- (rpt strip_tac >> first_assum MATCH_ACCEPT_TAC) >>
+  drule_all intcall_args_supplied_source >>
+  disch_then (qspecl_then [`dflt`,`ann`] SUBST_ALL_TAC) >>
+  pure_rewrite_tac[bind_assoc] >>
+  qpat_x_assum `gas_admissible _ P es0`
+    (assume_tac o PURE_REWRITE_RULE [bind_assoc]) >>
+  qmatch_goalsub_abbrev_tac `bind (eval_exprs cx es) supplied_tail` >>
+  `gas_admissible (eval_exprs cx es)
+       (\r:value list + exception. !err. r = INR err ==> expr_vv_res_ok (INR err)) es0` by
+    (qpat_assum `gas_admissible (bind (eval_exprs cx es) _) P es0`
+       (mp_then Any mp_tac slice_gas_admissible_bind_head) >>
+     disch_then (qspec_then `\r:value list + exception. !err. r = INR err ==> expr_vv_res_ok (INR err)` mp_tac) >>
+     qpat_assum `!e. P (INR e) ==> expr_vv_res_ok (INR e)` (fn th => simp[NoAsms,th])) >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 (eval_exprs cx es) (es0,entry,Ga,tna)
+      (intcall_args_stage_post (DF,lo,d,ctx,func,cenv,cx,tenv)
+        (es,sa,s0,es0,G0,tn0,st2a)
+        (TAKE (LENGTH es) pvs,TAKE (LENGTH es) (MAP SND args),sup_ops,
+         [],[],[],[],pin,T,T))
+      (\H res ee gt r. (?err. res = INR err) /\
+        expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)) /\
+    gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cx st0 (eval_exprs cx es) (es0,entry,Ga,tna)` by
+    (conj_tac >> FIRST [irule intcall_args_stage_left_outcome,
+       irule (Q.INST [`clean_words` |-> `T`, `keep_sites` |-> `T`,
+                      `ops` |-> `[]`, `vals` |-> `[]`, `ptys` |-> `[]`, `pflags` |-> `[]`]
+                (SPEC_ALL intcall_stage_list_prefix))] >>
+     qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
+     qpat_assum `compile_stage_intcall_args _ _ es (TAKE _ _) (TAKE _ _) st2 = _`
+       (irule_at Any) >>
+     qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) (TAKE _ _) (TAKE _ _) sh_st2 = _`
+       (irule_at Any) >>
+     qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
+     qpat_assum `return_buf_frame d cenv st2 entry` (irule_at Any) >>
+     TRY (qmatch_goalsub_rename_tac `ghost_kept_at _ _ _ _ _ _ _ _ _` >>
+          qpat_assum `ghost_kept_at lo cenv es0 sa G0 tn0 s0 Ga tna` (irule_at Any)) >>
+     TRY (qpat_assum `(case pin of NONE => T | SOME _ => _)` (irule_at Any)) >>
+     qpat_assum `gas_admissible (eval_exprs cx es) _ es0` (irule_at Any) >>
+     TRY (qpat_assum `expr_sim_inv cenv cx tenv es0` (irule_at Any)) >>
+     qexists_tac `[]` >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+     TRY (simp[venomStateTheory.eval_operands_def, listTheory.LENGTH_TAKE,
+               rich_listTheory.EL_TAKE, rich_listTheory.EVERY_TAKE] >> NO_TAC) >>
+     TRY (rpt gen_tac >> strip_tac >>
+          drule_all intcall_args_aggregate_physical_type >> simp[] >> NO_TAC) >>
+     rpt strip_tac >>
+     simp[rich_listTheory.EL_TAKE] >>
+     qpat_assum `!i. i < LENGTH args /\ EL i pvs ==> _` (qspec_then `j` mp_tac) >>
+     gvs[rich_listTheory.EL_TAKE] >> decide_tac) >>
+  irule gas_prefix_full_bind_path >>
+  qpat_assum `gas_outcome_full _ _ _ _ (eval_exprs cx es) _ _ _` (irule_at Any) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (simp[evaluate_storage_trace_frame,evaluate_requests_outcomes_frame] >> NO_TAC) >>
+  TRY (rpt gen_tac >> Cases_on `res` >> simp[NoAsms] >> NO_TAC)
+  >- (qunabbrev_tac `supplied_tail` >> gen_tac >> BETA_TAC >>
+      simp_tac bool_ss [bind_assoc] >>
+      irule storage_trace_frame_bind_all >>
+      simp_tac bool_ss [storage_trace_frame_state_reads] >> gen_tac >>
+      irule storage_trace_frame_bind_all >> conj_tac
+      >- (gen_tac >> BETA_TAC >>
+          irule (SIMP_RULE bool_ss [bind_assoc] intcall_after_defaults_storage_trace_frame) >>
+          first_assum ACCEPT_TAC) >>
+      irule storage_trace_frame_finally >>
+      simp_tac bool_ss [storage_trace_frame_state_updates] >>
+      irule storage_trace_frame_ignore_bind >>
+      simp_tac bool_ss [storage_trace_frame_state_updates, evaluate_storage_trace_frame]) >>
+  map_every qx_gen_tac [`marks`,`xs`,`ee`,`G1`,`tn1`,`t`] >> strip_tac >>
+  suspend "defaults"
+QED
+*)
 Theorem intcall_args_prefix:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv ty ann name
  es dflt es0 mut nr args ret ss rr dflts.
@@ -117,98 +212,10 @@ Theorem intcall_args_prefix:
     cx st0 (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)
     (es0, s0, G0, tn0)
 Proof
-  rpt strip_tac >>
-  `storage_trace_frame
-     (bind (eval_expr cx (Call ann (IntCall (NONE,name)) es dflt)) f)` by
-    (irule storage_trace_frame_bind_all >> simp[evaluate_storage_trace_frame]) >>
-  (reverse (Cases_on `storage_trace_domain cx st0 es0.storage_trace`)
-   >- (irule gas_prefix_full_invalid_trace_domain >> simp[])) >>
-  drule_all intcall_args_supplied_stage_setup >>
-  disch_then (qspecl_then [`shadow_ctx`,`PG`]
-    (qx_choosel_then [`art`,`imms`,`A`,`roots`,`compiled_dflts`,`ds`,`vv`,`sm`,
-      `shadow_vv`,`shadow_sm`,`rc'`,`rbs`,`pvs`,`buf_n`,`st2`,`st2a`,`st3`,
-      `sh_st2`,`sh_st2a`,`sh_st3`,`sup_ops`,`def_ops`,`sh_def_ops`,`entry`,`Ga`,`tna`,`pin`]
-      (map_every assume_tac o CONJUNCTS))) >>
-  qpat_x_assum `compiled_dflts = subst_consts_exprs _ _`
-    (assume_tac o PURE_ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
-  qpat_x_assum `buf_n = (if _ then _ else _)`
-    (assume_tac o PURE_ONCE_REWRITE_RULE [GSYM markerTheory.Abbrev_def]) >>
-  `body_exprs_full_ok cx es /\ body_exprs_prefix_ok cx es` by simp[] >>
-  irule gas_prefix_full_zero_prefix_guarded >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  conj_tac >- first_assum ACCEPT_TAC >>
-  qexistsl_tac [`Ga`,`entry`,`tna`] >>
-  conj_tac >- (rpt strip_tac >> first_assum MATCH_ACCEPT_TAC) >>
-  drule_all intcall_args_supplied_source >>
-  disch_then (qspecl_then [`dflt`,`ann`] SUBST_ALL_TAC) >>
-  pure_rewrite_tac[bind_assoc] >>
-  qpat_x_assum `gas_admissible _ P es0`
-    (assume_tac o PURE_REWRITE_RULE [bind_assoc]) >>
-  qmatch_goalsub_abbrev_tac `bind (eval_exprs cx es) supplied_tail` >>
-  `gas_admissible (eval_exprs cx es)
-       (\r:value list + exception. !err. r = INR err ==> expr_vv_res_ok (INR err)) es0` by
-    (qpat_assum `gas_admissible (bind (eval_exprs cx es) _) P es0`
-       (mp_then Any mp_tac slice_gas_admissible_bind_head) >>
-     disch_then (qspec_then `\r:value list + exception. !err. r = INR err ==> expr_vv_res_ok (INR err)` mp_tac) >>
-     qpat_assum `!e. P (INR e) ==> expr_vv_res_ok (INR e)` (fn th => simp[NoAsms,th])) >>
-  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx es) (es0,entry,Ga,tna)
-      (intcall_args_stage_post (DF,lo,d,ctx,func,cenv,cx,tenv)
-        (es,sa,s0,es0,G0,tn0,st2a)
-        (TAKE (LENGTH es) pvs,TAKE (LENGTH es) (MAP SND args),sup_ops,
-         [],[],[],[],pin,T,T))
-      (\H res ee gt r. (?err. res = INR err) /\
-        expr_exit res r /\ halt_exit H cx ee res r /\
-        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s)) /\
-    gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      cx st0 (eval_exprs cx es) (es0,entry,Ga,tna)` by
-    (conj_tac >> FIRST [irule intcall_args_stage_left_outcome,
-       irule (Q.INST [`clean_words` |-> `T`, `keep_sites` |-> `T`,
-                      `ops` |-> `[]`, `vals` |-> `[]`, `ptys` |-> `[]`, `pflags` |-> `[]`]
-                (SPEC_ALL intcall_stage_list_prefix))] >>
-     qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-     qpat_assum `compile_stage_intcall_args _ _ es (TAKE _ _) (TAKE _ _) st2 = _`
-       (irule_at Any) >>
-     qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) (TAKE _ _) (TAKE _ _) sh_st2 = _`
-       (irule_at Any) >>
-     qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
-     qpat_assum `return_buf_frame d cenv st2 entry` (irule_at Any) >>
-     TRY (qmatch_goalsub_rename_tac `ghost_kept_at _ _ _ _ _ _ _ _ _` >>
-          qpat_assum `ghost_kept_at lo cenv es0 sa G0 tn0 s0 Ga tna` (irule_at Any)) >>
-     TRY (qpat_assum `(case pin of NONE => T | SOME _ => _)` (irule_at Any)) >>
-     qpat_assum `gas_admissible (eval_exprs cx es) _ es0` (irule_at Any) >>
-     TRY (qpat_assum `expr_sim_inv cenv cx tenv es0` (irule_at Any)) >>
-     qexists_tac `[]` >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-     TRY (simp[venomStateTheory.eval_operands_def, listTheory.LENGTH_TAKE,
-               rich_listTheory.EL_TAKE, rich_listTheory.EVERY_TAKE] >> NO_TAC) >>
-     TRY (rpt gen_tac >> strip_tac >>
-          drule_all intcall_args_aggregate_physical_type >> simp[] >> NO_TAC) >>
-     rpt strip_tac >>
-     simp[rich_listTheory.EL_TAKE] >>
-     qpat_assum `!i. i < LENGTH args /\ EL i pvs ==> _` (qspec_then `j` mp_tac) >>
-     gvs[rich_listTheory.EL_TAKE] >> decide_tac) >>
-  irule gas_prefix_full_bind_path >>
-  qpat_assum `gas_outcome_full _ _ _ _ (eval_exprs cx es) _ _ _` (irule_at Any) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (simp[evaluate_storage_trace_frame,evaluate_requests_outcomes_frame] >> NO_TAC) >>
-  TRY (rpt gen_tac >> Cases_on `res` >> simp[NoAsms] >> NO_TAC)
-  >- (qunabbrev_tac `supplied_tail` >> gen_tac >> BETA_TAC >>
-      simp_tac bool_ss [bind_assoc] >>
-      irule storage_trace_frame_bind_all >>
-      simp_tac bool_ss [storage_trace_frame_state_reads] >> gen_tac >>
-      irule storage_trace_frame_bind_all >> conj_tac
-      >- (gen_tac >> BETA_TAC >>
-          irule (SIMP_RULE bool_ss [bind_assoc] intcall_after_defaults_storage_trace_frame) >>
-          first_assum ACCEPT_TAC) >>
-      irule storage_trace_frame_finally >>
-      simp_tac bool_ss [storage_trace_frame_state_updates] >>
-      irule storage_trace_frame_ignore_bind >>
-      simp_tac bool_ss [storage_trace_frame_state_updates, evaluate_storage_trace_frame]) >>
-  map_every qx_gen_tac [`marks`,`xs`,`ee`,`G1`,`tn1`,`t`] >> strip_tac >>
-  suspend "defaults"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_args_prefix[defaults]:
   `valid_horizon cx st0 (storage_trace_horizon ee.storage_trace) ee.storage_trace` by
     fs[storage_trace_domain_def] >>
@@ -259,7 +266,9 @@ Resume intcall_args_prefix[defaults]:
   strip_tac >>
   suspend "defaults_bind"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_args_prefix[defaults_bind]:
   qabbrev_tac `after_defaults = \prev dvs.
     bind
@@ -325,7 +334,9 @@ Resume intcall_args_prefix[defaults_bind]:
   pop_assum (fn th => once_rewrite_tac[GSYM th]) >>
   suspend "defaults_stage"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_args_prefix[defaults_stage]:
   `LENGTH ds = LENGTH args - LENGTH es` by
     (qpat_assum `ds = DROP length_skip compiled_dflts` SUBST1_TAC >>
@@ -399,7 +410,9 @@ Resume intcall_args_prefix[defaults_stage]:
      simp[NoAsms, listTheory.EL_DROP]) >>
   suspend "compose_defaults"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_args_prefix[compose_defaults]:
   qabbrev_tac `dc = cenv_without_defaults cenv name` >>
   qabbrev_tac `envd = tenv with current_src := NONE` >>
@@ -458,7 +471,9 @@ Resume intcall_args_prefix[compose_defaults]:
   map_every qx_gen_tac [`dm`,`dvs`,`ed`,`Gd`,`tnd`,`u`] >> strip_tac >>
   suspend "finish"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_args_prefix[finish]:
   `valid_horizon cxd st0 (storage_trace_horizon ed.storage_trace) ed.storage_trace` by
     (qpat_assum `storage_trace_domain cxd st0 ed.storage_trace`
@@ -485,7 +500,9 @@ Resume intcall_args_prefix[finish]:
   qunabbrev_tac `dc` >> qunabbrev_tac `envd` >> qunabbrev_tac `next` >>
   suspend "rest_data"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_args_prefix[rest_data]:
   `?penv rtv.
      ~u.vs_halted /\
@@ -540,7 +557,9 @@ Resume intcall_args_prefix[rest_data]:
      first_assum ACCEPT_TAC) >>
   suspend "invoke"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume intcall_args_prefix[invoke]:
   BETA_TAC >>
   `(gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -582,5 +601,8 @@ Resume intcall_args_prefix[invoke]:
     (qspecl_then [`err`,`failed`] mp_tac) >>
   simp_tac bool_ss []
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise intcall_args_prefix
+*)

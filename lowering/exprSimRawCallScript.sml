@@ -983,28 +983,6 @@ Proof
   drule raw_call_take_adopt_fields >> simp[]
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >>
-  `es'.scopes = es.scopes /\ es'.immutables = es.immutables` by
-    (drule raw_call_kind_take_adopt_fields >> simp[]) >>
-  `immutable_base_zero cenv t` by
-    (irule immutable_base_zero_frame >> qexists_tac `s` >>
-     fs[stmt_state_rel_def, lookup_var_def]) >>
-  qpat_x_assum `es' = SND _` (SUBST_ALL_TAC o SYM) >>
-  irule stmt_state_rel_allocas_frame >>
-  qpat_assum `stmt_state_rel H ctx func cenv cx es s` (irule_at Any) >>
-  qpat_assum `state_rel H func cenv cx es' t` (irule_at Any) >>
-  simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  rpt gen_tac >> TRY disch_tac >>
-  irule immutable_alloca_sep_fields >> qexistsl_tac [`s`,`es`] >>
-  simp[local_region_def, lookup_var_def] >>
-  qpat_assum `stmt_state_rel H ctx func cenv cx es s`
-    (mp_tac o REWRITE_RULE [stmt_state_rel_def]) >>
-  metis_tac[]
-QED
-*)
 Theorem raw_call_oracle_stmt_frame[local]:
   (if delegate then take_delegate_outcome else take_call_outcome)
     gas_cap target calldata value_opt es = (INL (rq,outcome),es1) /\
@@ -1019,7 +997,31 @@ Theorem raw_call_oracle_stmt_frame[local]:
     LENGTH s.vs_memory <= LENGTH t.vs_memory) ==>
   stmt_state_rel H ctx func cenv cx es' t
 Proof
-  cheat
+  strip_tac >>
+  `es'.scopes = es.scopes /\ es'.immutables = es.immutables` by
+    (drule raw_call_kind_take_adopt_fields >> simp[]) >>
+  `!ce id b sz. local_region ce es'.scopes t id b sz <=>
+                local_region ce es.scopes s id b sz` by
+    simp[local_region_def, lookup_var_def] >>
+  `!ce. immutable_alloca_sep func ce cx es s ==>
+        immutable_alloca_sep func ce cx es' t` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     qexistsl_tac [`s`,`es`] >> simp[] >> metis_tac[]) >>
+  `immutable_base_zero cenv t` by
+    (irule immutable_base_zero_frame >> qexists_tac `s` >>
+     simp[lookup_var_def] >>
+     drule stateRelProjTheory.stmt_state_rel_immutable_base_zero >> simp[]) >>
+  `immutable_alloca_sep func cenv cx es s /\
+   (!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+      immutable_alloca_sep func (cenv with ce_module := src) cx es s)` by
+    (qpat_assum `stmt_state_rel H ctx func cenv cx es s` mp_tac >>
+     pure_rewrite_tac[stmt_state_rel_def] >> strip_tac >> simp[]) >>
+  `immutable_alloca_sep func cenv cx es' t` by metis_tac[] >>
+  `!src tops. ALOOKUP cenv.ce_modules src = SOME tops ==>
+     immutable_alloca_sep func (cenv with ce_module := src) cx es' t` by
+    (rpt strip_tac >> first_x_assum irule >> metis_tac[]) >>
+  irule stmt_state_rel_allocas_frame >> simp[] >>
+  qexistsl_tac [`es`,`s`] >> simp[] >> first_assum ACCEPT_TAC
 QED
 
 

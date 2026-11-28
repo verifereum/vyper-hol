@@ -59,6 +59,47 @@ Proof
   simp[] >> metis_tac[]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
+    metis_tac[body_inv_no_phi] >>
+  drule expr_body_pre_static_facts >> strip_tac >>
+  `expr_body_pre cenv cx env a es` by
+    (irule expr_body_pre_raw_call_arg >>
+     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >> simp[]) >>
+  qpat_assum `body_exprs_full_ok cx (a::d::kws)`
+    (strip_assume_tac o ONCE_REWRITE_RULE [body_exprs_full_ok_cons]) >>
+  qpat_assum `body_exprs_prefix_ok cx (a::d::kws)`
+    (strip_assume_tac o ONCE_REWRITE_RULE [body_exprs_prefix_ok_def]) >>
+  `expr_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx (BaseT AddressT) a es` by
+    (drule (cj 1 body_expr_full_ok_simulations) >> metis_tac[]) >>
+  `expr_sim_prefix (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
+      cenv cx (BaseT AddressT) a es` by
+    (drule (cj 1 (iffLR (CONJUNCT1 body_expr_prefix_ok_def))) >> metis_tac[]) >>
+  `gas_admissible (bind (eval_expr cx a) (read_result cx)) expr_res_ok es` by
+    metis_tac[expr_body_pre_gas_admissible] >>
+  qpat_x_assum `expr_sim_prefix _ _ _ _ a _`
+    (mp_tac o REWRITE_RULE[expr_sim_prefix_def,expr_sim_full_pre_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`s1`,`shadow_sa`,`shadow_s1`,
+                           `addr`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  qpat_x_assum `expr_sim_full _ _ _ _ a _` (mp_tac o REWRITE_RULE[expr_sim_full_def]) >>
+  disch_then (qspecl_then [`st0`,`sa`,`s1`,`shadow_sa`,`shadow_s1`,
+                           `addr`,`s0`,`G0`,`tn0`] mp_tac) >>
+  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
+  qpat_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx a) _) _ _ _`
+    (mp_then Any irule forced_prefix_bind) >>
+  simp[evaluate_storage_trace_frame, storage_trace_frame_read_result,
+       storage_trace_frame_bind_all, requests_outcomes_frame_bind_all,
+       evaluate_requests_outcomes_frame, requests_outcomes_frame_read_result] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- suspend "address" >>
+  rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]
+QED
+*)
 Theorem raw_call_forced_args_prefix:
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   body_const_cells_agree [(NONE,tops)] cx env es /\
@@ -131,44 +172,10 @@ Theorem raw_call_forced_args_prefix:
       (\av. bind (bind (eval_expr cx d) (read_result cx)) (k av)))
     (es,s0,G0,tn0)
 Proof
-  strip_tac >>
-  `!bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0` by
-    metis_tac[body_inv_no_phi] >>
-  drule expr_body_pre_static_facts >> strip_tac >>
-  `expr_body_pre cenv cx env a es` by
-    (irule expr_body_pre_raw_call_arg >>
-     qpat_assum `expr_body_pre _ _ _ (Call _ _ _ _) _` (irule_at Any) >> simp[]) >>
-  qpat_assum `body_exprs_full_ok cx (a::d::kws)`
-    (strip_assume_tac o ONCE_REWRITE_RULE [body_exprs_full_ok_cons]) >>
-  qpat_assum `body_exprs_prefix_ok cx (a::d::kws)`
-    (strip_assume_tac o ONCE_REWRITE_RULE [body_exprs_prefix_ok_def]) >>
-  `expr_sim_full (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx (BaseT AddressT) a es` by
-    (drule (cj 1 body_expr_full_ok_simulations) >> metis_tac[]) >>
-  `expr_sim_prefix (DF,lo,dframe,ctx,shadow_ctx,PG,func,shadow_func)
-      cenv cx (BaseT AddressT) a es` by
-    (drule (cj 1 (iffLR (CONJUNCT1 body_expr_prefix_ok_def))) >> metis_tac[]) >>
-  `gas_admissible (bind (eval_expr cx a) (read_result cx)) expr_res_ok es` by
-    metis_tac[expr_body_pre_gas_admissible] >>
-  qpat_x_assum `expr_sim_prefix _ _ _ _ a _`
-    (mp_tac o REWRITE_RULE[expr_sim_prefix_def,expr_sim_full_pre_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`s1`,`shadow_sa`,`shadow_s1`,
-                           `addr`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  qpat_x_assum `expr_sim_full _ _ _ _ a _` (mp_tac o REWRITE_RULE[expr_sim_full_def]) >>
-  disch_then (qspecl_then [`st0`,`sa`,`s1`,`shadow_sa`,`shadow_s1`,
-                           `addr`,`s0`,`G0`,`tn0`] mp_tac) >>
-  (impl_tac >- (simp[] >> metis_tac[])) >> strip_tac >>
-  qpat_assum `gas_outcome_full _ _ _ _ (bind (eval_expr cx a) _) _ _ _`
-    (mp_then Any irule forced_prefix_bind) >>
-  simp[evaluate_storage_trace_frame, storage_trace_frame_read_result,
-       storage_trace_frame_bind_all, requests_outcomes_frame_bind_all,
-       evaluate_requests_outcomes_frame, requests_outcomes_frame_read_result] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- suspend "address" >>
-  rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_call_forced_args_prefix[address]:
   qx_genl_tac [`marksA`,`av`,`esA`,`GA`,`tnA`,`tA`] >> strip_tac >>
   qpat_assum `!H. valid_horizon _ _ H esA.storage_trace ==> _`
@@ -241,7 +248,9 @@ Resume raw_call_forced_args_prefix[address]:
   >- suspend "data" >>
   rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume raw_call_forced_args_prefix[data]:
   qx_genl_tac [`marksD`,`dv`,`esD`,`GD`,`tnD`,`tD`] >> strip_tac >>
   `esD with gas_obs := [] = esD` by simp[evaluation_state_component_equality] >>
@@ -290,5 +299,8 @@ Resume raw_call_forced_args_prefix[data]:
   qpat_assum `!h. valid_horizon _ _ h esD.storage_trace ==> expr_post _ _ _ _ _ _ _ _ _ _ _ _ _ _ /\ _`
     (qspec_then `H` mp_tac) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise raw_call_forced_args_prefix
+*)

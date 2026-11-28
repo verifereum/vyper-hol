@@ -2,7 +2,7 @@
 Theory s1PrefixIntCallRestOutcome
 Ancestors
   s1PrefixDefs bodyFullIntCall bodyFullIntCallCallee bodyFullIntCallReturn
-  gasOutcomeFull
+  gasOutcomeFull bodyInvCodeProps exprBodyPreProps
 
 Theorem intcall_entry_rest_outcome:
   body_inv tops ctx cenv cx /\
@@ -67,10 +67,27 @@ Proof
           intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv result_count
             (if result_count = 0 /\ 0 < rbs then SOME (HD argv) else NONE)
             sa.cs_next_id sb.cs_next_id t tn res ee gt r)` by
-    (rpt gen_tac >> strip_tac >> drule_all intcall_callee_full >> simp[]) >>
-  qpat_assum `!callee entered bb inst lbl arg_ops argv. _ ==> gas_outcome_full _ _ _ _ _ _ _ _`
-    (mp_then Any (drule_all_then (qspec_then `PG` assume_tac))
-      (DISCH_ALL (CONJUNCT1 (UNDISCH (SPEC_ALL intcall_return_full_owned))))) >>
+    (rpt gen_tac >> strip_tac >> drule_all intcall_callee_full_singleton >> simp[]) >>
+  drule_then assume_tac bodySimTheory.body_inv_contract >>
+  drule_then assume_tac bodySimTheory.body_inv_module >>
+  drule_then strip_assume_tac body_inv_module_locations >>
+  drule_all_then assume_tac body_inv_expr_body_pre_mods >>
+  `cenv.ce_modules = [(NONE,cx_tops cx)]` by
+    metis_tac[contract_inv_cenv_modules, body_inv_main_code] >>
+  mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
+    (Q.SPECL [`DF`, `lo`, `d`, `ctx`, `shadow_ctx`, `PG`, `func`,
+       `shadow_func`, `tops`, `cenv`, `cx`, `tenv`, `ty`, `ann`, `name`,
+       `es`, `dflt`, `es0`, `st0`, `sa`, `sb`, `shadow_sa`, `shadow_sb`,
+       `vv`, `s0`, `G0`, `tn0`, `mut`, `nr`, `args`, `ret`, `ss`, `rr`,
+       `prev`, `penv`, `rtv`, `es1`, `t`, `G`, `tn`, `result_count`,
+       `rbs`, `pvs`, `dflts`] intcall_return_full_owned)) >>
+  impl_tac >-
+    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
+     asm_rewrite_tac[GSYM gas_outcome_full_singleton_def]) >>
+  disch_then (mp_tac o CONJUNCT1) >>
+  impl_tac >- simp[] >>
+  simp[GSYM gas_outcome_full_singleton_def] >>
+  strip_tac >>
   irule gas_outcome_full_post_mono >>
   qhdtm_assum `gas_outcome_full` (irule_at Any) >> simp[]
 QED

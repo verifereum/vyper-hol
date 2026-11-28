@@ -51,34 +51,25 @@ Proof
   cheat
 QED
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
+Theorem immutable_target_write_root:
+  immutable_root cx bt /\
+  target_root bt = TopLevelNameTarget (src,id) /\
+  eval_target_place cx bt es = (INL (ImmutablePlace place_src name path),ee) /\
+  expr_sim_inv_mods mods ce cx env ee /\
+  FLOOKUP env.bare_globals (src,id) = SOME ity /\
+  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
+    | SOME imms => get_source_immutables place_src imms) name = SOME (itv,old) ==>
+  place_src = src /\ name = id /\
+  ce.ce_module_var_type (src,id) = SOME ity /\
+  evaluate_type (get_tenv cx) ity = SOME itv
 Proof
   strip_tac >>
   drule_then assume_tac tuple_place_target_base_inversion >>
   drule_all_then strip_assume_tac immutable_target_base_place_result >>
   gvs[] >>
-  drule_all_then strip_assume_tac immutable_assign_target_layout >>
-  simp[] >>
-  `env_immutables_consistent env cx ee` by
-    fs[expr_sim_inv_def,env_consistent_def] >>
+  qpat_x_assum `expr_sim_inv_mods _ _ _ _ _` mp_tac >>
+  simp[expr_sim_inv_mods_def, bare_globals_layout_def, env_consistent_def,
+       env_immutables_consistent_def] >>
   Cases_on `ALOOKUP ee.immutables cx.txn.target` >>
-  gvs[env_immutables_consistent_def] >>
-  first_x_assum drule_all >> simp[]
-QED
-*)
-Theorem immutable_target_write_root:
-  immutable_root cx bt /\
-  target_root bt = TopLevelNameTarget (NONE,id) /\
-  eval_target_place cx bt es = (INL (ImmutablePlace NONE name path),ee) /\
-  expr_sim_inv_mods mods ce cx env ee /\
-  FLOOKUP env.bare_globals (NONE,id) = SOME ity /\
-  ~cx_const_name cx (NONE,id) /\
-  FLOOKUP (case ALOOKUP ee.immutables cx.txn.target of NONE => FEMPTY
-    | SOME imms => get_source_immutables NONE imms) name = SOME (itv,old) ==>
-  name = id /\ ce.ce_module = NONE /\
-  ce.ce_module_var_type (NONE,id) = SOME ity /\
-  evaluate_type (get_tenv cx) ity = SOME itv
-Proof
-  cheat
+  gvs[] >> metis_tac[]
 QED

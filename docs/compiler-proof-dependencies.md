@@ -67,7 +67,8 @@ non-exempt branch:
 
 clean generic e2e_vyper_to_evm (explicit stage premises, zero admission leaves)
   -> vyper_call_correct (seven public premises at Milestone 1; inherits exactly S1-S7)
-exempt branch: actual total run + exact decoder exemption, not invented safety
+source failures follow the ordinary result relation; recipient-overflow is
+excluded by the balance corollary, not by a decoder exemption
 ```
 
 The compiler is the actual `run_venom_pipeline ... o1_pipeline_spec`, not an
@@ -182,11 +183,11 @@ presumed or proved.
 Success relates `tx_return_bytes`, accounts after EVM pending deletions,
 transient storage modulo dead target storage, logs and the full request
 list (computed precompiles included) via `request_agree`. A source halt relates the same effects (`effects_agree`) with empty output. Requests and these effects are compared only on success or halt, never on failure; leftover outcomes are not final
-observations. Non-exempt source failure requires target failure, without
-revert-data/reason/general-kind equality. The sole exemption is exact
-`RuntimeError "abi_decode invalid"` with a dynamic target occurring in a function
-body (including a return rejection producing that same message); not arbitrary
-`ReturnReject`, static-only decoding or conversion failure.
+observations. Source failure requires target failure, without
+revert-data/reason/general-kind equality. The sole source exemption is exact
+`RuntimeError "transfer_value recipient overflow"`; the call and deployment
+state corollaries rule it out under their well-formed state hypotheses. Dynamic
+decoder failures, including `"abi_decode invalid"`, are not exempt.
 
 The resource alternative is frame OutOfGas/StackOverflow, not an existential gas
 threshold. Entry `cc_gas=0`; Venom GAS consumes the frame's gas readings,

@@ -1,17 +1,22 @@
 (* Eliminate ranked expression prefixes at the current entry of a proper head. *)
 Theory s1PrefixBoolChainRankedExprProperHead
 Ancestors
-  s1PrefixBoolChainActualReach s1PrefixPreds s1PrefixDefs
+  s1PrefixBoolChainActualHistory s1PrefixPreds s1PrefixDefs
   bodyFullBoolChain bodyFullPreds bodyFullShadowBodyInv bodySim
-  exprSimHypsDefs vyperTyping vyperInterpreter arithmetic
+  exprSimHypsDefs vyperTyping vyperInterpreter arithmetic list alist
 
 Theorem bool_chain_proper_head_from_ranked_expr:
-  (!rank:num. !cx h. LENGTH (remcode cx) <= rank ==> body_expr_prefix_ok cx h) ==>
+  (!rank:num. !cx h. LENGTH (remcode cx) <= rank /\
+       (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
+          EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+            (vyperTypeCallGraph$int_calls_expr h)) ==> body_expr_prefix_ok cx h) ==>
   !cx p n e DF lo d PG tops ctx shadow_ctx func shadow_func cenv env ty es
      st0 sa sb shadow_sa shadow_sb rv s0 G0 tn0 sr shadow_sr xl sg shadow_sg
      sf shadow_sf.
     builtin_args_length_ok (BoolChain p n) (LENGTH [e]) /\
     body_expr_prefix_ok cx e /\
+    EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+      (vyperTypeCallGraph$int_calls_expr e) /\
     bool_chain_full_ok cx (bool_chain_operands p (n - 1) e) /\
     body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
     body_const_cells_agree [(NONE,tops)] cx env es /\
@@ -44,7 +49,11 @@ Proof
   disch_then (mk_asm "ranked") >> rpt gen_tac >> strip_tac >> rpt gen_tac >>
   disch_then (map_every assume_tac o CONJUNCTS) >>
   `body_expr_prefix_ok cx a` by
-    (asm_x "ranked" (qspecl_then [`LENGTH (remcode cx)`, `cx`, `a`] mp_tac) >> simp[]) >>
+    (asm_x "ranked" (qspecl_then [`LENGTH (remcode cx)`, `cx`, `a`] mp_tac) >>
+     simp[] >> disch_then irule >> rpt strip_tac >>
+     `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+       fs[body_const_cells_agree_def] >>
+     gvs[] >> drule_all bool_chain_actual_reached_calls >> simp[]) >>
   qpat_assum `body_expr_prefix_ok cx a`
     (mp_tac o CONJUNCT1 o ONCE_REWRITE_RULE [body_expr_prefix_ok_def]) >>
   disch_then drule_all >> simp[expr_sim_prefix_def] >> metis_tac[]

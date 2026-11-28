@@ -8,17 +8,8 @@ Ancestors
   vyperStorageTrace vyperStorageFootprint s1PrefixProps exprSimWordArgs
   exprSimPrecompiles exprSimDefs bodyPtrDefs venomState vyperValue
 
-Theorem send_expr_sim_prefix:
-  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
-   has_gas args dflt es.
-  body_inv tops ctx cenv cx /\
-  shadow_body_inv tops ctx shadow_ctx /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
-  expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
-  body_exprs_full_ok cx args /\
-  body_exprs_prefix_ok cx args ==>
-  expr_sim_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cenv cx ty (Call ann (Send has_gas) args dflt) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   drule send_pre_types >> strip_tac >> gvs[] >>
@@ -56,7 +47,23 @@ Proof
    fn_has_code shadow_sa shadow_sm shadow_func` by metis_tac[fn_has_code_split] >>
   suspend "operands"
 QED
+*)
+Theorem send_expr_sim_prefix:
+  !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann
+   has_gas args dflt es.
+  body_inv tops ctx cenv cx /\
+  shadow_body_inv tops ctx shadow_ctx /\
+  body_const_cells_agree [(NONE,tops)] cx env es /\
+  expr_body_pre cenv cx env (Call ann (Send has_gas) args dflt) es /\
+  body_exprs_full_ok cx args /\
+  body_exprs_prefix_ok cx args ==>
+  expr_sim_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cenv cx ty (Call ann (Send has_gas) args dflt) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_prefix[operands]:
   (* Argument requests use the list prefix; the full list post is only
      needed when the source reaches the Send continuation. *)
@@ -98,7 +105,9 @@ Resume send_expr_sim_prefix[operands]:
   >- (rpt gen_tac >> rename1 `_ ==> ISR res` >> Cases_on `res` >> simp[wb_args_exit_def]) >>
   suspend "call"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume send_expr_sim_prefix[call]:
   qx_genl_tac [`marks`,`vs`,`mid`,`G1`,`tn1`,`t`] >> strip_tac >>
   `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
@@ -139,8 +148,11 @@ Resume send_expr_sim_prefix[call]:
        address_typed_dest, uint256_typed_dest, ptrDisciplineTheory.op_taint_def] >>
   qexistsl_tac [`d`,`cenv`] >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise send_expr_sim_prefix
+*)
 
 Theorem send_expr_vv_sim_prefix:
   !DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx env ty ann

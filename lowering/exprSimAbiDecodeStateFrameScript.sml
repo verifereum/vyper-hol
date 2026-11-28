@@ -7,6 +7,7 @@ Ancestors
   exprSimAbiDecodeQuantifiedLift exprSimAbiDecodeEndpointFrame
   abiDecoderSiteEffect actualDecoderSites exprLoweringProps localPtrsProps
   exprSimProps compileEnv venomState loweringSlice valueEncodingProps venomMemDefs
+  stateRelProj placeMemoryProtectedFrame exprSimAbiDecodeImmutableFrame
 
 Theorem abi_decode_closed_effect:
   abi_decode_success_closed ce env ty tv bs out d start final ctx func s t ==>

@@ -175,6 +175,10 @@ Resume stmt_frag_prefix_cons_env[tail]:
    (c.ce_is_ctor <=> cenv.ce_is_ctor)` by
     metis_tac[cenv_top_ext_return_pc, cenv_top_ext_return_buf,
               cenv_top_ext_is_ctor] >>
+  `c.ce_modules = cenv.ce_modules` by
+    (qpat_assum `cenv_top_ext cenv c _` mp_tac >>
+     rewrite_tac[cenv_top_ext_def] >> strip_tac >>
+     qpat_x_assum `_ = cenv` (SUBST1_TAC o SYM) >> simp[]) >>
   `!H. dead_lo_ok H (DF H) lo c cx` by fs[dead_lo_ok_def] >>
   `ret_pc_ok c sm t` by (irule ret_pc_ok_frame >> metis_tac[]) >>
   `!x sz. c.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sm x` by

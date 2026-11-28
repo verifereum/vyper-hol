@@ -40,21 +40,6 @@ Definition constructor_return_q_def:
       final.vs_code = before.vs_code /\ final.vs_labels = before.vs_labels
 End
 
-(* SCRATCH MEASUREMENT: the original proof failed after widening the body
-   definitions. Temporarily admit it to test its downstream consumers.
-Proof
-  strip_tac >> irule stmt_state_rel_allocas_frame >> conj_tac
-  >- (irule immutable_base_zero_frame >>
-      qexists `s` >> gvs[stmt_state_rel_def, tstore_def, lookup_var_def]) >>
-  conj_tac
-  >- (irule immutable_alloca_sep_fields >>
-      simp[tstore_def, local_region_def, lookup_var_def] >>
-      qexistsl [`s`, `es`] >> gvs[stmt_state_rel_def] >> metis_tac[]) >>
-  conj_tac
-  >- (irule nonreentrant_state_rel_write >> gvs[stmt_state_rel_def]) >>
-  qexistsl [`es`, `s`] >> simp[tstore_def]
-QED
-*)
 Theorem constructor_unlock_stmt_state_rel:
   stmt_state_rel H ctx func cenv cx es s /\
   storage_locks_separated (FST H) (SND H) /\ MEM nkey (SND H) /\
@@ -64,7 +49,30 @@ Theorem constructor_unlock_stmt_state_rel:
       update_storage (n2w nkey) 0w (es.tStorage cx.txn.target)) es.tStorage)
     (tstore (n2w nkey) 0w s)
 Proof
-  cheat
+  strip_tac >>
+  qmatch_goalsub_abbrev_tac `stmt_state_rel H ctx func cenv cx es' s'` >>
+  `!ce. immutable_alloca_sep func ce cx es s ==>
+        immutable_alloca_sep func ce cx es' s'` by
+    (rpt strip_tac >> irule immutable_alloca_sep_fields >>
+     simp[Abbr `es'`, Abbr `s'`, tstore_def, local_region_def, lookup_var_def] >>
+     qexistsl [`s`, `es`] >> simp[] >> metis_tac[]) >>
+  `state_rel H func cenv cx es' s'` by
+    (simp[Abbr `es'`, Abbr `s'`] >> irule nonreentrant_state_rel_write >>
+     simp[] >> metis_tac[stateRelProjTheory.stmt_state_rel_state_rel]) >>
+  `immutable_base_zero cenv s'` by
+    (irule immutable_base_zero_frame >> qexists `s` >>
+     simp[Abbr `s'`, tstore_def, lookup_var_def] >>
+     metis_tac[stateRelProjTheory.stmt_state_rel_immutable_base_zero]) >>
+  `!src. (src = cenv.ce_module \/ IS_SOME (ALOOKUP cenv.ce_modules src)) ==>
+         immutable_alloca_sep func (cenv with ce_module := src) cx es' s'` by
+    (rpt strip_tac >> first_x_assum irule >>
+     irule placeMemoryProtectedFrameTheory.stmt_state_rel_immutable_alloca_sep_source >>
+     simp[] >> metis_tac[]) >>
+  `immutable_alloca_sep func cenv cx es' s'` by
+    (first_x_assum (qspec_then `cenv.ce_module` mp_tac) >>
+     simp[compile_env_component_equality]) >>
+  drule stmt_state_rel_allocas_frame >> disch_then irule >>
+  simp[] >> simp[Abbr `s'`, tstore_def]
 QED
 
 Theorem constructor_exit_code:

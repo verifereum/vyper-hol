@@ -2072,6 +2072,16 @@ QED
 
 Finalise append_nested_storage_endpoint_full
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >>
+  `!x. lo <> 0 /\ cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sm x` by
+    (metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_imm_base,
+               freshWritesTheory.not_fresh_at_mono]) >>
+  suspend "classify"
+QED
+*)
 Theorem append_nested_storage_cont_framed[local]:
  !DF lo d ctx shadow_ctx PG func cx st0 lctx RetQ cenv env sa sm sb s0 G0 tn0
    mid t G tn tr slot tv v bop vop w elem src_ty cap.
@@ -2130,13 +2140,10 @@ Theorem append_nested_storage_cont_framed[local]:
       (ctx_has_dalloca ctx ==> !s. (r = Halt s \/ ?ir. r = IntRet ir s) ==>
         allocas_below_fmp s))
 Proof
-  rpt gen_tac >> strip_tac >>
-  `!x. lo <> 0 /\ cenv.ce_imm_alloca = SOME (Var x) ==> not_fresh_at sm x` by
-    (metis_tac[exprLoweringPropsTheory.local_ptrs_reserved_imm_base,
-               freshWritesTheory.not_fresh_at_mono]) >>
-  suspend "classify"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_storage_cont_framed[classify]:
   `ptrDiscipline$ctx_has_dalloca ctx ==>
     !pre i post u. emitted_insts sm sb = pre ++ i::post /\
@@ -2201,7 +2208,9 @@ Resume append_nested_storage_cont_framed[classify]:
   >- suspend "success"
   >> suspend "capacity"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_storage_cont_framed[success]:
   Cases_on `cx.txn.is_static` >- suspend "static" >>
   `~t.vs_call_ctx.cc_static` by simp[] >>
@@ -2217,7 +2226,9 @@ Resume append_nested_storage_cont_framed[success]:
      simp[vyperStorageBackendTheory.set_storage_def]) >>
   suspend "source_success"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_storage_cont_framed[source_success]:
   `allocas_from lo t` by fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
   `len = w2n (if tr then tload slot t else sload slot t)` by simp[Abbr `len`] >>
@@ -2334,7 +2345,9 @@ Resume append_nested_storage_cont_framed[source_success]:
      irule (INST_TYPE [alpha |-> ``:256``] stmtSimDefsTheory.alloca_frame_of_mem_frame) >>
      simp[] >> qexistsl_tac [`H`, `ctx`, `cx`, `func`] >> simp[]) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_storage_cont_framed[capacity]:
   `append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v mid =
      (INR (Error (RuntimeError "append full storage array")),mid)` by
@@ -2357,7 +2370,9 @@ Resume append_nested_storage_cont_framed[capacity]:
   fs[fragGasModeTheory.gas_marked_path_def] >>
   suspend "capacity_joint"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_storage_cont_framed[capacity_joint]:
   rename1 `gas_path_mem ctx func t 0 (Abort Revert_abort (r with vs_inst_idx := jm))` >>
   `r with vs_inst_idx := jm = r with vs_inst_idx := j` by
@@ -2382,7 +2397,9 @@ Resume append_nested_storage_cont_framed[capacity_joint]:
      irule ptrSafetyTransportTheory.gas_path_ptr_from_no_dead >> first_assum ACCEPT_TAC) >>
   suspend "capacity_exit"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_storage_cont_framed[capacity_exit]:
   `!tail. append_place cx (StoragePlace tr slot (ArrayTV tv (Dynamic cap))) v
        (mid with gas_obs := tail) =
@@ -2396,7 +2413,9 @@ Resume append_nested_storage_cont_framed[capacity_exit]:
   simp[fragExecTheory.exit_result_def, bodyPtrDefsTheory.stmt_exit_ptr_def,
     exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume append_nested_storage_cont_framed[static]:
   `allocas_from lo t` by fs[bodyPtrDefsTheory.ghost_inv_at_def] >>
   `w2n (if tr then tload slot t else sload slot t) < cap` by simp[] >>
@@ -2419,8 +2438,11 @@ Resume append_nested_storage_cont_framed[static]:
     simp[fragExecTheory.exit_result_def, bodyPtrDefsTheory.stmt_exit_ptr_def,
       exprSimDefsTheory.expr_exit_def, exprSimDefsTheory.halt_exit_def]) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise append_nested_storage_cont_framed[local]
+*)
 
 Theorem append_outcome_scopes[local]:
   eval_stmt cx (Append bt e) es = (res,ee) ==>

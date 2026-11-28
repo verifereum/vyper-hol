@@ -10,8 +10,12 @@ Theorem bool_chain_pushed_locked_run_compiled:
   LENGTH (remcode pushed) < rank /\
   (!c ys. LENGTH (remcode c) < rank /\
      (!ts. ALOOKUP c.sources c.txn.target = SOME [(NONE,ts)] ==>
+        EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+          (vyperTypeCallGraph$int_calls_stmts ys) /\
         stmts_loop_calls_ok [(NONE,ts)] ys) ==>
       body_stmts_prefix_ok c ys) /\
+  EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+    (vyperTypeCallGraph$int_calls_stmts compiled) /\
   MEM (FunctionDecl Internal mut nr raw name args ds ret ss) tops /\
   compiled = subst_consts_stmts (module_consts_env tops []) ss /\
   body_inv tops ctx ce pushed /\
@@ -39,7 +43,8 @@ Proof
   strip_tac >>
   `body_stmts_prefix_ok pushed compiled` by
     (first_x_assum irule >> simp[] >>
-     drule selected_port_checker_guards >> strip_tac >> simp[] >> metis_tac[]) >>
+     drule selected_port_checker_guards >> strip_tac >>
+     fs[body_const_cells_agree_def] >> metis_tac[]) >>
   qpat_x_assum `compiled = _` SUBST_ALL_TAC >>
   qpat_x_assum `body_stmts_prefix_ok _ _`
     (mp_tac o REWRITE_RULE [body_stmts_prefix_ok_def]) >>
@@ -51,8 +56,12 @@ Theorem bool_chain_pushed_locked_run:
   LENGTH (remcode pushed) < rank /\
   (!c ys. LENGTH (remcode c) < rank /\
      (!ts. ALOOKUP c.sources c.txn.target = SOME [(NONE,ts)] ==>
+        EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,ts)] []))
+          (vyperTypeCallGraph$int_calls_stmts ys) /\
         stmts_loop_calls_ok [(NONE,ts)] ys) ==>
       body_stmts_prefix_ok c ys) /\
+  EVERY (\k. MEM k (vyperTypeContract$linked_live_functions [(NONE,tops)] []))
+    (vyperTypeCallGraph$int_calls_stmts compiled) /\
   MEM (FunctionDecl Internal mut nr raw name args ds ret ss) tops /\
   compiled = subst_consts_stmts (module_consts_env tops []) ss /\
   body_inv tops ctx ce pushed /\

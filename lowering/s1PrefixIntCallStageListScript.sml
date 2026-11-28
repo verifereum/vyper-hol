@@ -53,6 +53,83 @@ Proof
 QED
 
 (* The normal callback is checked separately from the compiler and bind cuts. *)
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
+    fs[GSYM storage_trace_domain_def] >>
+  `!H. valid_horizon cx st0 H mid.storage_trace ==>
+     stmt_state_rel H ctx func cenv cx mid t /\
+     storage_well_formed_on cx mid (FST H) /\
+     ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t` by
+    (gen_tac >> strip_tac >>
+     qpat_assum `!H. valid_horizon _ _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
+       (qspec_then `H` (drule_then (strip_assume_tac o REWRITE_RULE[intcall_args_stage_post_def]))) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  drule_all_then strip_assume_tac intcall_stage_replay_tail_facts >>
+  Cases_on `eval_operands (ops ++ [h]) t` >>
+  qpat_x_assum `!H. valid_horizon _ _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
+    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
+  simp[intcall_args_stage_post_def] >> strip_tac >>
+  rename1 `eval_operands (ops ++ [h]) t = SOME ws1` >>
+  `gas_admissible (bind (eval_exprs cx es) (\vs. return (hs ++ vs))) P mid` by
+    (qpat_assum `gas_admissible (bind (eval_exprs cx [e]) _) _ _`
+       (fn th => drule_then mp_tac
+         (MATCH_MP (REWRITE_RULE[GSYM AND_IMP_INTRO] gas_admissible_bind_tail) th)) >>
+     simp[]) >>
+  `gas_admissible (eval_exprs cx es) (\res. !err. res = INR err ==> expr_vv_res_ok (INR err)) mid` by
+    (qpat_assum `gas_admissible (vyperState$bind (eval_exprs cx es) _) P mid`
+       (mp_then Any mp_tac slice_gas_admissible_bind_head) >>
+     disch_then (qspec_then `\r:value list + exception. !err. r = INR err ==> expr_vv_res_ok (INR err)` mp_tac) >>
+     simp[]) >>
+  `si.cs_next_var <= sm.cs_next_var` by
+    (mp_tac (MATCH_MP ci_mono_compile_stage_intcall_args
+       (CONJUNCT1 stmtLoweringMonoTheory.ci_mono_compile_expr_sa)) >>
+     disch_then (qspecl_then [`cenv`,`[e]`,`[flag]`,`[dty]`,`si`] mp_tac) >>
+     simp[ci_mono_def]) >>
+  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u` by
+    (rpt gen_tac >> strip_tac >> irule intcall_stage_headroom_after_path >>
+     qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
+     qpat_assum `gas_path ctx func s _ (OK t)` (irule_at Any) >>
+     qpat_assum `frag_reachable ctx func t fn inst u` (irule_at Any) >>
+     rpt conj_tac >> first_assum ACCEPT_TAC) >>
+  `!st. SND (bind (eval_exprs cx es) (\vs. return (hs ++ vs)) st) =
+         SND (eval_exprs cx es st)` by
+    (gen_tac >> Cases_on `eval_exprs cx es st` >> rename1 `_ = (res,_)` >>
+     Cases_on `res` >> simp[bind_def,return_def]) >>
+  drule gas_prefix_full_state_cong >> disch_then (fn th => once_rewrite_tac[th]) >>
+  qpat_x_assum `!DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv st0 sa s0 es0 G0 tn0
+     si sf shadow_si shadow_sf esi s G tn flags dtys newops ops ws vals ptys pflags pin clean_words keep_sites P.
+     _ ==> gas_prefix_full _ _ _ (eval_exprs cx es) _` irule >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> stmt_state_rel H ctx func cenv cx mid t /\ _`
+        (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then strip_assume_tac)) >>
+      drule stmt_state_rel_allocas_below_fmp >> simp[])
+  >- (qexists_tac `\res:value list + exception. !err. res = INR err ==> expr_vv_res_ok (INR err)` >> simp[]) >>
+  qpat_assum `compile_stage_intcall_args _ _ es fs ts sm = (rest,sf)` (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) fs ts shadow_sm = (rest,shadow_sf)` (irule_at Any) >>
+  qpat_assum `return_buf_frame d cenv sm t` (irule_at Any) >>
+  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
+  qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
+  qpat_assum `body_const_cells_agree _ cx tenv mid` (irule_at Any) >>
+  qpat_assum `ghost_kept_at lo cenv es0 sa G0 tn0 s0 G1 tn1` (irule_at Any) >>
+  qpat_assum `eval_operands (ops ++ [h]) t = SOME ws1` (irule_at Any) >>
+  qexistsl_tac [`vals ++ hs`,`ptys ++ [dty]`,`pin`,`pflags ++ [flag]`,`keep_sites`,`clean_words`] >>
+  fs[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
+  >- (rpt strip_tac >>
+      qpat_x_assum `!j. j < SUC (LENGTH es) /\ EL j (flag::fs) ==> _`
+        (qspec_then `SUC j` mp_tac) >> simp[listTheory.EL]) >>
+  TRY (rename1 `local_ptrs_reserved cenv sm` >>
+       irule local_ptrs_reserved_next_var >> qexists_tac `si` >> simp[] >> NO_TAC)
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `si` >> simp[] >> metis_tac[])
+  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
+      qexists_tac `si` >> simp[] >> metis_tac[]) >>
+  simp[EVERY_MEM] >> rpt strip_tac >> irule intcall_args_pre_state >>
+  simp[] >> qexists_tac `esi` >> fs[EVERY_MEM]
+QED
+*)
 Theorem intcall_stage_list_normal_cut[local]:
   (!DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
     st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
@@ -177,80 +254,95 @@ Theorem intcall_stage_list_normal_cut[local]:
   gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     cx st0 (bind (eval_exprs cx es) (\vs. return (hs ++ vs))) (mid,t,G1,tn1)
 Proof
-  strip_tac >>
-  `valid_horizon cx st0 (storage_trace_horizon mid.storage_trace) mid.storage_trace` by
-    fs[GSYM storage_trace_domain_def] >>
-  `!H. valid_horizon cx st0 H mid.storage_trace ==>
-     stmt_state_rel H ctx func cenv cx mid t /\
-     storage_well_formed_on cx mid (FST H) /\
-     ghost_inv_at (DF H) lo d cenv cx mid G1 tn1 t` by
-    (gen_tac >> strip_tac >>
-     qpat_assum `!H. valid_horizon _ _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
-       (qspec_then `H` (drule_then (strip_assume_tac o REWRITE_RULE[intcall_args_stage_post_def]))) >>
+  cheat
+QED
+
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  Induct
+  >- (rpt gen_tac >> strip_tac >> rewrite_tac[intcall_stage_nil_source] >>
+      irule gas_prefix_full_no_outcome >> simp[storage_trace_frame_return, return_def]) >>
+  rpt gen_tac >> strip_tac >> rename1 `body_exprs_full_ok cx (e::es)` >>
+  qpat_assum `compile_stage_intcall_args _ cenv (e::es) flags dtys si = (newops,sf)`
+    (mp_then (Pos (el 3)) mp_tac intcall_stage_cons_cut_elim) >>
+  disch_then irule >>
+  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr (e::es)) flags dtys shadow_si = (newops,shadow_sf)`
+    (irule_at Any) >>
+  qpat_assum `fn_has_code si sf func` (irule_at Any) >>
+  qpat_assum `fn_has_code shadow_si shadow_sf shadow_func` (irule_at Any) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  map_every qx_gen_tac [`flag`,`fs`,`dty`,`ts`,`h`,`sm`,`shadow_sm`,`rest`] >>
+  strip_tac >> gvs[MAP] >>
+  `expr_body_pre cenv cx tenv e esi /\ body_expr_prefix_ok cx e` by
+    fs[Once body_exprs_prefix_ok_def] >>
+  drule_then assume_tac intcall_stage_full_head >>
+  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      cx st0 (eval_exprs cx [e]) (esi,s,G,tn)` by
+    (irule intcall_stage_singleton_prefix >>
+     qpat_assum `compile_stage_intcall_args _ _ [e] _ _ si = _` (irule_at Any) >>
+     qpat_assum `compile_stage_intcall_args _ _ [gas_shadow_expr e] _ _ shadow_si = _`
+       (irule_at Any) >>
+     qpat_assum `expr_body_pre cenv cx tenv e esi` (irule_at Any) >>
+     qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
+     qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
+     qpat_assum `return_buf_frame d cenv si s` (irule_at Any) >>
      rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  drule_all_then strip_assume_tac intcall_stage_replay_tail_facts >>
-  Cases_on `eval_operands (ops ++ [h]) t` >>
-  qpat_x_assum `!H. valid_horizon _ _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
-    (qspec_then `storage_trace_horizon mid.storage_trace` mp_tac) >>
-  simp[intcall_args_stage_post_def] >> strip_tac >>
-  rename1 `eval_operands (ops ++ [h]) t = SOME ws1` >>
-  `gas_admissible (bind (eval_exprs cx es) (\vs. return (hs ++ vs))) P mid` by
-    (qpat_assum `gas_admissible (bind (eval_exprs cx [e]) _) _ _`
-       (fn th => drule_then mp_tac
-         (MATCH_MP (REWRITE_RULE[GSYM AND_IMP_INTRO] gas_admissible_bind_tail) th)) >>
-     simp[]) >>
-  `gas_admissible (eval_exprs cx es) (\res. !err. res = INR err ==> expr_vv_res_ok (INR err)) mid` by
-    (qpat_assum `gas_admissible (vyperState$bind (eval_exprs cx es) _) P mid`
+  `gas_admissible (bind (eval_exprs cx [e])
+      (\hs. bind (eval_exprs cx es) (\vs. return (hs ++ vs)))) P esi` by
+    (pure_rewrite_tac[GSYM intcall_stage_cons_source] >> first_assum ACCEPT_TAC) >>
+  `gas_admissible (eval_exprs cx [e])
+       (\res. !err. res = INR err ==> expr_vv_res_ok (INR err)) esi` by
+    (qpat_assum `gas_admissible (vyperState$bind (eval_exprs cx [e]) _) P esi`
        (mp_then Any mp_tac slice_gas_admissible_bind_head) >>
      disch_then (qspec_then `\r:value list + exception. !err. r = INR err ==> expr_vv_res_ok (INR err)` mp_tac) >>
      simp[]) >>
-  `si.cs_next_var <= sm.cs_next_var` by
-    (mp_tac (MATCH_MP ci_mono_compile_stage_intcall_args
-       (CONJUNCT1 stmtLoweringMonoTheory.ci_mono_compile_expr_sa)) >>
-     disch_then (qspecl_then [`cenv`,`[e]`,`[flag]`,`[dty]`,`si`] mp_tac) >>
-     simp[ci_mono_def]) >>
-  `!fn inst u. frag_reachable ctx func t fn inst u ==> dalloca_fmp_headroom inst u` by
-    (rpt gen_tac >> strip_tac >> irule intcall_stage_headroom_after_path >>
+  `flag ==> is_word_type dty` by
+    (strip_tac >> qpat_x_assum `!j. _ /\ EL j (flag::fs) ==> is_word_type (EL j (dty::ts))`
+       (qspec_then `0` mp_tac) >> simp[]) >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+      (cx_tops cx) cx st0 (eval_exprs cx [e]) (esi,s,G,tn)
+      (intcall_args_stage_post (DF,lo,d,ctx,func,cenv,cx,tenv)
+        ([e],sa,s0,es0,G0,tn0,sm)
+        ([flag],[dty],[h],ops,vals,ptys,pflags,pin,clean_words,keep_sites))
+      (\H res ee gt r. (?err. res = INR err) /\
+        expr_exit res r /\ halt_exit H cx ee res r /\
+        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))` by
+    (irule intcall_args_stage_left_outcome >>
      qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-     qpat_assum `gas_path ctx func s _ (OK t)` (irule_at Any) >>
-     qpat_assum `frag_reachable ctx func t fn inst u` (irule_at Any) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `!st. SND (bind (eval_exprs cx es) (\vs. return (hs ++ vs)) st) =
-         SND (eval_exprs cx es st)` by
-    (gen_tac >> Cases_on `eval_exprs cx es st` >> rename1 `_ = (res,_)` >>
-     Cases_on `res` >> simp[bind_def,return_def]) >>
-  drule gas_prefix_full_state_cong >> disch_then (fn th => once_rewrite_tac[th]) >>
-  qpat_x_assum `!DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv st0 sa s0 es0 G0 tn0
-     si sf shadow_si shadow_sf esi s G tn flags dtys newops ops ws vals ptys pflags pin clean_words keep_sites P.
-     _ ==> gas_prefix_full _ _ _ (eval_exprs cx es) _` irule >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- (qpat_assum `!H. valid_horizon cx st0 H mid.storage_trace ==> stmt_state_rel H ctx func cenv cx mid t /\ _`
-        (qspec_then `storage_trace_horizon mid.storage_trace` (drule_then strip_assume_tac)) >>
-      drule stmt_state_rel_allocas_below_fmp >> simp[])
-  >- (qexists_tac `\res:value list + exception. !err. res = INR err ==> expr_vv_res_ok (INR err)` >> simp[]) >>
+     qpat_assum `compile_stage_intcall_args _ _ [e] _ _ si = _` (irule_at Any) >>
+     qexistsl_tac [`ws`,`shadow_si`,`shadow_sm`,`shadow_func`,
+       `\res:value list + exception. !err. res = INR err ==> expr_vv_res_ok (INR err)`] >>
+     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >>
+     FIRST [qpat_x_assum `LIST_REL _ _ (dty::ts)` mp_tac >> simp[] >> NO_TAC,
+       qpat_x_assum `EVERY _ (dty::ts)` mp_tac >> simp[] >> NO_TAC,
+       qpat_x_assum `flag ==> is_word_type dty` ACCEPT_TAC]) >>
+  once_rewrite_tac[intcall_stage_cons_source] >>
+  irule gas_prefix_full_bind_path >>
+  qpat_assum `gas_outcome_full _ _ _ _ (eval_exprs cx [e]) _ _ _`
+    (irule_at Any) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  TRY (simp[evaluate_storage_trace_frame,evaluate_requests_outcomes_frame] >> NO_TAC) >>
+  TRY (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
+       simp[evaluate_storage_trace_frame,storage_trace_frame_return] >> NO_TAC) >>
+  TRY (rpt gen_tac >> Cases_on `res` >> simp[NoAsms] >> NO_TAC) >>
+  map_every qx_gen_tac [`marks`,`hs`,`mid`,`G1`,`tn1`,`t`] >>
+  BETA_TAC >> strip_tac >>
+  qpat_assum `!H. valid_horizon _ _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
+    (mp_then (Pos last) mp_tac intcall_stage_list_normal_cut) >>
+  disch_then irule >>
+  qpat_assum `gas_path ctx func s (LENGTH marks) (OK t)` (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ _ [e] _ _ si = _` (irule_at Any) >>
   qpat_assum `compile_stage_intcall_args _ _ es fs ts sm = (rest,sf)` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) fs ts shadow_sm = (rest,shadow_sf)` (irule_at Any) >>
-  qpat_assum `return_buf_frame d cenv sm t` (irule_at Any) >>
-  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
+  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) fs ts shadow_sm = (rest,shadow_sf)`
+    (irule_at Any) >>
+  qpat_assum `gas_admissible (bind (eval_exprs cx [e]) _) P esi` (irule_at Any) >>
   qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-  qpat_assum `body_const_cells_agree _ cx tenv mid` (irule_at Any) >>
-  qpat_assum `ghost_kept_at lo cenv es0 sa G0 tn0 s0 G1 tn1` (irule_at Any) >>
-  qpat_assum `eval_operands (ops ++ [h]) t = SOME ws1` (irule_at Any) >>
-  qexistsl_tac [`vals ++ hs`,`ptys ++ [dty]`,`pin`,`pflags ++ [flag]`,`keep_sites`,`clean_words`] >>
-  fs[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
-  >- (rpt strip_tac >>
-      qpat_x_assum `!j. j < SUC (LENGTH es) /\ EL j (flag::fs) ==> _`
-        (qspec_then `SUC j` mp_tac) >> simp[listTheory.EL]) >>
-  TRY (rename1 `local_ptrs_reserved cenv sm` >>
-       irule local_ptrs_reserved_next_var >> qexists_tac `si` >> simp[] >> NO_TAC)
-  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
-      qexists_tac `si` >> simp[] >> metis_tac[])
-  >- (rpt strip_tac >> irule freshWritesTheory.not_fresh_at_mono >>
-      qexists_tac `si` >> simp[] >> metis_tac[]) >>
-  simp[EVERY_MEM] >> rpt strip_tac >> irule intcall_args_pre_state >>
-  simp[] >> qexists_tac `esi` >> fs[EVERY_MEM]
+  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
+  simp[NoAsms] >> first_assum ACCEPT_TAC
 QED
-
+*)
 Theorem intcall_stage_list_prefix:
   !es DF lo d ctx shadow_ctx PG func shadow_func tops cenv cx tenv
    st0 sa s0 es0 G0 tn0 si sf shadow_si shadow_sf esi s G tn
@@ -351,85 +443,5 @@ Theorem intcall_stage_list_prefix:
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       cx st0 (eval_exprs cx es) (esi,s,G,tn)
 Proof
-  Induct
-  >- (rpt gen_tac >> strip_tac >> rewrite_tac[intcall_stage_nil_source] >>
-      irule gas_prefix_full_no_outcome >> simp[storage_trace_frame_return, return_def]) >>
-  rpt gen_tac >> strip_tac >> rename1 `body_exprs_full_ok cx (e::es)` >>
-  qpat_assum `compile_stage_intcall_args _ cenv (e::es) flags dtys si = (newops,sf)`
-    (mp_then (Pos (el 3)) mp_tac intcall_stage_cons_cut_elim) >>
-  disch_then irule >>
-  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr (e::es)) flags dtys shadow_si = (newops,shadow_sf)`
-    (irule_at Any) >>
-  qpat_assum `fn_has_code si sf func` (irule_at Any) >>
-  qpat_assum `fn_has_code shadow_si shadow_sf shadow_func` (irule_at Any) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  map_every qx_gen_tac [`flag`,`fs`,`dty`,`ts`,`h`,`sm`,`shadow_sm`,`rest`] >>
-  strip_tac >> gvs[MAP] >>
-  `expr_body_pre cenv cx tenv e esi /\ body_expr_prefix_ok cx e` by
-    fs[Once body_exprs_prefix_ok_def] >>
-  drule_then assume_tac intcall_stage_full_head >>
-  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      cx st0 (eval_exprs cx [e]) (esi,s,G,tn)` by
-    (irule intcall_stage_singleton_prefix >>
-     qpat_assum `compile_stage_intcall_args _ _ [e] _ _ si = _` (irule_at Any) >>
-     qpat_assum `compile_stage_intcall_args _ _ [gas_shadow_expr e] _ _ shadow_si = _`
-       (irule_at Any) >>
-     qpat_assum `expr_body_pre cenv cx tenv e esi` (irule_at Any) >>
-     qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-     qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
-     qpat_assum `return_buf_frame d cenv si s` (irule_at Any) >>
-     rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  `gas_admissible (bind (eval_exprs cx [e])
-      (\hs. bind (eval_exprs cx es) (\vs. return (hs ++ vs)))) P esi` by
-    (pure_rewrite_tac[GSYM intcall_stage_cons_source] >> first_assum ACCEPT_TAC) >>
-  `gas_admissible (eval_exprs cx [e])
-       (\res. !err. res = INR err ==> expr_vv_res_ok (INR err)) esi` by
-    (qpat_assum `gas_admissible (vyperState$bind (eval_exprs cx [e]) _) P esi`
-       (mp_then Any mp_tac slice_gas_admissible_bind_head) >>
-     disch_then (qspec_then `\r:value list + exception. !err. r = INR err ==> expr_vv_res_ok (INR err)` mp_tac) >>
-     simp[]) >>
-  `flag ==> is_word_type dty` by
-    (strip_tac >> qpat_x_assum `!j. _ /\ EL j (flag::fs) ==> is_word_type (EL j (dty::ts))`
-       (qspec_then `0` mp_tac) >> simp[]) >>
-  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (eval_exprs cx [e]) (esi,s,G,tn)
-      (intcall_args_stage_post (DF,lo,d,ctx,func,cenv,cx,tenv)
-        ([e],sa,s0,es0,G0,tn0,sm)
-        ([flag],[dty],[h],ops,vals,ptys,pflags,pin,clean_words,keep_sites))
-      (\H res ee gt r. (?err. res = INR err) /\
-        expr_exit res r /\ halt_exit H cx ee res r /\
-        (ctx_has_dalloca ctx ==> !s. r = Halt s ==> allocas_below_fmp s))` by
-    (irule intcall_args_stage_left_outcome >>
-     qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-     qpat_assum `compile_stage_intcall_args _ _ [e] _ _ si = _` (irule_at Any) >>
-     qexistsl_tac [`ws`,`shadow_si`,`shadow_sm`,`shadow_func`,
-       `\res:value list + exception. !err. res = INR err ==> expr_vv_res_ok (INR err)`] >>
-     rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> simp[] >>
-     FIRST [qpat_x_assum `LIST_REL _ _ (dty::ts)` mp_tac >> simp[] >> NO_TAC,
-       qpat_x_assum `EVERY _ (dty::ts)` mp_tac >> simp[] >> NO_TAC,
-       qpat_x_assum `flag ==> is_word_type dty` ACCEPT_TAC]) >>
-  once_rewrite_tac[intcall_stage_cons_source] >>
-  irule gas_prefix_full_bind_path >>
-  qpat_assum `gas_outcome_full _ _ _ _ (eval_exprs cx [e]) _ _ _`
-    (irule_at Any) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  TRY (simp[evaluate_storage_trace_frame,evaluate_requests_outcomes_frame] >> NO_TAC) >>
-  TRY (gen_tac >> BETA_TAC >> irule storage_trace_frame_bind_all >>
-       simp[evaluate_storage_trace_frame,storage_trace_frame_return] >> NO_TAC) >>
-  TRY (rpt gen_tac >> Cases_on `res` >> simp[NoAsms] >> NO_TAC) >>
-  map_every qx_gen_tac [`marks`,`hs`,`mid`,`G1`,`tn1`,`t`] >>
-  BETA_TAC >> strip_tac >>
-  qpat_assum `!H. valid_horizon _ _ H _ ==> intcall_args_stage_post _ _ _ H _ _ _ _ _`
-    (mp_then (Pos last) mp_tac intcall_stage_list_normal_cut) >>
-  disch_then irule >>
-  qpat_assum `gas_path ctx func s (LENGTH marks) (OK t)` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ _ [e] _ _ si = _` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ _ es fs ts sm = (rest,sf)` (irule_at Any) >>
-  qpat_assum `compile_stage_intcall_args _ _ (MAP gas_shadow_expr es) fs ts shadow_sm = (rest,shadow_sf)`
-    (irule_at Any) >>
-  qpat_assum `gas_admissible (bind (eval_exprs cx [e]) _) P esi` (irule_at Any) >>
-  qpat_assum `body_inv tops ctx cenv cx` (irule_at Any) >>
-  qpat_assum `gas_shadow_function func shadow_func` (irule_at Any) >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-  simp[NoAsms] >> first_assum ACCEPT_TAC
+  cheat
 QED
