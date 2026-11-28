@@ -20,16 +20,6 @@ Proof
   gvs[deploy_state_rel_mods_def]
 QED
 
-Theorem deploy_state_rel_total_balance_bounded:
-  deploy_state_rel tops deploy_bc am tx es ==>
-  total_balance am.accounts <= 2 ** 256 - 1
-Proof
-  strip_tac >>
-  `deploy_state_rel_mods [(NONE,tops)] [] deploy_bc am tx es` by
-    metis_tac[deploy_state_rel_mods_singleton] >>
-  metis_tac[deploy_state_rel_mods_total_balance_bounded]
-QED
-
 Theorem call_state_rel_no_recipient_overflow:
   call_state_rel tops runtime_bc am tx es /\
   call_external_trace (SOME (MAP SND (call_trace es))) gobs am tx =
@@ -37,16 +27,7 @@ Theorem call_state_rel_no_recipient_overflow:
   source_result_ok res
 Proof
   strip_tac >>
-  `total_balance am.accounts <= 2 ** 256 - 1` by
-    metis_tac[call_state_rel_total_balance_bounded] >>
-  `EVERY (\co. total_balance co.co_accounts <= 2 ** 256 - 1)
-      (MAP SND (call_trace es))` by
-    (irule call_trace_outcomes_total_balance_bounded >>
-     fs[call_state_rel_def, evm_state_ok_def]) >>
-  `total_balance am'.accounts <= 2 ** 256 - 1 /\ source_result_ok res` by
-    (irule source_call_external_no_recipient_overflow >>
-     qexistsl [`am`, `gobs`, `obs`, `MAP SND (call_trace es)`, `rqs`, `tx`] >>
-     simp[]) >>
+  drule_all call_state_rel_no_recipient_overflow_core >>
   gvs[]
 QED
 
@@ -80,9 +61,7 @@ Theorem deploy_state_rel_no_recipient_overflow:
   source_result_ok res
 Proof
   strip_tac >>
-  `deploy_state_rel_mods [(NONE,tops)] [] deploy_bc am tx es` by
-    metis_tac[deploy_state_rel_mods_singleton] >>
-  drule_all deploy_state_rel_mods_no_recipient_overflow >>
+  drule_all deploy_state_rel_no_recipient_overflow_core >>
   simp[]
 QED
 

@@ -68,8 +68,8 @@ inventory](compiler-proof-dependencies.md#s1s7-stage-producers).
 | S6 | `o1PipelineCorrect.run_venom_pipeline_output_shape` (same owner) | Actual O1 success + `o1_source_unit_ok` + `unit_entry_no_params` + `unit_defs_reach_uses` + `unit_fmp_unsealed` -> `unit_shape_ok` | 3 |
 | S7 | `codegenCorrectness.codegen_correct` ([source](../venom/codegen/codegenCorrectnessScript.sml)) | Generated plan/assembly + shape + context/reachability + initial frame relation -> actual `run_call`, resource alternatives or `venom_frame_rel` | 2.1 / 4 |
 
-The top uses S1 even on exempt source executions. Only its non-exempt branch
-needs S3/S4/S7 and memory/reachability facts at the concrete `Inv`
+The top uses S1 on every source execution. It needs S3/S4/S7 and
+memory/reachability facts at the concrete `Inv`
 `raw_reachable vs0` (`vs0` the O1 output's entry state) rather than one the
 caller supplies. On the ordinary path they have S5's form and come from
 `e2eProducers.o1_pipeline_memory_obligations_raw`; on the static-abort path they

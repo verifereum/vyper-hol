@@ -51,15 +51,6 @@ Theorem call_state_rel_no_recipient_overflow_core:
   total_balance am'.accounts <= 2 ** 256 - 1 /\ source_result_ok res
 Proof
   strip_tac >>
-  `value_transfer_ok tx am.accounts` by
-    fs[call_state_rel_def, world_rel_def] >>
-  `total_balance es.rollback.accounts <= 2 ** 256 - 1` by
-    (irule balance_bounded_rollback >>
-     fs[call_state_rel_def, evm_state_ok_def]) >>
-  `total_balance (accounts_after_transfer tx am.accounts) =
-     total_balance am.accounts` by
-    (irule total_balance_accounts_after_transfer >>
-     first_assum ACCEPT_TAC) >>
   `total_balance am.accounts <= 2 ** 256 - 1` by
     metis_tac[call_state_rel_total_balance_bounded] >>
   `EVERY (\co. total_balance co.co_accounts <= 2 ** 256 - 1)
@@ -71,6 +62,21 @@ Proof
   simp[]
 QED
 
+Theorem deploy_state_rel_total_balance_bounded:
+  deploy_state_rel tops deploy_bc am tx es ==>
+  total_balance am.accounts <= 2 ** 256 - 1
+Proof
+  strip_tac >>
+  `total_balance es.rollback.accounts <= 2 ** 256 - 1` by
+    (irule balance_bounded_rollback >>
+     fs[deploy_state_rel_def]) >>
+  `total_balance (accounts_after_transfer tx am.accounts) =
+     total_balance am.accounts` by
+    (irule total_balance_accounts_after_transfer >>
+     fs[deploy_state_rel_def]) >>
+  gvs[deploy_state_rel_def]
+QED
+
 Theorem deploy_state_rel_no_recipient_overflow_core:
   deploy_state_rel tops deploy_bc am tx es /\
   load_contract_trace (SOME (MAP SND (call_trace es))) gobs am tx
@@ -78,17 +84,8 @@ Theorem deploy_state_rel_no_recipient_overflow_core:
   total_balance am.accounts <= 2 ** 256 - 1 /\ source_result_ok res
 Proof
   strip_tac >>
-  `value_transfer_ok tx am.accounts` by
-    fs[deploy_state_rel_def] >>
-  `total_balance es.rollback.accounts <= 2 ** 256 - 1` by
-    (irule balance_bounded_rollback >>
-     fs[deploy_state_rel_def]) >>
-  `total_balance (accounts_after_transfer tx am.accounts) =
-     total_balance am.accounts` by
-    (irule total_balance_accounts_after_transfer >>
-     first_assum ACCEPT_TAC) >>
   `total_balance am.accounts <= 2 ** 256 - 1` by
-    gvs[deploy_state_rel_def] >>
+    metis_tac[deploy_state_rel_total_balance_bounded] >>
   `EVERY (\co. total_balance co.co_accounts <= 2 ** 256 - 1)
       (MAP SND (call_trace es))` by
     (irule call_trace_outcomes_total_balance_bounded >>

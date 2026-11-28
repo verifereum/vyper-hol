@@ -234,7 +234,6 @@ Theorem e2e_vyper_to_evm:
   !gobs tops ret am tx ctx ctx' vs es.
     external_return_type tops tx.function_name = ret /\
     vs.vs_outcomes = MAP SND (call_trace es) /\
-    ~source_exempt tops (call_external (SOME vs.vs_outcomes) gobs am tx) /\
     (?fuel. external_call_result_rel
               (storage_trace_horizon (source_storage_trace am tx (MAP SND (call_trace es)) gobs))
               tops ret tx
