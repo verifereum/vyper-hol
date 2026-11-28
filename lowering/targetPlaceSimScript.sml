@@ -136,6 +136,24 @@ Definition target_pre_def:
     target_indices_pre cenv cx env bt
 End
 
+Definition target_indices_pre_mods_def:
+  target_indices_pre_mods mods cenv cx env (NameTarget id) = T /\
+  target_indices_pre_mods mods cenv cx env (TopLevelNameTarget nsid) = T /\
+  target_indices_pre_mods mods cenv cx env (AttributeTarget t fld) =
+    target_indices_pre_mods mods cenv cx env t /\
+  target_indices_pre_mods mods cenv cx env (SubscriptTarget t e) =
+    (target_indices_pre_mods mods cenv cx env t /\
+     ~target_subscript_overlap cenv t e /\
+     !es. expr_sim_inv_mods mods cenv cx env es ==>
+          expr_body_pre_mods mods cenv cx env e es)
+End
+
+Definition target_pre_mods_def:
+  target_pre_mods mods cenv cx env bt es <=>
+    expr_sim_inv_mods mods cenv cx env es /\ ~immutable_root cx bt /\
+    target_indices_pre_mods mods cenv cx env bt
+End
+
 (* The shared case form, as expr_vv_case: target_sim at every state meeting
    target_pre, with no internal call in the target if nocalls. *)
 Definition target_case_def:
