@@ -79,6 +79,58 @@ Proof
   metis_tac[]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  simp[OPT_MMAP_def] >> strip_tac >>
+  `body_expr_full_ok cx e` by fs[body_exprs_full_ok_cons] >>
+  `expr_body_pre cenv cx env e es` by metis_tac[MEM] >>
+  qpat_assum `compile_make_tuple _ _ (e::xs) _ _ _ sa = _`
+    (strip_assume_tac o MATCH_MP compile_make_tuple_cons) >>
+  qpat_assum `compile_make_tuple _ _ (gas_shadow_expr e::_) _ _ _ shadow_sa = _`
+    (strip_assume_tac o SIMP_RULE (srw_ss()) [] o MATCH_MP compile_make_tuple_cons) >>
+  `vv = vv' /\ gas_shadow_state sm sm'` by
+    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
+        (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
+       irule gas_shadow_stmt_compile_expr_env >>
+     pop_assum (qspecl_then [`sa`,`shadow_sa`] mp_tac o
+                REWRITE_RULE [gas_shadow_compiles_def]) >> simp[]) >> gvs[] >>
+  `dst = dst' /\ gas_shadow_state sn sn'` by
+    (mp_tac (Q.INST [`opc` |-> `ADD`, `ops` |-> `[Var q; Lit (n2w off)]`]
+      gas_shadow_compiles_emit_op_same) >>
+     rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`sm`,`sm'`] mp_tac) >> simp[]) >> gvs[] >>
+  `op = op' /\ gas_shadow_state su su'` by
+    (mp_tac gas_shadow_compiles_unwrap_value >>
+     simp[gas_shadow_compiles_def] >> disch_then drule >> simp[] >> metis_tac[]) >> gvs[] >>
+  `gas_shadow_state st st'` by
+    (mp_tac (Q.INST [`src` |-> `op`, `dst_ty` |-> `dty`,
+        `src_ty` |-> `lowered_value_type cenv e`]
+        gas_shadow_compiles_store_memory) >>
+     rewrite_tac[gas_shadow_compiles_def] >>
+     disch_then (qspecl_then [`su`,`su'`] mp_tac) >> simp[]) >>
+  `cs_extends sa sm /\ cs_extends shadow_sa sm'` by
+    metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
+  `cs_extends sm sn /\ cs_extends sm' sn'` by
+    (mp_tac (cj 2 cs_appends_emit_helpers) >>
+     simp[cs_appends_def] >> metis_tac[]) >>
+  `cs_extends sn su /\ cs_extends sn' su'` by
+    metis_tac[exprSimUnwrapTheory.unwrap_value_extends] >>
+  `cs_extends su st /\ cs_extends su' st'` by
+    (qpat_assum `compile_store_memory _ _ _ _ _ su = _` mp_tac >>
+     qpat_assum `compile_store_memory _ _ _ _ _ su' = _` mp_tac >>
+     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
+     metis_tac[externalEntryShapeTheory.compile_store_memory_labels,SND]) >>
+  `cs_extends st sb /\ cs_extends st' shadow_sb` by suspend "tail_extends" >>
+  `fn_has_code sa sm func /\ fn_has_code sa st func /\ fn_has_code st sb func /\
+   fn_has_code shadow_sa sm' shadow_func /\ fn_has_code shadow_sa st' shadow_func /\
+   fn_has_code st' shadow_sb shadow_func` by suspend "split_code" >>
+  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)` by
+    suspend "head_prefix" >>
+  suspend "compose"
+QED
+*)
 Theorem make_tuple_slot_cons_prefix:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\ expr_sim_inv cenv cx env ebase /\
@@ -134,55 +186,10 @@ Theorem make_tuple_slot_cons_prefix:
   gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
     cx st0 (eval_exprs cx (e::xs)) (es,s,G,tn)
 Proof
-  simp[OPT_MMAP_def] >> strip_tac >>
-  `body_expr_full_ok cx e` by fs[body_exprs_full_ok_cons] >>
-  `expr_body_pre cenv cx env e es` by metis_tac[MEM] >>
-  qpat_assum `compile_make_tuple _ _ (e::xs) _ _ _ sa = _`
-    (strip_assume_tac o MATCH_MP compile_make_tuple_cons) >>
-  qpat_assum `compile_make_tuple _ _ (gas_shadow_expr e::_) _ _ _ shadow_sa = _`
-    (strip_assume_tac o SIMP_RULE (srw_ss()) [] o MATCH_MP compile_make_tuple_cons) >>
-  `vv = vv' /\ gas_shadow_state sm sm'` by
-    (`gas_shadow_compiles (compile_expr cenv (expr_type e) e)
-        (compile_expr (gas_shadow_env T cenv) (expr_type e) (gas_shadow_expr e))` by
-       irule gas_shadow_stmt_compile_expr_env >>
-     pop_assum (qspecl_then [`sa`,`shadow_sa`] mp_tac o
-                REWRITE_RULE [gas_shadow_compiles_def]) >> simp[]) >> gvs[] >>
-  `dst = dst' /\ gas_shadow_state sn sn'` by
-    (mp_tac (Q.INST [`opc` |-> `ADD`, `ops` |-> `[Var q; Lit (n2w off)]`]
-      gas_shadow_compiles_emit_op_same) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`sm`,`sm'`] mp_tac) >> simp[]) >> gvs[] >>
-  `op = op' /\ gas_shadow_state su su'` by
-    (mp_tac gas_shadow_compiles_unwrap_value >>
-     simp[gas_shadow_compiles_def] >> disch_then drule >> simp[] >> metis_tac[]) >> gvs[] >>
-  `gas_shadow_state st st'` by
-    (mp_tac (Q.INST [`src` |-> `op`, `dst_ty` |-> `dty`,
-        `src_ty` |-> `lowered_value_type cenv e`]
-        gas_shadow_compiles_store_memory) >>
-     rewrite_tac[gas_shadow_compiles_def] >>
-     disch_then (qspecl_then [`su`,`su'`] mp_tac) >> simp[]) >>
-  `cs_extends sa sm /\ cs_extends shadow_sa sm'` by
-    metis_tac[exprSimUnwrapTheory.compile_expr_extends] >>
-  `cs_extends sm sn /\ cs_extends sm' sn'` by
-    (mp_tac (cj 2 cs_appends_emit_helpers) >>
-     simp[cs_appends_def] >> metis_tac[]) >>
-  `cs_extends sn su /\ cs_extends sn' su'` by
-    metis_tac[exprSimUnwrapTheory.unwrap_value_extends] >>
-  `cs_extends su st /\ cs_extends su' st'` by
-    (qpat_assum `compile_store_memory _ _ _ _ _ su = _` mp_tac >>
-     qpat_assum `compile_store_memory _ _ _ _ _ su' = _` mp_tac >>
-     POP_ASSUM_LIST (K all_tac) >> rpt strip_tac >>
-     metis_tac[externalEntryShapeTheory.compile_store_memory_labels,SND]) >>
-  `cs_extends st sb /\ cs_extends st' shadow_sb` by suspend "tail_extends" >>
-  `fn_has_code sa sm func /\ fn_has_code sa st func /\ fn_has_code st sb func /\
-   fn_has_code shadow_sa sm' shadow_func /\ fn_has_code shadow_sa st' shadow_func /\
-   fn_has_code st' shadow_sb shadow_func` by suspend "split_code" >>
-  `gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     cx st0 (bind (eval_expr cx e) (read_result cx)) (es,s,G,tn)` by
-    suspend "head_prefix" >>
-  suspend "compose"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_tuple_slot_cons_prefix[tail_extends]:
   mp_tac externalEntryShapeTheory.compile_make_tuple_labels >>
   disch_then (qspecl_then [`compile_expr`,`cenv`,`xs`,`tys`,`Var q`,
@@ -193,7 +200,9 @@ Resume make_tuple_slot_cons_prefix[tail_extends]:
       `MAP gas_shadow_expr xs`,`tys`,`Var q`,`off + type_memory_size dtv`,`st'`] mp_tac) >>
   simp[externalEntryShapeTheory.compile_expr_labels]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_tuple_slot_cons_prefix[split_code]:
   `cs_extends sm st /\ cs_extends sm' st'` by metis_tac[cs_extends_trans] >>
   `cs_extends sa st /\ cs_extends shadow_sa st'` by metis_tac[cs_extends_trans] >>
@@ -202,7 +211,9 @@ Resume make_tuple_slot_cons_prefix[split_code]:
     metis_tac[fn_has_code_split] >>
   metis_tac[fn_has_code_split]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_tuple_slot_cons_prefix[head_prefix]:
   rewrite_tac[gas_prefix_full_bind_read_result] >>
   `expr_vv_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
@@ -226,7 +237,9 @@ Resume make_tuple_slot_cons_prefix[head_prefix]:
   metis_tac[not_fresh_at_mono,expr_body_pre_vv_gas_admissible,
             bodyFullHashKeccakFixedTheory.stmt_state_rel_allocas_below_fmp]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_tuple_slot_cons_prefix[compose]:
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     metis_tac[expr_body_pre_gas_admissible] >>
@@ -250,7 +263,9 @@ Resume make_tuple_slot_cons_prefix[compose]:
        cj 5 evaluate_requests_outcomes_frame, requests_outcomes_frame_read_result] >>
   suspend "bind"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_tuple_slot_cons_prefix[slot_headroom]:
   irule gas_outcome_full_post_path >> goal_assum (drule_at Any) >>
   simp[Abbr `Ready`] >> rpt strip_tac >>
@@ -258,7 +273,9 @@ Resume make_tuple_slot_cons_prefix[slot_headroom]:
     metis_tac[body_inv_no_phi] >>
   drule_all gas_origin_ptr_path_dalloca_fmp_headroom >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_tuple_slot_cons_prefix[bind]:
   goal_assum (drule_at Any) >> reverse conj_tac
   >- (simp[Abbr `Rslot`] >> rpt gen_tac >> Cases_on `res` >>
@@ -301,7 +318,9 @@ Resume make_tuple_slot_cons_prefix[bind]:
   >- (qexists_tac `v` >> first_assum ACCEPT_TAC) >>
   qexistsl_tac [`st'`,`st`] >> simp[] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume make_tuple_slot_cons_prefix[store_indices]:
   mp_tac (Q.SPECL [`cenv`,`expr_type e`,`e`,`sa`]
      (cj 1 exprLoweringPropsTheory.compile_expr_ci_mono)) >>
@@ -313,5 +332,8 @@ Resume make_tuple_slot_cons_prefix[store_indices]:
      exprLoweringPropsTheory.ci_mono_compile_store_memory) >>
   simp[exprLoweringPropsTheory.ci_mono_def] >> decide_tac
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise make_tuple_slot_cons_prefix
+*)

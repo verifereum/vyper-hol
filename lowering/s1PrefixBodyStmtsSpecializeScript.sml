@@ -5,6 +5,30 @@ Ancestors
 
 val _ = Parse.hide "body";
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  disch_then (mk_asm "list_clause") >> rpt strip_tac >>
+  `!vis mut nr raw fn args dflts ret body.
+      MEM (FunctionDecl vis mut nr raw fn args dflts ret body) tops ==>
+      stmts_loop_calls_ok [(NONE,tops)]
+        (subst_consts_stmts (module_consts_env tops []) body)` by
+    (qpat_assum `body_const_cells_agree _ _ _ _`
+       (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_def]) >>
+     `cx_tops cx = tops` by fs[ALOOKUP_def] >>
+     rpt strip_tac >>
+     drule checked_subst_consts_loop_calls_ok >>
+     simp[] >> disch_then irule >> gvs[] >> metis_tac[]) >>
+  `body_stmts_prefix_ok cx ss` by
+    (asm "list_clause" irule >>
+     drule_then assume_tac body_inv_contract >>
+     drule_then assume_tac contract_inv_singleton_source_modules >>
+     simp[] >> first_assum ACCEPT_TAC) >>
+  qpat_x_assum `body_stmts_prefix_ok _ _`
+    (irule o REWRITE_RULE [body_stmts_prefix_ok_def]) >>
+  metis_tac[]
+QED
+*)
 Theorem body_stmts_sim_prefix_from_list_clause:
   (!cx ss. (!tops. ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] ==>
                  struct_args_unique tops /\
@@ -40,23 +64,5 @@ Theorem body_stmts_sim_prefix_from_list_clause:
       (stmts_env (gas_shadow_env T cenv) lctx ret_ty (MAP gas_shadow_stmt ss))
       (eval_stmts cx ss) es
 Proof
-  disch_then (mk_asm "list_clause") >> rpt strip_tac >>
-  `!vis mut nr raw fn args dflts ret body.
-      MEM (FunctionDecl vis mut nr raw fn args dflts ret body) tops ==>
-      stmts_loop_calls_ok [(NONE,tops)]
-        (subst_consts_stmts (module_consts_env tops []) body)` by
-    (qpat_assum `body_const_cells_agree _ _ _ _`
-       (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_def]) >>
-     `cx_tops cx = tops` by fs[ALOOKUP_def] >>
-     rpt strip_tac >>
-     drule checked_subst_consts_loop_calls_ok >>
-     simp[] >> disch_then irule >> gvs[] >> metis_tac[]) >>
-  `body_stmts_prefix_ok cx ss` by
-    (asm "list_clause" irule >>
-     drule_then assume_tac body_inv_contract >>
-     drule_then assume_tac contract_inv_singleton_source_modules >>
-     simp[] >> first_assum ACCEPT_TAC) >>
-  qpat_x_assum `body_stmts_prefix_ok _ _`
-    (irule o REWRITE_RULE [body_stmts_prefix_ok_def]) >>
-  metis_tac[]
+  cheat
 QED

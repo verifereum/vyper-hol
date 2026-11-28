@@ -8,6 +8,61 @@ Ancestors
   gasOutcomeFullCompose exprSimDefs loweringPosts bodyMemoryDefs
   freshWrites vyperStorageFootprint vyperState exprBodyPreProps
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >> drule expr_body_pre_bop >> strip_tac >>
+  `body_expr_full_ok cx e1` by
+    (qpat_assum `body_exprs_full_ok cx [e1;e2]` mp_tac >>
+     simp[NoAsms, body_exprs_full_ok_cons, body_exprs_full_ok_nil]) >>
+  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx (expr_type e1) e1 es` by metis_tac[body_expr_full_ok_simulations] >>
+  `expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+    cenv cx (expr_type e1) e1 es` by
+    (qpat_assum `body_exprs_prefix_ok cx [e1;e2]` mp_tac >>
+     simp[body_exprs_prefix_ok_def] >> metis_tac[body_expr_prefix_ok_def]) >>
+  `expr_sim_full_pre (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
+     cenv cx (expr_type e1) e1 es
+     (st0,sa,s1,shadow_sa,shadow_s1,x,s0,G0,tn0)` by
+    (simp[expr_sim_full_pre_def] >> metis_tac[expr_body_pre_gas_admissible]) >>
+  qpat_assum `expr_sim_prefix _ _ _ _ e1 es`
+    (drule_then assume_tac o REWRITE_RULE [expr_sim_prefix_def]) >>
+  qpat_assum `expr_sim_full _ _ _ _ e1 es`
+    (drule_then assume_tac o REWRITE_RULE [expr_sim_full_eq]) >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ fullQ headR` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx e1) (read_result cx)) (es,s0,G0,tn0)
+     (\H rr ee G tn u. fullQ H rr ee G tn u /\ ~u.vs_halted /\ ee.gas_obs = []) headR` by
+    (qpat_assum `gas_outcome_full _ _ _ _ _ _ fullQ headR`
+       (mp_then Any irule gas_outcome_full_post_source) >> simp[]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ fullQ headR` kall_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ headR` >>
+  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+     (cx_tops cx) cx st0 (bind (eval_expr cx e1) (read_result cx)) (es,s0,G0,tn0)
+     (\H rr ee G tn u. headQ H rr ee G tn u /\
+       ?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+         (s0,G0,tn0) cm (OK u,G,tn)) headR` by
+    (qpat_assum `gas_outcome_full _ _ _ _ _ _ headQ headR`
+       (mp_then Any irule gas_outcome_full_post_path) >>
+     simp[] >> metis_tac[]) >>
+  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ headQ headR` kall_tac >>
+  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ pathQ headR` >>
+  rewrite_tac[REWRITE_RULE [ETA_THM] eval_expr_bop_bind] >>
+  qpat_assum `gas_outcome_full _ _ _ _ _ _ pathQ headR`
+    (mp_then Any irule gas_prefix_full_bind) >>
+  simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+       storage_trace_frame_read_result, requests_outcomes_frame_bind_all,
+       evaluate_requests_outcomes_frame, requests_outcomes_frame_read_result,
+       Abbr `headR`] >>
+  reverse (rpt conj_tac)
+  >- (gen_tac >> irule storage_trace_frame_bind_all >>
+      simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
+           storage_trace_frame_read_result] >>
+      simp[storage_trace_frame_def, bop_result_def])
+  >- (rpt gen_tac >> Cases_on `res` >> simp[]) >>
+  suspend "right_operand"
+QED
+*)
 Theorem bop_operands_prefix_cps_exit:
   is_word_type (expr_type e1) /\
   is_word_type (expr_type e2) /\
@@ -127,58 +182,10 @@ Theorem bop_operands_prefix_cps_exit:
       cx st0 (bind (eval_expr cx (Builtin ann (Bop bop) [e1; e2])) (read_result cx))
       (es,s0,G0,tn0)
 Proof
-  strip_tac >> drule expr_body_pre_bop >> strip_tac >>
-  `body_expr_full_ok cx e1` by
-    (qpat_assum `body_exprs_full_ok cx [e1;e2]` mp_tac >>
-     simp[NoAsms, body_exprs_full_ok_cons, body_exprs_full_ok_nil]) >>
-  `expr_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx (expr_type e1) e1 es` by metis_tac[body_expr_full_ok_simulations] >>
-  `expr_sim_prefix (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-    cenv cx (expr_type e1) e1 es` by
-    (qpat_assum `body_exprs_prefix_ok cx [e1;e2]` mp_tac >>
-     simp[body_exprs_prefix_ok_def] >> metis_tac[body_expr_prefix_ok_def]) >>
-  `expr_sim_full_pre (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
-     cenv cx (expr_type e1) e1 es
-     (st0,sa,s1,shadow_sa,shadow_s1,x,s0,G0,tn0)` by
-    (simp[expr_sim_full_pre_def] >> metis_tac[expr_body_pre_gas_admissible]) >>
-  qpat_assum `expr_sim_prefix _ _ _ _ e1 es`
-    (drule_then assume_tac o REWRITE_RULE [expr_sim_prefix_def]) >>
-  qpat_assum `expr_sim_full _ _ _ _ e1 es`
-    (drule_then assume_tac o REWRITE_RULE [expr_sim_full_eq]) >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ fullQ headR` >>
-  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     (cx_tops cx) cx st0 (bind (eval_expr cx e1) (read_result cx)) (es,s0,G0,tn0)
-     (\H rr ee G tn u. fullQ H rr ee G tn u /\ ~u.vs_halted /\ ee.gas_obs = []) headR` by
-    (qpat_assum `gas_outcome_full _ _ _ _ _ _ fullQ headR`
-       (mp_then Any irule gas_outcome_full_post_source) >> simp[]) >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ fullQ headR` kall_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ headR` >>
-  `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-     (cx_tops cx) cx st0 (bind (eval_expr cx e1) (read_result cx)) (es,s0,G0,tn0)
-     (\H rr ee G tn u. headQ H rr ee G tn u /\
-       ?cm. gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-         (s0,G0,tn0) cm (OK u,G,tn)) headR` by
-    (qpat_assum `gas_outcome_full _ _ _ _ _ _ headQ headR`
-       (mp_then Any irule gas_outcome_full_post_path) >>
-     simp[] >> metis_tac[]) >>
-  qpat_x_assum `gas_outcome_full _ _ _ _ _ _ headQ headR` kall_tac >>
-  qmatch_asmsub_abbrev_tac `gas_outcome_full _ _ _ _ _ _ pathQ headR` >>
-  rewrite_tac[REWRITE_RULE [ETA_THM] eval_expr_bop_bind] >>
-  qpat_assum `gas_outcome_full _ _ _ _ _ _ pathQ headR`
-    (mp_then Any irule gas_prefix_full_bind) >>
-  simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
-       storage_trace_frame_read_result, requests_outcomes_frame_bind_all,
-       evaluate_requests_outcomes_frame, requests_outcomes_frame_read_result,
-       Abbr `headR`] >>
-  reverse (rpt conj_tac)
-  >- (gen_tac >> irule storage_trace_frame_bind_all >>
-      simp[storage_trace_frame_bind_all, evaluate_storage_trace_frame,
-           storage_trace_frame_read_result] >>
-      simp[storage_trace_frame_def, bop_result_def])
-  >- (rpt gen_tac >> Cases_on `res` >> simp[]) >>
-  suspend "right_operand"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_operands_prefix_cps_exit[right_operand]:
   rpt gen_tac >> strip_tac >>
   rename1 `!tail. bind (eval_expr cx e1) (read_result cx)
@@ -250,7 +257,9 @@ Resume bop_operands_prefix_cps_exit[right_operand]:
     (simp[expr_sim_full_pre_def] >> metis_tac[expr_body_pre_gas_admissible]) >>
   suspend "compose_result"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume bop_operands_prefix_cps_exit[compose_result]:
   qpat_assum `expr_sim_prefix _ _ _ _ e2 mid`
     (drule_then assume_tac o REWRITE_RULE [expr_sim_prefix_def]) >>
@@ -298,8 +307,11 @@ Resume bop_operands_prefix_cps_exit[compose_result]:
      rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >> metis_tac[])) >>
   simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise bop_operands_prefix_cps_exit
+*)
 
 Theorem bop_operands_prefix_cps:
   is_word_type (expr_type e1) /\

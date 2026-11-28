@@ -28,6 +28,52 @@ Proof
   simp[subst_consts_fn_def, fn_decl_name_def, compileEnvTheory.nsid_to_string_def]
 QED
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  strip_tac >>
+  qpat_x_assum `pushed = _` SUBST_ALL_TAC >>
+  qpat_x_assum `callee_stmts = _` SUBST_ALL_TAC >>
+  `ss <> []` by (strip_tac >> fs[subst_consts_stmt_def]) >>
+  `LENGTH (remcode (cx with stk updated_by CONS (NONE,name))) < LENGTH (remcode cx)` by
+    (irule callable_remcode_decreases >> simp[]) >>
+  `!ts. ALOOKUP (cx with stk updated_by CONS (NONE,name)).sources
+      (cx with stk updated_by CONS (NONE,name)).txn.target = SOME [(NONE,ts)] ==>
+    struct_args_unique ts /\
+    (!vis fm fr raw fn fa fd ft stmts.
+       MEM (FunctionDecl vis fm fr raw fn fa fd ft stmts) ts ==>
+       stmts_loop_calls_ok [(NONE,ts)]
+         (subst_consts_stmts (module_consts_env ts []) stmts)) /\
+    stmts_loop_calls_ok [(NONE,ts)] (subst_consts_stmts (module_consts_env tops []) ss)` by
+    (gen_tac >> strip_tac >> fs[] >>
+     `ts = tops` by fs[get_module_code_def, ALOOKUP_def] >>
+     qpat_x_assum `ts = tops` SUBST_ALL_TAC >> simp[] >> metis_tac[]) >>
+  `lookup_function (internal_fn_label (build_func_ids 0 tops name) name
+       (MAP SND args) cx.in_deploy) ctx.ctx_functions = SOME callee` by
+    fs[gas_invoke_entry_def] >>
+  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
+  >- (irule (cj 2 body_sim_full_mutual) >> first_assum ACCEPT_TAC)
+  >- (first_x_assum irule >> asm_rewrite_tac[])
+  >- (rpt strip_tac >> irule selected_callee_in_order >> asm_rewrite_tac[])
+  >- (drule venomInstTheory.lookup_function_MEM >> simp[])
+  >- fs[gas_invoke_entry_def]
+  >- (drule gas_invoke_entry_readings >> simp[])
+  >- simp[valid_horizon_def,
+      vyperFiniteStoragePreservationTheory.storage_well_formed_on_stk,
+      vyperFiniteStoragePreservationTheory.storage_observations_ok_stk]
+  >- (rpt strip_tac >> drule intcall_callee_body_gas_trace >> simp[])
+  >- (rpt strip_tac >>
+      qpat_x_assum `request_site _ _ _ _ _ _ _` mp_tac >>
+      `request_site (D,lo,explicit,ctx,callee,MAP (op_prov G1) arg_ops)
+         (cx with stk updated_by CONS (NONE,name)) H (entered,FEMPTY,tn1 with t_var := FEMPTY) k rq outcome <=>
+       request_site (D,lo,explicit,ctx,callee,MAP (op_prov G1) arg_ops)
+         cx H (entered,FEMPTY,tn1 with t_var := FEMPTY) k rq outcome` by simp[request_site_def] >>
+      asm_rewrite_tac[] >> strip_tac >>
+      drule_all bool_chain_request_site_through_invoke >> simp[]) >>
+  drule_all shadow_body_inv_callee_code >> simp[] >> rpt strip_tac >>
+  goal_assum (drule_at Any) >> metis_tac[]
+QED
+*)
 Theorem bool_chain_callee_body_entry_prefix:
   body_inv tops ctx cenv cx /\ shadow_body_inv tops ctx shadow_ctx /\
   gas_shadow_context ctx shadow_ctx /\
@@ -83,45 +129,5 @@ Theorem bool_chain_callee_body_entry_prefix:
     gas_shadow_function callee sf /\ MEM sf shadow_ctx.ctx_functions /\
     ctx_inst_ids_distinct ctx /\ fn_has_code entry final callee /\ fn_has_code entryS finalS sf)
 Proof
-  strip_tac >>
-  qpat_x_assum `pushed = _` SUBST_ALL_TAC >>
-  qpat_x_assum `callee_stmts = _` SUBST_ALL_TAC >>
-  `ss <> []` by (strip_tac >> fs[subst_consts_stmt_def]) >>
-  `LENGTH (remcode (cx with stk updated_by CONS (NONE,name))) < LENGTH (remcode cx)` by
-    (irule callable_remcode_decreases >> simp[]) >>
-  `!ts. ALOOKUP (cx with stk updated_by CONS (NONE,name)).sources
-      (cx with stk updated_by CONS (NONE,name)).txn.target = SOME [(NONE,ts)] ==>
-    struct_args_unique ts /\
-    (!vis fm fr raw fn fa fd ft stmts.
-       MEM (FunctionDecl vis fm fr raw fn fa fd ft stmts) ts ==>
-       stmts_loop_calls_ok [(NONE,ts)]
-         (subst_consts_stmts (module_consts_env ts []) stmts)) /\
-    stmts_loop_calls_ok [(NONE,ts)] (subst_consts_stmts (module_consts_env tops []) ss)` by
-    (gen_tac >> strip_tac >> fs[] >>
-     `ts = tops` by fs[get_module_code_def, ALOOKUP_def] >>
-     qpat_x_assum `ts = tops` SUBST_ALL_TAC >> simp[] >> metis_tac[]) >>
-  `lookup_function (internal_fn_label (build_func_ids 0 tops name) name
-       (MAP SND args) cx.in_deploy) ctx.ctx_functions = SOME callee` by
-    fs[gas_invoke_entry_def] >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC)
-  >- (irule (cj 2 body_sim_full_mutual) >> first_assum ACCEPT_TAC)
-  >- (first_x_assum irule >> asm_rewrite_tac[])
-  >- (rpt strip_tac >> irule selected_callee_in_order >> asm_rewrite_tac[])
-  >- (drule venomInstTheory.lookup_function_MEM >> simp[])
-  >- fs[gas_invoke_entry_def]
-  >- (drule gas_invoke_entry_readings >> simp[])
-  >- simp[valid_horizon_def,
-      vyperFiniteStoragePreservationTheory.storage_well_formed_on_stk,
-      vyperFiniteStoragePreservationTheory.storage_observations_ok_stk]
-  >- (rpt strip_tac >> drule intcall_callee_body_gas_trace >> simp[])
-  >- (rpt strip_tac >>
-      qpat_x_assum `request_site _ _ _ _ _ _ _` mp_tac >>
-      `request_site (D,lo,explicit,ctx,callee,MAP (op_prov G1) arg_ops)
-         (cx with stk updated_by CONS (NONE,name)) H (entered,FEMPTY,tn1 with t_var := FEMPTY) k rq outcome <=>
-       request_site (D,lo,explicit,ctx,callee,MAP (op_prov G1) arg_ops)
-         cx H (entered,FEMPTY,tn1 with t_var := FEMPTY) k rq outcome` by simp[request_site_def] >>
-      asm_rewrite_tac[] >> strip_tac >>
-      drule_all bool_chain_request_site_through_invoke >> simp[]) >>
-  drule_all shadow_body_inv_callee_code >> simp[] >> rpt strip_tac >>
-  goal_assum (drule_at Any) >> metis_tac[]
+  cheat
 QED

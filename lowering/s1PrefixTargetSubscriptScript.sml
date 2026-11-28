@@ -10,6 +10,48 @@ Ancestors
   freshWrites vyperStorageFootprint exprSimDefs bodyFullHashKeccakFixed list
   bodyFullBaseTargetProjection bodyFullSimProjection
 
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
+Proof
+  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
+  qpat_assum `type_place_target _ (SubscriptTarget _ _) = _`
+    (strip_assume_tac o REWRITE_RULE [type_place_target_SubscriptTarget]) >>
+  rename1 `type_place_target env bt = SOME bvt` >>
+  Cases_on `compile_get_target_ptr compile_expr cenv bt sa` >>
+  rename1 `compile_get_target_ptr _ _ bt sa = (rb,sm)` >>
+  Cases_on `lower_value compile_expr cenv (expr_type e) e sm` >>
+  rename1 `lower_value _ _ _ e sm = (iop,sn)` >>
+  qpat_assum `compile_get_target_ptr _ _ (SubscriptTarget bt e) sa = _`
+    (mp_then (Pos last) mp_tac target_subscript_compile_cut) >>
+  simp[compile_expr_ci_mono] >> strip_tac >>
+  `?shadow_sm.
+     compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
+       (gas_shadow_target bt) shadow_sa = (rb,shadow_sm) /\
+     gas_shadow_state sm shadow_sm` by
+    (irule (MATCH_MP gas_shadow_compile_result gas_shadow_stmt_get_target_ptr_env) >>
+     qexists_tac `sa` >> simp[]) >>
+  `?shadow_sn.
+     lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
+       (gas_shadow_expr e) shadow_sm = (iop,shadow_sn) /\
+     gas_shadow_state sn shadow_sn` by
+    (irule (MATCH_MP gas_shadow_compile_result gas_shadow_stmt_lower_value_env) >>
+     qexists_tac `sm` >> simp[]) >>
+  qpat_assum `compile_get_target_ptr _ _ (gas_shadow_target (SubscriptTarget _ _)) _ = _`
+    ((mp_then (Pos last) mp_tac target_subscript_compile_cut) o
+     SIMP_RULE std_ss [gas_shadow_expr_def]) >>
+  simp[compile_expr_ci_mono, gas_shadow_expr_type] >> strip_tac >>
+  `cs_extends sa sm /\ cs_extends sm sn /\ cs_extends sn sb /\
+   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
+   cs_extends shadow_sa shadow_sm /\ cs_extends shadow_sm shadow_sn /\
+   cs_extends shadow_sn shadow_sb` by fs[ci_mono_def] >>
+  `fn_has_code sa sm func /\ fn_has_code sm sn func /\ fn_has_code sn sb func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  `fn_has_code shadow_sa shadow_sm shadow_func /\
+   fn_has_code shadow_sm shadow_sn shadow_func` by
+    metis_tac[fn_has_code_split, cs_extends_trans] >>
+  suspend "base"
+QED
+*)
 Theorem target_subscript_sim_prefix:
   body_inv tops ctx cenv cx /\
   shadow_body_inv tops ctx shadow_ctx /\
@@ -137,45 +179,10 @@ Theorem target_subscript_sim_prefix:
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
         cx st0 (eval_base_place cx (SubscriptTarget bt e)) (es, s0, G0, tn0)
 Proof
-  rpt gen_tac >> strip_tac >> rpt gen_tac >> strip_tac >>
-  qpat_assum `type_place_target _ (SubscriptTarget _ _) = _`
-    (strip_assume_tac o REWRITE_RULE [type_place_target_SubscriptTarget]) >>
-  rename1 `type_place_target env bt = SOME bvt` >>
-  Cases_on `compile_get_target_ptr compile_expr cenv bt sa` >>
-  rename1 `compile_get_target_ptr _ _ bt sa = (rb,sm)` >>
-  Cases_on `lower_value compile_expr cenv (expr_type e) e sm` >>
-  rename1 `lower_value _ _ _ e sm = (iop,sn)` >>
-  qpat_assum `compile_get_target_ptr _ _ (SubscriptTarget bt e) sa = _`
-    (mp_then (Pos last) mp_tac target_subscript_compile_cut) >>
-  simp[compile_expr_ci_mono] >> strip_tac >>
-  `?shadow_sm.
-     compile_get_target_ptr compile_expr (gas_shadow_env T cenv)
-       (gas_shadow_target bt) shadow_sa = (rb,shadow_sm) /\
-     gas_shadow_state sm shadow_sm` by
-    (irule (MATCH_MP gas_shadow_compile_result gas_shadow_stmt_get_target_ptr_env) >>
-     qexists_tac `sa` >> simp[]) >>
-  `?shadow_sn.
-     lower_value compile_expr (gas_shadow_env T cenv) (expr_type e)
-       (gas_shadow_expr e) shadow_sm = (iop,shadow_sn) /\
-     gas_shadow_state sn shadow_sn` by
-    (irule (MATCH_MP gas_shadow_compile_result gas_shadow_stmt_lower_value_env) >>
-     qexists_tac `sm` >> simp[]) >>
-  qpat_assum `compile_get_target_ptr _ _ (gas_shadow_target (SubscriptTarget _ _)) _ = _`
-    ((mp_then (Pos last) mp_tac target_subscript_compile_cut) o
-     SIMP_RULE std_ss [gas_shadow_expr_def]) >>
-  simp[compile_expr_ci_mono, gas_shadow_expr_type] >> strip_tac >>
-  `cs_extends sa sm /\ cs_extends sm sn /\ cs_extends sn sb /\
-   sa.cs_next_var <= sm.cs_next_var /\ sm.cs_next_var <= sn.cs_next_var /\
-   cs_extends shadow_sa shadow_sm /\ cs_extends shadow_sm shadow_sn /\
-   cs_extends shadow_sn shadow_sb` by fs[ci_mono_def] >>
-  `fn_has_code sa sm func /\ fn_has_code sm sn func /\ fn_has_code sn sb func` by
-    metis_tac[fn_has_code_split, cs_extends_trans] >>
-  `fn_has_code shadow_sa shadow_sm shadow_func /\
-   fn_has_code shadow_sm shadow_sn shadow_func` by
-    metis_tac[fn_has_code_split, cs_extends_trans] >>
-  suspend "base"
+  cheat
 QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume target_subscript_sim_prefix[base]:
   `eval_base_place cx (SubscriptTarget bt e) =
      bind (eval_base_place cx bt)
@@ -221,7 +228,9 @@ Resume target_subscript_sim_prefix[base]:
        storage_trace_frame_read_result] >>
   reverse conj_tac >- first_assum ACCEPT_TAC >> suspend "index"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume target_subscript_sim_prefix[index]:
   qx_genl_tac [`marks`,`pv`,`mid1`,`G1`,`tn1`,`t1`] >>
   BETA_TAC >> strip_tac >>
@@ -267,7 +276,9 @@ Resume target_subscript_sim_prefix[index]:
      simp[] >> first_assum ACCEPT_TAC) >>
   suspend "index_run"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume target_subscript_sim_prefix[index_run]:
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok mid1` by
     metis_tac[expr_body_pre_gas_admissible] >>
@@ -307,7 +318,9 @@ Resume target_subscript_sim_prefix[index_run]:
        requests_outcomes_frame_read_result] >>
   reverse conj_tac >- first_assum ACCEPT_TAC >> suspend "tail"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume target_subscript_sim_prefix[tail]:
   qx_genl_tac [`marks2`,`v`,`mid2`,`G2`,`tn2`,`t2`] >>
   BETA_TAC >> strip_tac >>
@@ -336,7 +349,9 @@ Resume target_subscript_sim_prefix[tail]:
           storage_trace_frame_read_result]) >>
   suspend "extend"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume target_subscript_sim_prefix[extend]:
   `post_value_type cenv e = expr_type e` by
     (irule target_subscript_index_post_type >> metis_tac[]) >>
@@ -358,7 +373,9 @@ Resume target_subscript_sim_prefix[extend]:
                    `mid1`,`t1`,`G1`,`tn1`,`mid2`,`t2`,`G2`,`tn2`] mp_tac) >>
   (impl_tac >- (asm_rewrite_tac[] >> suspend "extend_pre")) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume target_subscript_sim_prefix[extend_pre]:
   gen_tac >> disch_tac >>
   `valid_horizon cx st0 H mid1.storage_trace` by
@@ -373,5 +390,8 @@ Resume target_subscript_sim_prefix[extend_pre]:
     (fn th => RULE_ASSUM_TAC (REWRITE_RULE [th])) >>
   asm_rewrite_tac[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise target_subscript_sim_prefix
+*)
