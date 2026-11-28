@@ -7,7 +7,7 @@ Ancestors
   bodyIntCallDefaultSliceOccurrenceAccessMods gasShadowCompileHelpers
   vyperTypeEvalProofs vyperFiniteStoragePreservation vyperStorageFootprint
   gasOutcomeFullMods exprSimHypsDefs exprLowering compileEnv pair list alist
-  bodyIntCallArgMetadataMods bodyFullPredsMods bodyInvSplit compileUnit
+  bodyIntCallArgMetadataMods bodyFullPreds bodyFullPredsMods bodyInvSplit compileUnit
   loweringShapeProps constSubstMods vyperTypeContract vyperTypeContractStaticMaps
   linkedNsidProps venomFnInstsProofs
 
@@ -253,8 +253,7 @@ Theorem selected_default_stage_enter_mods:
   let ds = DROP n (subst_consts_exprs_mods (consts_env_mods mods) dflts) in
   contract_inv mods exps ctx ce cx /\
   expr_sim_inv_mods mods ce cx env mid /\ body_const_cells_agree mods cx env mid /\
-  exports_ok cx.layouts cx.txn.target mods exps /\
-  MEM (src,name) (linked_live_functions mods exps) /\
+  (mods = [(NONE,tops)] \/ MEM (src,name) (linked_live_functions mods exps)) /\
   ALOOKUP mods src = SOME tops /\
   MEM (FunctionDecl vis mut nr rawfn name args dflts ret ss) tops /\
   (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
@@ -302,7 +301,6 @@ Proof
   `p = cx with stk updated_by CONS (src,name)` by simp[Abbr `p`] >>
   `cd = ce with ce_module := src` by simp[Abbr `cd`] >>
   `ed = env with current_src := src` by simp[Abbr `ed`] >>
-  `exports_ok p.layouts p.txn.target mods exps` by simp[Abbr `p`] >>
   drule_all intcall_default_slice_pre_mods >>
   disch_then (qspec_then `LENGTH dflts - (LENGTH args - LENGTH es)` mp_tac) >>
   SIMP_TAC std_ss [LET_THM] >> strip_tac >>

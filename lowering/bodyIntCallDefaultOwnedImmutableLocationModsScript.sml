@@ -7,17 +7,16 @@ Ancestors
 
 Theorem intcall_default_owned_immutable_location_mods:
   check_contract mode layouts addr mods = SOME art /\
-  exports_ok layouts addr mods exps /\
+  check_linked_state_ownership layouts addr mods (linked_live_functions mods exps) /\
   ALOOKUP mods src = SOME tops /\
   MEM (FunctionDecl vis mut nr rawfn name args dflts ret ss) tops /\
-  MEM (src,name) (linked_live_functions mods exps) /\
+  (mods = [(NONE,tops)] \/ MEM (src,name) (linked_live_functions mods exps)) /\
   MEM (ReadAcc (StateRef (owner,id))) (accesses_exprs dflts) /\
   declared_immutable mods owner id /\
   immutable_section_layout_mods mods cd ==>
   ?off. FLOOKUP cd.ce_module_vars (owner,id) = SOME (ImmutableLoc off)
 Proof
   disch_then (map_every assume_tac o CONJUNCTS) >>
-  drule_all_then assume_tac check_contract_linked_state_ownership >>
   drule_then assume_tac check_contract_runtime_namespaces >>
   qpat_x_assum `declared_immutable _ _ _`
     (strip_assume_tac o REWRITE_RULE [declared_immutable_def]) >>
@@ -26,7 +25,9 @@ Proof
   Q.SUBGOAL_THEN
     `mods = [(NONE,tls)] \/ linked_state_ref_allocated layouts addr mods (owner,id)`
     assume_tac
-  >- (`((case mods of [(NONE,_)] => T | _ => F) <=> ?ts. mods = [(NONE,ts)])` by
+  >- (Cases_on `mods = [(NONE,tops)]` >- gvs[] >>
+     `MEM (src,name) (linked_live_functions mods exps)` by fs[] >>
+     `((case mods of [(NONE,_)] => T | _ => F) <=> ?ts. mods = [(NONE,ts)])` by
        (Cases_on `mods` >> simp[] >> PairCases_on `h` >>
         Cases_on `h0` >> Cases_on `t` >> simp[]) >>
      `MEM (src,tops) mods` by (irule ALOOKUP_MEM >> simp[]) >>

@@ -4,7 +4,7 @@ Ancestors
   bodyIntCallDefaultSliceOccurrenceAccessMods
   bodyIntCallDefaultOwnedImmutableLocationMods
   bodyIntCallDefaultSelectedReadsMods
-  bodyFullPredsMods bodyInvSplit exprSimHypsDefs
+  bodyFullPreds bodyFullPredsMods bodyInvSplit exprSimHypsDefs
   constSubst constSubstMods constSubstCorrect
   vyperTypeContract vyperTypeContractStaticMaps vyperAST vyperContext
   finite_map alist list pair option rich_list
@@ -60,16 +60,21 @@ QED
 Theorem intcall_default_slice_no_unallocated_mods:
   contract_inv mods exps ctx cd p /\
   body_const_cells_agree mods p ed mid /\
-  exports_ok p.layouts p.txn.target mods exps /\
   ALOOKUP mods src = SOME tops /\
   MEM (FunctionDecl vis mut nr rawfn name args dflts ret ss) tops /\
-  MEM (src,name) (linked_live_functions mods exps) /\
+  (mods = [(NONE,tops)] \/ MEM (src,name) (linked_live_functions mods exps)) /\
   ds = DROP n (subst_consts_exprs_mods (consts_env_mods mods) dflts) /\
   EVERY (runtime_constant_expr mods) ds /\
   ~supported_exprs_exists (const_name_root_mods mods) ds ==>
   ~supported_exprs_exists (unallocated_bare_global_root cd ed) ds
 Proof
-  strip_tac >> strip_tac >>
+  disch_then (map_every assume_tac o CONJUNCTS) >>
+  `check_linked_state_ownership p.layouts p.txn.target mods
+      (linked_live_functions mods exps)` by fs[contract_inv_def] >>
+  `mods <> [(NONE,tops)] ==> MEM (src,name) (linked_live_functions mods exps)` by
+    (strip_tac >> fs[]) >>
+  qpat_x_assum `mods = [(NONE,tops)] \/ _` kall_tac >>
+  strip_tac >>
   qpat_x_assum `ds = _` SUBST_ALL_TAC >>
   qpat_x_assum `supported_exprs_exists (unallocated_bare_global_root _ _) _`
     (qx_choosel_then [`e`] strip_assume_tac o
@@ -116,6 +121,10 @@ Proof
              >- asm "consts_env_accesses_free" ACCEPT_TAC
              >- simp[]) >>
           drule_then assume_tac contract_inv_immutable_section_layout >>
+          Q.SUBGOAL_THEN
+            `mods = [(NONE,tops)] \/ MEM (src,name) (linked_live_functions mods exps)`
+            assume_tac
+          >- (Cases_on `mods = [(NONE,tops)]` >> simp[]) >>
           drule_all intcall_default_owned_immutable_location_mods >> simp[])) >>
   qpat_x_assum `~supported_expr_exists _ e'` mp_tac >> simp[] >>
   irule (cj 1 supportedExprTraverseTheory.supported_expr_exists_mono) >>

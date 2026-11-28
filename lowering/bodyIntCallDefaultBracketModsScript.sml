@@ -1,7 +1,7 @@
 (* Replay the selected internal defaults at the post-argument empty scope. *)
 Theory bodyIntCallDefaultBracketMods
 Ancestors
-  bodySelectedLockedCellsMods bodyFullPredsMods linkedRuntimeDefaultReplay
+  bodySelectedLockedCellsMods bodyFullPreds bodyFullPredsMods linkedRuntimeDefaultReplay
   constSubstCorrect constSubstStmts constSubstMods vyperTypeSystem vyperTypeContract
   vyperTypeContractContext vyperTypeContractStaticMaps vyperInterpreter vyperState
   finite_map alist list rich_list
