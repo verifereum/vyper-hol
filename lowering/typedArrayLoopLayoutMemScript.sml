@@ -192,7 +192,7 @@ Proof
        fresh_label_def, fresh_var_def, fresh_id_def,
        emit_op_def, emit_void_def, emit_inst_def, emit_def, new_block_def] >>
   strip_tac >> gvs[] >>
-  simp[compile_store_memory_typed_def, is_word_type_def, is_bytestring_type_def,
+  simp[NoAsms, compile_store_memory_typed_def, is_word_type_def, is_bytestring_type_def,
        compile_store_bytestring_def, compile_bytestring_copy_len_def,
        comp_bind_def, comp_ignore_bind_def, comp_return_def,
        fresh_var_def, fresh_id_def, emit_op_def, emit_void_def,

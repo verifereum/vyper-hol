@@ -442,13 +442,17 @@ Proof
     simp[Abbr `i`, Abbr `j`, Abbr `k`, mk_inst_def, is_terminator_def] >>
   gvs[run_inst_seq_def, AllCaseEqs()] >>
   gvs[inst_seq_ptr_def, step_inst_inst_idx_indep, exec_result_map_def] >>
-  simp[Abbr `i`, Abbr `j`, Abbr `k`, step_prov_def, out_prov_def,
-    set_prov_def, op_prov_def, first_prov_def, FLOOKUP_DRESTRICT,
-    step_taint_def, op_taint_def, set_var_taint_def, out_taint_def,
-    mk_inst_def, FLOOKUP_UPDATE, eval_operand_def] >>
+  conj_tac
+  >- simp[NoAsms, Abbr `k`, Once step_taint_def, op_taint_def,
+          out_taint_def, set_var_taint_def, FLOOKUP_UPDATE, mk_inst_def,
+          eval_operand_def]
+  >- (simp[NoAsms, Abbr `i`, Abbr `j`, Abbr `k`, step_prov_other_output,
+           step_prov_def, out_prov_def, set_prov_def, op_prov_def,
+           first_prov_def, FLOOKUP_DRESTRICT, mk_inst_def,
+           FLOOKUP_UPDATE, eval_operand_def] >>
   Cases_on `x` >> gvs[op_prov_def] >>
   Cases_on `s' = STRING #"%" (toString sa.cs_next_var)` >>
-  gvs[FLOOKUP_DRESTRICT]
+  gvs[FLOOKUP_DRESTRICT])
 QED
 *)
 Theorem word_neg_result_clean:
