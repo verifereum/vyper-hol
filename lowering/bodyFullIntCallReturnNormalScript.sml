@@ -630,14 +630,16 @@ Proof
 QED
 *)
 Theorem intcall_return_register_post:
-  !mods exps caller_src caller_tops src callee_tops ctx func cenv cx tenv ty ann name es dflt es0 sa sm vv s0
+  !mods exps caller_src caller_tops src callee_tops vis ctx func cenv cx
+   tenv ty ann name es dflt es0 sa sm vv s0
    DF lo d H G0 tn0 mut nr args ret ss rr prev penv rtv es1 t G tn
    rc rbs pvs v ee Gc tc ir cs returned out outs rbuf root off st4 stored Gs ts bb inst dflts.
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods caller_src caller_tops cenv cx) /\
   ALOOKUP mods src = SOME callee_tops /\
   expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) callee_tops /\
+  (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) callee_tops /\
   compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt) sa = (vv,sm) /\
   fn_has_code sa sm func /\ fn_inst_ids_distinct func /\
   local_ptrs_reserved cenv sa /\ dead_lo_ok H (DF H) lo cenv cx /\
@@ -903,7 +905,8 @@ Proof
 QED
 *)
 Theorem intcall_return_normal_owned:
-  !DF lo d ctx shadow_ctx PG func shadow_func mods exps caller_src caller_tops src callee_tops cenv cx tenv ty ann name
+  !DF lo d ctx shadow_ctx PG func shadow_func mods exps caller_src caller_tops
+   src callee_tops vis cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
    rr prev penv rtv es1 t G tn rc rbs pvs callee entered bb inst lbl arg_ops argv dflts.
     (contract_inv mods exps ctx cenv cx /\
@@ -911,7 +914,8 @@ Theorem intcall_return_normal_owned:
     ALOOKUP mods src = SOME callee_tops /\
     expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
     lookup_callable_function cx.in_deploy name callee_tops = SOME (mut,nr,args,dflts,ret,ss) /\
-    MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) callee_tops /\
+    (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+    MEM (FunctionDecl vis mut nr rr name args dflts ret ss) callee_tops /\
     compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt) sa = (vv,sm) /\
     compile_expr (gasShadowCompileBase$gas_shadow_env T cenv) ty
       (gas_shadow_expr (Call ann (IntCall (src,name)) es dflt)) shadow_sa = (vv,shadow_sm) /\

@@ -74,7 +74,8 @@ Proof
 QED
 *)
 Theorem intcall_return_unwrap:
-  !DF lo d ctx shadow_ctx PG func shadow_func mods exps caller_src caller_tops src callee_tops cenv cx tenv ty ann name
+  !DF lo d ctx shadow_ctx PG func shadow_func mods exps caller_src caller_tops
+   src callee_tops vis cenv cx tenv ty ann name
    es dflt es0 st0 sa sm shadow_sa shadow_sm vv s0 G0 tn0 mut nr args ret ss
    rr prev penv rtv es1 t G tn rc rbs pvs dflts.
   (contract_inv mods exps ctx cenv cx /\
@@ -82,7 +83,8 @@ Theorem intcall_return_unwrap:
   ALOOKUP mods src = SOME callee_tops /\
   expr_body_pre_mods mods cenv cx tenv (Call ann (IntCall (src,name)) es dflt) es0 /\
   lookup_callable_function cx.in_deploy name callee_tops = SOME (mut,nr,args,dflts,ret,ss) /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) callee_tops /\
+  (vis = Internal \/ (cx.in_deploy /\ src <> NONE /\ vis = Deploy)) /\
+  MEM (FunctionDecl vis mut nr rr name args dflts ret ss) callee_tops /\
   compile_expr cenv ty (Call ann (IntCall (src,name)) es dflt) sa = (vv,sm) /\
   compile_expr (gas_shadow_env T cenv) ty
     (gas_shadow_expr (Call ann (IntCall (src,name)) es dflt)) shadow_sa = (vv,shadow_sm) /\
