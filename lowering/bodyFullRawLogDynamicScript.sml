@@ -97,9 +97,9 @@ Theorem raw_log_dynamic_data_full:
   emit_op ADD [data_op;Lit 32w] s1 = (ptr_op,s2) /\
   emit_inst LOG (Lit (n2w (LENGTH ops)) :: REVERSE ops ++ [len_op;ptr_op]) [] s2 = ((),sb) /\
   fn_has_code sm sb func ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0
+    cenv.ce_modules cx st0
     (bind (bind (eval_expr cx data) (read_result cx))
       (\v. do bs <- lift_option_type (dest_BytesV v) "raw_log data";
               type_check (LENGTH vals <= 4) "raw_log too many topics";

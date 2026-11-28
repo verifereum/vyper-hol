@@ -99,9 +99,9 @@ Theorem expr_sim_full_via_bundle:
   !st0 sa sb shadow_sa shadow_sb op s0 G0 tn0.
     expr_sim_full_hypotheses (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)
       cenv cx ty e es (st0,sa,sb,shadow_sa,shadow_sb,op,s0,G0,tn0) ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
+        cenv.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx))
         (es, s0, G0, tn0)
         (expr_sim_full_post (DF,lo,d,ctx,func) cenv cx e (es,sa,sb,s0,op,G0,tn0))
         (\H res ee gt r.

@@ -383,8 +383,8 @@ Theorem annassign_word_full_rhs[local]:
     ghost_inv_at (DF H) lo d ce cx es G tn t) /\
   ~t.vs_halted /\ t.vs_current_bb = a.cs_current_bb /\
   t.vs_inst_idx = LENGTH a.cs_current_insts ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx)) (es,t,G,tn)
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    ce.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx)) (es,t,G,tn)
     (\H res ee Gf tnf u. ?v. res = INL v /\
       expr_post H ctx func ce cx e es a b t ee v op u /\
       expr_store_bound cx (expr_type e) v op u /\

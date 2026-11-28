@@ -851,8 +851,8 @@ Theorem ifexp_arm_outcome_full_conditional[local]:
     value_has_type rty v /\
     !ptv. evaluate_type (get_tenv cx) (post_value_type cenv e) = SOME ptv ==>
       value_has_type ptv v) ==>
-  gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-    (cx_tops cx) cx st0 (bind (eval_expr cx e) (conditional_result cx))
+  gas_outcome_full_mods (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
+    cenv.ce_modules cx st0 (bind (eval_expr cx e) (conditional_result cx))
     (es1,u,G1,tn1)
     (\H res ee G tn z. ?tv v. res = INL tv /\
       read_result cx tv ee = (INL v,ee) /\

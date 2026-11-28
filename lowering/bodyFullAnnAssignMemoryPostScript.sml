@@ -819,9 +819,9 @@ Theorem annassign_full_rhs_from_entry:
     (!x. not_fresh_at sa x ==> not_fresh_at a x /\ not_fresh_at b x) /\
     (!x cap. ce.ce_return_buf = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x) /\
     (!x cap. ce.ce_return_pc = SOME (PtrVar (Var x) cap) ==> not_fresh_at b x) /\
-    gas_outcome_full
+    gas_outcome_full_mods
       (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-      (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
+      ce.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx))
       (es,entry,Ga,tna)
       (\H res mid G tn u. ?v.
         res = INL v /\
@@ -1166,9 +1166,9 @@ Theorem annassign_full_alloc_rhs_prefix:
         stmt_state_rel H ctx func ce cx es entry /\
         storage_well_formed_on cx es (FST H) /\
         ghost_inv_at (DF H) lo d ce cx es Ga tna entry) /\
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
-        (cx_tops cx) cx st0 (bind (eval_expr cx e) (read_result cx))
+        ce.ce_modules cx st0 (bind (eval_expr cx e) (read_result cx))
         (es,entry,Ga,tna)
         (\H res mid G tn u. ?v.
           res = INL v /\
