@@ -1,6 +1,7 @@
 (* Route a nested storage-root iterator by its actual evaluated result. *)
 Theory s1PrefixForStorageSubplace
 Ancestors
+  bodySingletonStmtGuards[qualified] stmtExprAllocationPreProps[qualified]
   s1PrefixPreds s1PrefixDefs bodyFullForIteratorHeld bodyFullForFacts
   bodyFullForArray bodyFullForArrayRound bodyFullForExprCut bodyFullForArrayBranch
   forNestedArrayCapture[qualified,ignore_grammar]
@@ -23,8 +24,18 @@ Proof
       drule_then strip_assume_tac supported_stmt_for_projection >>
       `?bd. expr_type e = ArrayT typ bd` by
         (drule_then strip_assume_tac type_stmt_for_array_bound >> simp[]) >>
-      irule nonslot_iterator_expr_pre >> conj_tac >- first_assum ACCEPT_TAC >>
-      qexistsl [`bd`,`ctx`,`id`,`loop_body`,`n`,`tops`,`typ`] >> simp[]) >>
+      drule_all_then strip_assume_tac bodySingletonStmtGuardsTheory.singleton_stmt_expr_guards >>
+      `expr_body_pre cenv cx env e es` by
+        (mp_tac (Q.INST [`s` |-> `(For id typ (Array e) n loop_body)`,
+                         `tops` |-> `tops`, `ctx` |-> `ctx`]
+            stmtExprAllocationPrePropsTheory.body_inv_stmt_expr_pre_singleton) >>
+         simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+              supportedStmtTraverseTheory.supported_iterator_exists_def] >>
+         disch_then irule >> strip_tac >>
+         irule nonslot_iterator_expr_pre >>
+         fs[bodySimTheory.body_inv_split_def,
+            bodyInvSplitTheory.module_body_inv_def, alistTheory.ALOOKUP_def] >>
+         metis_tac[]) >> first_assum ACCEPT_TAC) >>
   map_every qx_gen_tac [`st0`,`sa`,`sb`,`sha`,`shb`,`s0`,`G0`,`tn0`,`vv`,
     `se`,`she`,`bd`,`tyv`,`marks`,`rv`,`em`,`G`,`tn`,`u`] >>
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>

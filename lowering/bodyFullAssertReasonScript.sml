@@ -10,6 +10,7 @@
  *)
 Theory bodyFullAssertReason
 Ancestors
+  bodyActiveStmtCallsMods[qualified]
   bodyFullShadowBodyInv
   bodyFullAssertReasonSource bodyFullAssertReasonControl bodyFullShared
   bodyFullRaiseReason
@@ -29,7 +30,12 @@ val _ = Parse.hide "body";
 Proof
   disch_then (markerLib.mk_asm "producer") >>
   rpt gen_tac >> strip_tac >>
-  `expr_body_pre cenv cx env e es` by
+  `EVERY (source_body_call_supported cx)
+     (int_calls_stmt (Assert e (AssertReason se)))` by
+    (drule_all_then (mp_tac o CONJUNCT1)
+       bodyActiveStmtCallsModsTheory.active_stmt_calls_resolve_mods >>
+     metis_tac[]) >>
+  `expr_body_pre_mods mods cenv cx env e es` by
     (irule assert_reason_condition_source_pre >> metis_tac[]) >>
   `expr_type e = BaseT BoolT` by fs[type_stmt_assert_reason] >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
@@ -102,6 +108,8 @@ Theorem compile_assert_reason_frag_full_from_raise:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Raise (RaiseReason e)) = SOME env' /\
     stmt_exprs_ok cenv (Raise (RaiseReason e)) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (Raise (RaiseReason e)) /\
     call_evaluation_safe cx (int_calls_stmt (Raise (RaiseReason e))) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
@@ -125,6 +133,8 @@ Theorem compile_assert_reason_frag_full_from_raise:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assert e (AssertReason se)) = SOME env' /\
     stmt_exprs_ok cenv (Assert e (AssertReason se)) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (Assert e (AssertReason se)) /\
     call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason se))) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>
@@ -232,7 +242,13 @@ Resume compile_assert_reason_frag_full_from_raise[false]:
     (irule o MATCH_MP (REWRITE_RULE [GSYM AND_IMP_INTRO]
                                   gas_outcome_full_zero_prefix)) >>
   drule_all assert_reason_false_source_ready >> strip_tac >>
-  `body_const_cells_agree [(NONE,tops)] cx env (mid with gas_obs := [])` by
+  `~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+     (Raise (RaiseReason se))` by
+    (qpat_assum `~supported_stmt_expr_exists _ (Assert e (AssertReason se))` mp_tac >>
+     simp[supportedStmtTraverseTheory.supported_stmt_expr_exists_def,
+          supportedStmtTraverseTheory.supported_assert_exists_def,
+          supportedStmtTraverseTheory.supported_raise_exists_def]) >>
+  `body_const_cells_agree mods cx env (mid with gas_obs := [])` by
     (`well_typed_expr env e` by
        qpat_assum `expr_body_pre _ cx env e _`
          (ACCEPT_TAC o cj 2 o MATCH_MP exprBodyPrePropsTheory.expr_body_pre_static_facts) >>
@@ -374,6 +390,8 @@ Theorem compile_assert_reason_frag_full:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (Assert e (AssertReason se)) = SOME env' /\
     stmt_exprs_ok cenv (Assert e (AssertReason se)) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (Assert e (AssertReason se)) /\
     call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason se))) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty ==>

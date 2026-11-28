@@ -156,6 +156,10 @@ Theorem assert_reason_condition_source_pre:
   expr_sim_inv_mods mods cenv cx env es /\
   type_stmt env ret_ty (Assert e (AssertReason r)) = SOME env' /\
   stmt_exprs_ok cenv (Assert e (AssertReason r)) /\
+  ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+    (Assert e (AssertReason r)) /\
+  EVERY (source_body_call_supported cx)
+    (int_calls_stmt (Assert e (AssertReason r))) /\
   call_evaluation_safe cx (int_calls_stmt (Assert e (AssertReason r))) ==>
   expr_body_pre_mods mods cenv cx env e es
 Proof

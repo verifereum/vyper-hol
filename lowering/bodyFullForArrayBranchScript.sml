@@ -1,6 +1,7 @@
 (* Source composition for the non-slot Array branch of For. *)
 Theory bodyFullForArrayBranch
 Ancestors
+  bodyActiveStmtCallsMods[qualified]
   bodyInvCodeProps bodyInvExecutionProps bodyCallSupport[qualified,ignore_grammar]
   bodyTypedTargetScope[qualified,ignore_grammar]
   bodyFullShadowBodyInv constSubst bodyStorageMetadata vyperSubscriptOverlap
@@ -182,6 +183,10 @@ Theorem nonslot_iterator_expr_pre:
      module_body_inv mods c.ce_module tops c cx) /\ supported_iterator tops typ (Array e) n /\
   expr_type e = ArrayT typ bd /\ well_typed_iterator env typ (Array e) /\
   expr_sim_inv_mods mods c cx env es /\ stmt_exprs_ok c (For id typ (Array e) n loop_body) /\
+  ~supported_stmt_expr_exists (unallocated_bare_global_root c env)
+    (For id typ (Array e) n loop_body) /\
+  EVERY (source_body_call_supported cx)
+    (int_calls_stmt (For id typ (Array e) n loop_body)) /\
   call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n loop_body)) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id typ (Array e) n loop_body) ==> occurs_abi_decode_target target tops) ==>
@@ -313,7 +318,12 @@ Proof
     (qspecl_then [`get_tenv cx`,`es`,`tyv`,`es`] mp_tac) >>
   impl_tac >- simp[lift_option_type_def, return_def] >>
   disch_tac >>
-  `expr_body_pre cenv cx env e es` by
+  `EVERY (source_body_call_supported cx)
+     (int_calls_stmt (For id typ (Array e) n body'))` by
+    (drule_all_then (mp_tac o CONJUNCT1)
+       bodyActiveStmtCallsModsTheory.active_stmt_calls_resolve_mods >>
+     metis_tac[]) >>
+  `expr_body_pre_mods mods cenv cx env e es` by
     (mp_tac (Q.INST [`c` |-> `cenv`,`loop_body` |-> `body'`]
         nonslot_iterator_expr_pre) >>
      impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
@@ -511,6 +521,8 @@ Theorem compile_for_nonslot_array_frag_full:
     type_stmt env ret_ty (For id typ (Array e) n body) = SOME env' /\
     ~supported_expr_exists (const_name_root cx) e /\
     stmt_exprs_ok cenv (For id typ (Array e) n body) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (For id typ (Array e) n body) /\
     (~(?ty nid. e = TopLevelName ty nid) ==>
      !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
     stmt_loop_calls_ok [(NONE,tops)] (For id typ (Array e) n body) /\
@@ -531,7 +543,12 @@ QED
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
-  `expr_body_pre cenv cx env e es` by
+  `EVERY (source_body_call_supported cx)
+     (int_calls_stmt (For id typ (Array e) n loop_body))` by
+    (drule_all_then (mp_tac o CONJUNCT1)
+       bodyActiveStmtCallsModsTheory.active_stmt_calls_resolve_mods >>
+     metis_tac[]) >>
+  `expr_body_pre_mods mods cenv cx env e es` by
     (drule_then strip_assume_tac type_stmt_for_projection >>
      drule_then strip_assume_tac supported_stmt_for_projection >>
      `?bd. expr_type e = ArrayT typ bd` by
@@ -568,6 +585,8 @@ Theorem for_array_expr_cut_frag_full:
   type_stmt env ret_ty (For id typ (Array e) n loop_body) = SOME env' /\
   ~supported_expr_exists (const_name_root cx) e /\
   stmt_exprs_ok cenv (For id typ (Array e) n loop_body) /\
+  ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+    (For id typ (Array e) n loop_body) /\
   call_evaluation_safe cx (int_calls_stmt (For id typ (Array e) n loop_body)) /\
   frame_ret_ok_full_mods mods (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func) cx RetQ cenv ret_ty /\
   ~(?ty nid. e = TopLevelName ty nid) /\

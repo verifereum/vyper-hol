@@ -8,6 +8,7 @@
  *)
 Theory bodyFullAnnAssign
 Ancestors
+  bodyActiveStmtCallsMods[qualified]
   bodyFullShadowBodyInv
   bodyFullAnnAssignWord bodyFullAnnAssignWidened bodyFullAnnAssignMemoryPost
   bodyFullAnnAssignMemory bodyFullAnnAssignOther bodyFullShared exprSimAggregateLayout typedMemoryCopy
@@ -64,6 +65,10 @@ Theorem annassign_full_declared_rhs_pre:
   expr_sim_inv_mods mods cenv cx env es /\ well_typed_expr env e /\
   id NOTIN FDOM env.var_types /\ FLOOKUP cenv.ce_vars id = NONE /\
   stmt_exprs_ok cenv (AnnAssign id typ e) /\
+  ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+    (AnnAssign id typ e) /\
+  EVERY (source_body_call_supported cx)
+    (int_calls_stmt (AnnAssign id typ e)) /\
   call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
   declare_local cenv id typ st = (c,st1) ==>
   (contract_inv mods exps ctx c cx /\
@@ -106,10 +111,14 @@ Theorem annassign_word_full_source:
   supported_stmt tops bindings (AnnAssign id typ e) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
     (AnnAssign id typ e) ==> occurs_abi_decode_target target tops) /\
-  body_const_cells_agree [(NONE,tops)] cx env es /\
+  body_const_cells_agree mods cx env es /\
   expr_sim_inv_mods mods cenv cx env es /\
   type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
   stmt_exprs_ok cenv (AnnAssign id typ e) /\
+  ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+    (AnnAssign id typ e) /\
+  EVERY (source_body_call_supported cx)
+    (int_calls_stmt (AnnAssign id typ e)) /\
   call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
   is_word_type typ ==>
   well_typed_expr env e /\ expr_type e = typ /\
@@ -135,6 +144,11 @@ fun annassign_rhs_sim_tac g =
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
+  `EVERY (source_body_call_supported cx)
+     (int_calls_stmt (AnnAssign id typ e))` by
+    (drule_all_then (mp_tac o CONJUNCT1)
+       bodyActiveStmtCallsModsTheory.active_stmt_calls_resolve_mods >>
+     metis_tac[]) >>
   drule_all annassign_word_full_source >> strip_tac >>
   drule_all_then strip_assume_tac bodySingletonCallSupportTheory.supported_singleton_expr_body_calls >>
   rw[stmt_frag_full_def] >>
@@ -212,6 +226,8 @@ Theorem body_annassign_word_full:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
@@ -265,6 +281,11 @@ Proof
   rpt (conj_tac ORELSE qexistsl_tac [`env`,`tops`]) >>
   simp[] >>
   rpt gen_tac >> disch_tac >>
+  `EVERY (source_body_call_supported cx)
+     (int_calls_stmt (AnnAssign id typ e))` by
+    (drule_all_then (mp_tac o CONJUNCT1)
+       bodyActiveStmtCallsModsTheory.active_stmt_calls_resolve_mods >>
+     metis_tac[]) >>
   drule_all_then strip_assume_tac annassign_full_declared_rhs_pre >>
   annassign_rhs_sim_tac
 QED
@@ -289,6 +310,8 @@ Theorem body_annassign_memory_full:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
@@ -343,6 +366,11 @@ Proof
   irule annassign_widened_full_execution >>
   simp[] >> qexistsl_tac [`env`, `tops`] >> simp[] >>
   rpt gen_tac >> strip_tac >>
+  `EVERY (source_body_call_supported cx)
+     (int_calls_stmt (AnnAssign id typ e))` by
+    (drule_all_then (mp_tac o CONJUNCT1)
+       bodyActiveStmtCallsModsTheory.active_stmt_calls_resolve_mods >>
+     metis_tac[]) >>
   drule_all annassign_full_declared_rhs_pre >> strip_tac >>
   drule_all declare_local_memory_types_mem >> strip_tac >>
   annassign_rhs_sim_tac >>
@@ -369,6 +397,8 @@ Theorem body_annassign_widened_full:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
@@ -424,6 +454,11 @@ Proof
       irule annassign_other_typed_full_execution >>
       fs[] >> qexistsl_tac [`env`, `tops`] >> simp[] >>
       rpt gen_tac >> strip_tac >>
+      `EVERY (source_body_call_supported cx)
+         (int_calls_stmt (AnnAssign id typ e))` by
+        (drule_all_then (mp_tac o CONJUNCT1)
+           bodyActiveStmtCallsModsTheory.active_stmt_calls_resolve_mods >>
+         metis_tac[]) >>
       drule_all_then strip_assume_tac annassign_full_declared_rhs_pre >>
       annassign_rhs_sim_tac) >>
   irule body_annassign_widened_full >> simp[] >>
@@ -450,6 +485,8 @@ Theorem body_annassign_other_full:
     locals_alloc_ok cenv env /\
     type_stmt env ret_ty (AnnAssign id typ e) = SOME env' /\
     stmt_exprs_ok cenv (AnnAssign id typ e) /\
+    ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+      (AnnAssign id typ e) /\
     call_evaluation_safe cx (int_calls_stmt (AnnAssign id typ e)) /\
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\

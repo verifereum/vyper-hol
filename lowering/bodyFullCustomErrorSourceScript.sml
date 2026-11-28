@@ -66,12 +66,16 @@ Theorem custom_error_raise_source:
      occurs_abi_decode_target target tops) /\
   type_stmt env ret_ty (Raise (RaiseCustomError (CustomError id pos kw))) = SOME env' /\
   stmt_exprs_ok cenv (Raise (RaiseCustomError (CustomError id pos kw))) /\
+  ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+    (Raise (RaiseCustomError (CustomError id pos kw))) /\
+  EVERY (source_body_call_supported cx)
+    (int_calls_stmt (Raise (RaiseCustomError (CustomError id pos kw)))) /\
   call_evaluation_safe cx
     (int_calls_stmt (Raise (RaiseCustomError (CustomError id pos kw)))) ==>
-  ?params args.
+  ?etops params args.
     args = custom_error_exprs (CustomError id pos kw) /\
-    get_module_code cx (FST id) = SOME tops /\
-    lookup_custom_error_args_in (SND id) tops = SOME params /\
+    get_module_code cx (FST id) = SOME etops /\
+    lookup_custom_error_args_in (SND id) etops = SOME params /\
     order_custom_error_args params (CustomError id pos kw) = SOME args /\
     cenv.ce_error_info (nsid_to_string id) = SOME params /\
     MAP expr_type args = MAP SND params /\
@@ -261,6 +265,10 @@ Theorem assert_custom_condition_source_pre:
   expr_sim_inv_mods mods cenv cx env es /\
   type_stmt env ret_ty (Assert e (AssertCustomError err)) = SOME env' /\
   stmt_exprs_ok cenv (Assert e (AssertCustomError err)) /\
+  ~supported_stmt_expr_exists (unallocated_bare_global_root cenv env)
+    (Assert e (AssertCustomError err)) /\
+  EVERY (source_body_call_supported cx)
+    (int_calls_stmt (Assert e (AssertCustomError err))) /\
   call_evaluation_safe cx (int_calls_stmt (Assert e (AssertCustomError err))) ==>
   expr_body_pre_mods mods cenv cx env e es
 Proof
