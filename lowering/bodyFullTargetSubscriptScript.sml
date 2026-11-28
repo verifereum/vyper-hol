@@ -789,7 +789,7 @@ Resume immutable_target_subscript_sim_full[index]:
   `expr_body_pre_mods mods cenv cx env e mid1` by
     metis_tac[] >>
   `body_expr_full_ok_mods mods exps cx e` by
-    (fs[body_base_target_full_ok_mods_def] >> first_x_assum irule >> metis_tac[]) >>
+    (fs[bodyFullPredsModsTheory.body_base_target_full_ok_mods_def] >> first_x_assum irule >> metis_tac[]) >>
   `expr_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
      cenv cx (expr_type e) e mid1` by
     (drule_all body_expr_full_ok_linked_simulation >> simp[]) >>
@@ -950,7 +950,11 @@ Resume immutable_target_subscript_sim_full[tail]:
      drule_all_then strip_assume_tac immutable_target_write_root >>
      first_assum ACCEPT_TAC) >>
   `off + type_memory_size itv < dimword (:256)` by
-    (fs[expr_sim_inv_mods_def] >> metis_tac[]) >>
+    (qpat_assum `expr_sim_inv_mods mods cenv cx env mid1`
+       (strip_assume_tac o REWRITE_RULE [expr_sim_inv_mods_def]) >>
+     qpat_assum `!src name ty. FLOOKUP env.bare_globals (src,name) = SOME ty /\ _ ==> _`
+       (qspecl_then [`NONE`,`id`,`root_ty`] mp_tac) >>
+     impl_tac >- simp[] >> disch_then (mp_tac o CONJUNCT2) >> simp[]) >>
   `?raw. eval_expr cx e ix = (INL raw,mid2)` by
     (qpat_assum `bind (eval_expr cx e) (read_result cx) ix = (INL _,mid2)`
        (mp_tac o MATCH_MP (SIMP_RULE (srw_ss() ++ ETA_ss) [] eval_expr_read_INL)) >>

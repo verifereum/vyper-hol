@@ -64,14 +64,14 @@ Theorem body_imm_target_place_sim_full:
 Proof
   recInduct base_assignment_target_induct >>
   simp[target_root_def, target_indices_pre_mods_def, target_indices_def,
-       body_base_target_full_ok_mods_def]
+       bodyFullPredsModsTheory.body_base_target_full_ok_mods_def]
   >- (rpt strip_tac >> gvs[] >>
       irule immutable_toplevel_target_sim_full >> simp[] >> metis_tac[])
   >- (rpt strip_tac >>
       `immutable_root cx bt` by fs[immutable_root_def,target_root_def] >>
       irule immutable_target_subscript_sim_full >>
       rpt conj_tac >> TRY (first_assum ACCEPT_TAC) >>
-      TRY (fs[body_base_target_full_ok_mods_def] >> NO_TAC) >>
+      TRY (fs[bodyFullPredsModsTheory.body_base_target_full_ok_mods_def] >> NO_TAC) >>
       metis_tac[])
   >> rpt strip_tac >>
   `immutable_root cx bt` by fs[immutable_root_def,target_root_def] >>
