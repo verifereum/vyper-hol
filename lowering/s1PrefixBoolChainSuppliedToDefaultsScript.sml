@@ -1,7 +1,7 @@
 (* The supplied arguments run in the caller before the pushed defaults. *)
 Theory s1PrefixBoolChainSuppliedToDefaults
 Ancestors
-  s1PrefixBoolChainDefaultStageEntry s1PrefixBoolChainDefaultCallback
+  s1PrefixBoolChainDefaultCallback
   s1PrefixInvalidTraceDomain s1PrefixFrame
   s1PrefixProps bodyFullIntCallArgsTrace vyperTypeEvalProofs vyperTypeArgFits
   exprSimSliceCompose stmtSimForRounds exprBodyPreProps gasContext

@@ -1,7 +1,7 @@
 (* Prefix observations for a selected pushed child. *)
 Theory s1PrefixBoolChainPushedChildren
 Ancestors
-  s1PrefixBoolChainCallRankBase s1PrefixBoolChainDefaultStageEntry
+  s1PrefixBoolChainCallRankBase
   s1PrefixBoolChainCalleeRounds s1PrefixIntCallStageSingleton
   s1PrefixPreds bodyLoopCalls typedCopyProducer bodyFullSimProjection
   bodyFullIntCallCallee bodyInvCodeProps bodySimFullMain constSubst
