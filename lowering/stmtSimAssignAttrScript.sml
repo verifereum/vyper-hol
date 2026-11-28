@@ -72,6 +72,21 @@ QED
 
 (* A field the typing gives a struct is in the lowering's struct table,
    at the type the typing gives it. *)
+Theorem attribute_type_struct_field_consistent:
+  !cenv cx sid fld fty.
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    attribute_type (get_tenv cx) (StructT sid) fld = SOME fty ==>
+    ?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
+                     (nsid_to_string sid)) fld = SOME (fty, fsz)
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[vyperTypeSystemTheory.attribute_type_def, AllCaseEqs()] >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  simp[sfields_tenv_consistent_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  simp[get_struct_fields_def] >> metis_tac[alookup_fields_args]
+QED
+
 Theorem attribute_type_struct_field:
   !cenv cx env es sid fld fty.
     expr_sim_inv cenv cx env es /\
@@ -79,14 +94,9 @@ Theorem attribute_type_struct_field:
     ?fsz. ALOOKUP (get_struct_fields cenv.ce_struct_fields
                      (nsid_to_string sid)) fld = SOME (fty, fsz)
 Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[vyperTypeSystemTheory.attribute_type_def, AllCaseEqs()] >>
-  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
-    gvs[expr_sim_inv_def] >>
-  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
-  simp[sfields_tenv_consistent_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  simp[get_struct_fields_def] >> metis_tac[alookup_fields_args]
+  rpt strip_tac >>
+  fs[expr_sim_inv_def] >>
+  drule_all attribute_type_struct_field_consistent >> simp[]
 QED
 
 (* The place x.f for a local x in scope whose value has field f, and only

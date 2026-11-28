@@ -85,7 +85,7 @@ Proof
     (irule target_place_ptr_values_frame >> qexistsl [`t1`, `sm`] >>
      fs[expr_post_def]) >>
   `!lbl. FST rb <> Label lbl` by
-    metis_tac[target_subscript_typed_base_not_label] >>
+    drule_all_then ACCEPT_TAC target_subscript_typed_base_not_label_mods >>
   Cases_on `FST rb` >> gvs[eval_operand_def, target_ptr_ok_def,
     op_taint_def, op_prov_def, ghost_kept_at_def, expr_post_def] >>
   metis_tac[]
@@ -296,7 +296,7 @@ Proof
           bind_def, lift_option_type_def, lift_sum_def, return_def]) >>
   fs[array_tail_packet_def] >> first_x_assum drule >> strip_tac >>
   `!l. FST rb <> Label l` by
-    metis_tac[target_subscript_typed_base_not_label] >>
+    drule_all_then ACCEPT_TAC target_subscript_typed_base_not_label_mods >>
   `local_ptrs_reserved cenv sm` by
     metis_tac[local_ptrs_reserved_next_var] >>
   `MAP FDOM es.scopes = MAP FDOM mid1.scopes` by

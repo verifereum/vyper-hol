@@ -5,10 +5,14 @@ Ancestors
   stmtSimAssignAttrStorage exprSimAttributeFields exprSimFieldLayout
   exprSimHypsDefs loweringPosts compileEnv vyperInterpreter vyperState
   vyperPlaceTyping vyperPlaceResultTyping vyperTypeSystem vyperValue
-  words exprLowering exprSimProps
+  words exprLowering exprSimProps loweringStateRelDefs
 
 Theorem target_field_source_ptr:
-  expr_sim_inv cenv cx env es /\
+  sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+  (!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+                               sz = type_memory_size tv) fields) /\
+  popped_keys_indexed es.scopes /\
   place_ptr_rel cenv cx t pv w0 (FST (SND rb)) (Type (StructT sid)) /\
   SND (SND rb) = SOME (ValPT (StructT sid)) /\
   place_readable cx es pv /\
@@ -28,7 +32,7 @@ Theorem target_field_source_ptr:
             target_ptr_ok cenv pv' rb G tn t)
 Proof
   rpt gen_tac >> strip_tac >>
-  drule_all stmtSimAssignAttrTheory.attribute_type_struct_field >> strip_tac >>
+  drule_all stmtSimAssignAttrTheory.attribute_type_struct_field_consistent >> strip_tac >>
   `target_field_type cenv (SND (SND rb)) fld =
      SOME (value_type_place (Type fty))` by
     simp[target_field_type_def, value_type_place_def] >>
@@ -40,8 +44,8 @@ QED
 
 Resume target_field_source_ptr[storage]:
   rename1 `StoragePlace tr slot tv` >>
-  drule_all struct_fields_layout >> strip_tac >> gvs[] >>
-  drule_all struct_field_type >> strip_tac >>
+  drule_all struct_fields_layout_consistent >> strip_tac >> gvs[] >>
+  drule_all struct_field_type_consistent >> strip_tac >>
   qpat_x_assum `extend_place _ _ _ _ = _` mp_tac >>
   simp[extend_place_def, bind_def] >>
   Cases_on `extend_storage_place cx tr slot (StructTV fs) (AttrSubscript fld) es` >>
@@ -59,10 +63,9 @@ QED
 
 Resume target_field_source_ptr[memory]:
   rename1 `MemoryPlace id path` >>
-  `popped_keys_indexed es.scopes` by fs[expr_sim_inv_def] >>
   drule_all extend_place_memory_attr >> strip_tac >> gvs[] >>
-  drule_all struct_fields_layout >> strip_tac >> gvs[] >>
-  drule_all struct_field_type >> strip_tac >>
+  drule_all struct_fields_layout_consistent >> strip_tac >> gvs[] >>
+  drule_all struct_field_type_consistent >> strip_tac >>
   drule_all mem_field_offset_layout >> strip_tac >>
   `mem_step_offset (StructTV fs) (AttrSubscript fld) =
      SOME (struct_field_offset (get_struct_fields cenv.ce_struct_fields

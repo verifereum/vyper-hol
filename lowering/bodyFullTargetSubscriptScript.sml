@@ -646,6 +646,22 @@ Proof
   fs[expr_sim_inv_mods_def] >> metis_tac[]
 QED
 
+Theorem immutable_target_offset_bound[local]:
+  expr_sim_inv_mods mods cenv cx env es /\
+  FLOOKUP env.bare_globals (src,id) = SOME ty /\
+  FLOOKUP env.bare_global_assignable (src,id) = SOME ty /\
+  FLOOKUP cenv.ce_module_vars (src,id) = SOME (ImmutableLoc off) /\
+  evaluate_type (get_tenv cx) ty = SOME tv ==>
+  off + type_memory_size tv < dimword (:256)
+Proof
+  strip_tac >>
+  qpat_x_assum `expr_sim_inv_mods _ _ _ _ _`
+    (strip_assume_tac o REWRITE_RULE [expr_sim_inv_mods_def]) >>
+  qpat_x_assum `!src id ty. FLOOKUP env.bare_globals (src,id) = SOME ty /\ _ ==> _`
+    (qspecl_then [`src`,`id`,`ty`] mp_tac) >>
+  simp[SF CONJ_ss]
+QED
+
 Theorem immutable_target_subscript_sim_full:
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\
@@ -950,11 +966,9 @@ Resume immutable_target_subscript_sim_full[tail]:
      drule_all_then strip_assume_tac immutable_target_write_root >>
      first_assum ACCEPT_TAC) >>
   `off + type_memory_size itv < dimword (:256)` by
-    (qpat_assum `expr_sim_inv_mods mods cenv cx env mid1`
-       (strip_assume_tac o REWRITE_RULE [expr_sim_inv_mods_def]) >>
-     qpat_assum `!src name ty. FLOOKUP env.bare_globals (src,name) = SOME ty /\ _ ==> _`
-       (qspecl_then [`NONE`,`id`,`root_ty`] mp_tac) >>
-     impl_tac >- simp[] >> disch_then (mp_tac o CONJUNCT2) >> simp[]) >>
+    (mp_tac (Q.INST [`es` |-> `mid1`, `src` |-> `NONE`,
+                   `ty` |-> `root_ty`, `tv` |-> `itv`] immutable_target_offset_bound) >>
+     simp[]) >>
   `?raw. eval_expr cx e ix = (INL raw,mid2)` by
     (qpat_assum `bind (eval_expr cx e) (read_result cx) ix = (INL _,mid2)`
        (mp_tac o MATCH_MP (SIMP_RULE (srw_ss() ++ ETA_ss) [] eval_expr_read_INL)) >>
@@ -990,7 +1004,8 @@ Resume immutable_target_subscript_sim_full[tail]:
        (mp_tac o MATCH_MP target_subscript_compile_decompose) >>
      simp[] >> TRY (disch_then ACCEPT_TAC)) >>
   `type_memory_bytes cenv et = type_memory_size etv` by
-    (irule expr_sim_inv_mods_memory_bytes >> qexistsl [`mods`,`cx`,`env`,`mid2`] >> simp[]) >>
+    (mp_tac (Q.INST [`es` |-> `mid2`, `ty` |-> `et`, `rt` |-> `etv`]
+       expr_sim_inv_mods_memory_bytes) >> simp[]) >>
   `rb = (FST rb,SOME LocCode,SOME (ValPT (ArrayT et bd)))` by
     (PairCases_on `rb` >> gvs[]) >>
   qpat_assum `rb = _` (fn th =>
@@ -1003,7 +1018,8 @@ Resume immutable_target_subscript_sim_full[tail]:
 QED
 
 Resume immutable_target_subscript_sim_full[run_tail]:
-  `!l. FST rb <> Label l` by drule_all_then ACCEPT_TAC target_subscript_typed_base_not_label >>
+  `!l. FST rb <> Label l` by
+    drule_all_then ACCEPT_TAC target_subscript_typed_base_not_label_mods >>
   `sa.cs_next_id <= sm.cs_next_id` by fs[ci_mono_def] >>
   `local_ptrs_reserved cenv sn` by
     (irule local_ptrs_reserved_next_var >> qexists_tac `sa` >> simp[]) >>
@@ -1050,15 +1066,15 @@ Resume immutable_target_subscript_sim_full[run_tail]:
   irule gas_outcome_full_mods_post_source >>
   irule_at Any immutable_target_array_tail >>
   simp[Abbr `childR`] >>
-  qexistsl [`tops`,`exps`,`mods`,`tn0`,`sn`,`is_signed_type (expr_type e)`,`sb`,`sa`,
-    `s0`,`off`,`iw`,`iop`,`et`,`es`,`env`,`dst`,`d`,`cenv`,
-    `FST rb`,`G0`] >>
+  qexistsl [`tops`,`tn0`,`sn`,`is_signed_type (expr_type e)`,`sb`,`sa`,`s0`,
+    `mods`,`iw`,`iop`,`exps`,`et`,`es`,`env`,`dst`,`d`,`FST rb`,`G0`] >>
   simp[arithmeticTheory.ADD_COMM] >>
   rpt (conj_tac >- first_assum ACCEPT_TAC) >>
   suspend "tail_post"
 QED
 
 Resume immutable_target_subscript_sim_full[tail_post]:
+  conj_tac >- fs[] >>
   conj_tac >-
     (gen_tac >> strip_tac >>
      qpat_assum `!H. valid_horizon cx st0 H mid2.storage_trace ==>

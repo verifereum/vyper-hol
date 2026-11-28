@@ -295,8 +295,8 @@ Resume target_attribute_sim_full[selected]:
     (qpat_assum `target_pre_mods _ _ _ _ (AttributeTarget _ _) _`
        (strip_assume_tac o REWRITE_RULE [target_pre_mods_def,target_indices_pre_mods_def]) >>
      irule targetLocalLiveTheory.eval_base_place_mods_inv >>
-     qexistsl [`bt`, `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
-                `INL pv`] >> simp[]) >>
+     qexistsl [`INL pv`, `es with gas_obs := gas_explicit marks s0.vs_gas_readings`,
+                `bt`] >> simp[]) >>
   `env.type_defs = get_tenv cx` by
     fs[expr_sim_inv_mods_def, env_consistent_def, env_context_consistent_def] >>
   `?sid. bty = StructT sid` by
@@ -319,6 +319,14 @@ Resume target_attribute_sim_full[selected]:
        (strip_assume_tac o SIMP_RULE std_ss [target_post_def,
                                              value_type_place_def]) >>
      qexists_tac `w` >> fs[]) >>
+  qpat_assum `expr_sim_inv_mods mods cenv cx env mid`
+    (strip_assume_tac o REWRITE_RULE [expr_sim_inv_mods_def]) >>
+  `!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==>
+      EVERY (\(fname, fty, sz). !tv. evaluate_type (get_tenv cx) fty = SOME tv ==>
+                               sz = type_memory_size tv) fields` by
+    (rpt gen_tac >> strip_tac >>
+     qpat_assum `!name fields. FLOOKUP cenv.ce_struct_fields name = SOME fields ==> _`
+       (drule_then (ACCEPT_TAC o CONJUNCT2))) >>
   drule_all target_field_source_ptr >> strip_tac >> gvs[] >>
   suspend "tail"
 QED

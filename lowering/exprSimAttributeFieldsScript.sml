@@ -97,6 +97,27 @@ QED
 
 (* A field of the lowering's struct table has, in the struct's type value,
    the type value its declared type evaluates to. *)
+Theorem struct_field_type_consistent:
+  !cenv cx sid fs fld fty fsz.
+    sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx) /\
+    evaluate_type (get_tenv cx) (StructT sid) = SOME (StructTV fs) /\
+    ALOOKUP (get_struct_fields cenv.ce_struct_fields (nsid_to_string sid))
+      fld = SOME (fty, fsz) ==>
+    ?ftv. ALOOKUP fs fld = SOME ftv /\
+          evaluate_type (get_tenv cx) fty = SOME ftv
+Proof
+  rpt gen_tac >> strip_tac >>
+  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
+  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
+  simp[sfields_tenv_consistent_def] >> strip_tac >>
+  first_x_assum drule >> strip_tac >>
+  gvs[get_struct_fields_def, vyperValueTheory.evaluate_types_OPT_MMAP] >>
+  qpat_x_assum `MAP FST fields = _` (SUBST_ALL_TAC o SYM) >>
+  qpat_x_assum `MAP (FST o SND) fields = _` (SUBST_ALL_TAC o SYM) >>
+  drule_all alookup_zip_field >> strip_tac >> simp[] >>
+  metis_tac[cj 1 evaluate_type_mono]
+QED
+
 Theorem struct_field_type:
   !cenv cx env es sid fs fld fty fsz.
     expr_sim_inv cenv cx env es /\
@@ -106,18 +127,9 @@ Theorem struct_field_type:
     ?ftv. ALOOKUP fs fld = SOME ftv /\
           evaluate_type (get_tenv cx) fty = SOME ftv
 Proof
-  rpt gen_tac >> strip_tac >>
-  gvs[vyperValueTheory.evaluate_type_def, AllCaseEqs()] >>
-  `sfields_tenv_consistent cenv.ce_struct_fields (get_tenv cx)` by
-    gvs[expr_sim_inv_def] >>
-  qpat_x_assum `sfields_tenv_consistent _ _` mp_tac >>
-  simp[sfields_tenv_consistent_def] >> strip_tac >>
-  first_x_assum drule >> strip_tac >>
-  gvs[get_struct_fields_def, vyperValueTheory.evaluate_types_OPT_MMAP] >>
-  qpat_x_assum `MAP FST fields = _` (SUBST_ALL_TAC o SYM) >>
-  qpat_x_assum `MAP (FST o SND) fields = _` (SUBST_ALL_TAC o SYM) >>
-  drule_all alookup_zip_field >> strip_tac >> simp[] >>
-  metis_tac[cj 1 evaluate_type_mono]
+  rpt strip_tac >>
+  fs[expr_sim_inv_def] >>
+  drule_all struct_field_type_consistent >> simp[]
 QED
 
 (* ===== Offsets of declared types and of their type values ===== *)
