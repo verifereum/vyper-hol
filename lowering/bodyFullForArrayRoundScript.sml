@@ -2799,14 +2799,14 @@ Proof
   `lookup_immutable cx em src name = lookup_immutable cx es src name` by
     (qpat_assum `read_result cx (PlaceR _) em = _`
        (mp_then Any mp_tac for_nonslot_bare_immutable_lookup) >>
-     disch_then (drule_at (Pat `expr_sim_inv _ _ _ em`)) >> simp[]) >>
+     disch_then (drule_at (Pat `expr_sim_inv_mods _ _ _ _ em`)) >> simp[]) >>
   qpat_assum `evaluate_type _ (ArrayT et bd) = SOME _`
     (strip_assume_tac o MATCH_MP vyperTypeValuesTheory.evaluate_type_ArrayT_cases) >>
   `lookup_immutable cx (eb with gas_obs := obs) src name = lookup_immutable cx es src name` by
     (qpat_assum `eb.immutables = es.immutables` (fn eq =>
        simp[NoAsms,vyperBareGlobalNameTheory.lookup_immutable_def,eq])) >>
   `lookup_immutable cx (eb with gas_obs := obs) src name = SOME (ArrayTV elem_tv bd,ArrayV av)` by simp[] >>
-  `stmt_loop_calls_ok [(NONE,tops)]
+  `stmt_loop_calls_ok mods
      (For id et (Array (TopLevelName (ArrayT et bd) (src,name))) n body)` by
     (qpat_assum `e = TopLevelName _ _` (fn eq =>
        qpat_assum `stmt_loop_calls_ok _ _` (mp_tac o REWRITE_RULE [eq])) >>
@@ -2825,17 +2825,17 @@ Proof
 QED
 *)
 Theorem for_nonslot_code_frame_bare[local]:
-  ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)] /\
+  ALOOKUP cx.sources cx.txn.target = SOME mods /\
   iterator_unmodified (Array e) body /\
-  stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) n body) /\
-  expr_sim_inv_mods [(NONE,tops)] c cx env em /\
+  stmt_loop_calls_ok mods (For id fty (Array e) n body) /\
+  expr_sim_inv_mods mods c cx env em /\
   (loc = LocCode ==> ?src name.
     e = TopLevelName (ArrayT et bd) (src,name) /\
     rv = PlaceR (ImmutablePlace src name []) /\
     FLOOKUP env.bare_globals (src,name) = SOME (ArrayT et bd) /\
     ~cx_const_name cx (src,name) /\
     vv_location vv = SOME LocCode /\ post_value_type c e = ArrayT et bd) ==>
-  for_nonslot_code_frame [(NONE,tops)] c cx env ctx func id e body loc rv vv av em u
+  for_nonslot_code_frame mods c cx env ctx func id e body loc rv vv av em u
 Proof
   cheat
 QED
@@ -2886,7 +2886,7 @@ Theorem for_nonslot_array_scoped_body_at[local]:
   benv = extend_local env id fty F /\ id NOTIN FDOM env.var_types /\
   evaluate_type (get_tenv cx) fty = SOME dtv /\
   iterator_unmodified (Array e) body /\
-  (?limit. stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) limit body)) /\
+  (?limit. stmt_loop_calls_ok mods (For id fty (Array e) limit body)) /\
   (?bb inst. lookup_block incr func.fn_blocks = SOME bb /\
     get_instruction bb 0 = SOME inst /\ inst.inst_opcode <> PHI) /\
   call_evaluation_safe cx (int_calls_stmts body) /\
@@ -3183,13 +3183,13 @@ QED
 
 (* SCRATCH MEASUREMENT: original continuation.
 Resume for_nonslot_array_scoped_body_at[continue_live_frame]:
-  `body_const_cells_agree [(NONE,tops)] cx benv ef` by
+  `body_const_cells_agree mods cx benv ef` by
     (irule body_const_cells_agree_stmts >>
      qpat_assum `eval_stmts cx body (eb with gas_obs := obs) = (raw,ef)`
        (irule_at Any) >>
      qexists_tac `ret_ty` >> simp[]) >>
-  `body_const_cells_agree [(NONE,tops)] cx env ep` by
-    (qpat_assum `body_const_cells_agree [(NONE,tops)] cx benv ef` mp_tac >>
+  `body_const_cells_agree mods cx env ep` by
+    (qpat_assum `body_const_cells_agree mods cx benv ef` mp_tac >>
      qpat_assum `benv = extend_local env id fty F` (fn eq =>
        simp[NoAsms, eq, Abbr `ep`])) >>
   `ep.storage_trace = ef.storage_trace` by simp[Abbr `ep`] >>
@@ -3474,7 +3474,7 @@ Resume for_nonslot_array_scoped_body_at[increment_return_buffer]:
     (map_every assume_tac o CONJUNCTS o REWRITE_RULE[for_nonslot_live_def]) >>
   conj_tac >- first_assum ACCEPT_TAC >>
   reverse conj_tac >-
-    (qpat_assum `body_const_cells_agree [(NONE,tops)] cx env ep` mp_tac >>
+    (qpat_assum `body_const_cells_agree mods cx env ep` mp_tac >>
      simp[NoAsms, Abbr `ep`]) >>
   irule bodyFullSharedTheory.return_buf_sep_transport >>
   conj_tac
@@ -3981,7 +3981,7 @@ Theorem for_nonslot_array_round_contracts_at_with_prefix:
   type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
   stmt_exprs_ok c (For id fty (Array e) n loop_body) /\
   for_nonslot_code_frame mods c cx env ctx func id e loop_body loc rv vv av em u /\
-  stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) n loop_body) /\
+  stmt_loop_calls_ok mods (For id fty (Array e) n loop_body) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id fty (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
   call_evaluation_safe cx (int_calls_stmt (For id fty (Array e) n loop_body)) /\
@@ -4223,7 +4223,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[round_packets]:
       (len_op,idx,bw) (xd,dw,capacity,aidItem) (H,k,rs,es,c,es,J,tz,z)` >>
   qabbrev_tac `Inv = \H rs es J tz z.
     z.vs_current_bb = cond /\ z.vs_inst_idx = 0 /\ return_buf_sep d c es z /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
+    body_const_cells_agree mods cx env es /\
     Live H (LENGTH vs - LENGTH rs) rs es J tz z` >>
   qabbrev_tac `Done = \H ee G1 tn1 t.
     stmt_lands lctx sb (INL ()) t /\ ~t.vs_halted /\ ~block_is_terminated sb /\
@@ -4311,7 +4311,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons]:
   `valid_horizon cx st0 (storage_trace_horizon es.storage_trace) es.storage_trace` by
     fs[storage_trace_domain_def] >>
   qabbrev_tac `k = LENGTH vs - LENGTH (a::rs)` >>
-  `body_const_cells_agree [(NONE,tops)] cx env es` by
+  `body_const_cells_agree mods cx env es` by
     (qpat_assum `!H. valid_horizon cx st0 H es.storage_trace ==> Inv H (a::rs) es J tz z`
        (qspec_then `storage_trace_horizon es.storage_trace` (drule_then mp_tac)) >>
      simp[NoAsms, Abbr `Inv`] >> strip_tac >> first_assum ACCEPT_TAC) >>
@@ -4359,7 +4359,7 @@ Resume for_nonslot_array_round_contracts_at_with_prefix[cons_body]:
      simp[NoAsms,push_scope_with_var_def,return_def] >>
      disch_then (SUBST1_TAC o SYM) >>
      simp[NoAsms,Abbr `sc`,evaluation_state_component_equality]) >>
-  `body_const_cells_agree [(NONE,tops)] cx (extend_local env id fty F) eb` by
+  `body_const_cells_agree mods cx (extend_local env id fty F) eb` by
     (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
   `eb.storage_trace = es.storage_trace` by
     (qpat_assum `eb = _` SUBST1_TAC >> simp[]) >>
@@ -4667,7 +4667,7 @@ Theorem for_nonslot_array_round_contracts_at:
   type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
   stmt_exprs_ok c (For id fty (Array e) n loop_body) /\
   for_nonslot_code_frame mods c cx env ctx func id e loop_body loc rv vv av em u /\
-  stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) n loop_body) /\
+  stmt_loop_calls_ok mods (For id fty (Array e) n loop_body) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id fty (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
   call_evaluation_safe cx (int_calls_stmt (For id fty (Array e) n loop_body)) /\
@@ -4790,43 +4790,33 @@ Proof
   `eval_expr cx e start = (INL rv,em)` by
     (qpat_assum `!tail. eval_expr _ _ _ = _` (qspec_then `em.gas_obs` mp_tac) >>
      simp[Abbr `start`]) >>
-  `expr_body_pre c cx env e start` by simp[Abbr `start`] >>
-  `?start. eval_expr cx e start = (INL rv,em) /\ expr_body_pre c cx env e start` by
+  `expr_body_pre_mods mods c cx env e start` by simp[Abbr `start`] >>
+  `?start. eval_expr cx e start = (INL rv,em) /\ expr_body_pre_mods mods c cx env e start` by
     (qexists `start` >> simp[]) >>
   conj_tac
   >- (irule body_const_cells_agree_expr >>
       qpat_assum `eval_expr cx e start = (INL rv,em)` (irule_at Any) >>
-      imp_res_tac exprBodyPrePropsTheory.expr_body_pre_static_facts >>
+      imp_res_tac exprBodyPrePropsTheory.expr_body_pre_mods_well_typed >>
       simp[Abbr `start`]) >>
-  `expr_sim_inv c cx env em` by
-    (drule_all_then ACCEPT_TAC bodySimStmtFactsTheory.expr_body_pre_eval_result) >>
+  `expr_sim_inv_mods mods c cx env em` by
+    (drule_all_then ACCEPT_TAC bodySimStmtFactsTheory.expr_body_pre_eval_result_mods) >>
   `vv_place_ptr c cx em u rv vv` by fs[vv_post_def] >>
   `(!v ty p. rv = Value v /\ ~is_word_type (post_value_type c e) /\
      ~is_bytestring_type (post_value_type c e) /\ vv = LocatedValue ty p ==>
      p.ptr_location = LocMemory)` by
     (rpt strip_tac >> first_x_assum (drule_all_then strip_assume_tac) >> simp[]) >>
-  `ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
-    (qpat_assum `body_inv tops ctx _ cx`
-       (ACCEPT_TAC o MATCH_MP contractInvContextPropsTheory.contract_inv_singleton_source_modules
-         o MATCH_MP bodySimTheory.body_inv_contract)) >>
+  `ALOOKUP cx.sources cx.txn.target = SOME mods` by
+    fs[bodyInvSplitTheory.contract_inv_def] >>
   irule for_nonslot_code_frame_bare >>
   conj_tac >- (qexistsl [`bd`,`fty`] >> disch_tac >>
     `vv_location vv = SOME LocCode` by
       (qpat_assum `loc = (case vv_location vv of NONE => LocMemory | SOME l => l)` mp_tac >>
        Cases_on `vv_location vv` >> simp[]) >>
-    qpat_assum `body_inv tops ctx c cx` (fn inv =>
-      assume_tac (MATCH_MP bodySimTheory.body_inv_contract inv) >>
-      strip_assume_tac (MATCH_MP bodyInvCodePropsTheory.body_inv_main_code inv)) >>
-    `expr_sim_inv_mods [(NONE,tops)] c cx env em` by
-      (drule_then strip_assume_tac bodyInvCodePropsTheory.body_inv_module_locations >>
-       drule_then assume_tac bodyInvSplitTheory.contract_inv_immutable_section_layout >>
-       drule_all_then (fn th => simp[th])
-         bodyFullPostsModsTheory.expr_sim_inv_mods_singleton) >>
     `type_widens_to env.type_defs (post_value_type c e) (expr_type e)` by
       (irule post_value_type_widens >> conj_tac >- fs[well_typed_iterator_def] >>
        qexistsl [`cx`,`em`] >> first_assum ACCEPT_TAC) >>
     `!src name. e = TopLevelName (expr_type e) (src,name) ==>
-       ?ts. ALOOKUP [(NONE,tops)] src = SOME ts /\
+       ?ts. ALOOKUP mods src = SOME ts /\
             IS_SOME (supported_immutable_type ts (NONE,name))` by
       (rpt gen_tac >> strip_tac >>
        qpat_assum `!nid. e = TopLevelName _ nid ==> _`
@@ -4834,7 +4824,7 @@ Proof
        Cases_on `src` >>
        gvs[alistTheory.ALOOKUP_def, supportedDeclsTheory.supported_immutable_type_def,
             supportedDeclsTheory.supported_lookup_other_module]) >>
-    mp_tac (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`, `et` |-> `fty`]
+    mp_tac (Q.INST [`et` |-> `fty`]
               for_nonslot_array_capture_classify_mods) >>
     (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
     fs[exprSimHypsDefsTheory.cx_const_name_split_def]) >>
@@ -4848,7 +4838,7 @@ Theorem for_nonslot_array_round_source_pre:
     (entry,cond,bod,incr,exit,idx,invalid,valid,done_var,next_var)
     (sa,stride,off_op,sm,sum_op,sn,addr,saCopy,sbCopy)
     (sbBody,sj,sb,shadow_sbCopy,shadow_sbBody) /\
-  body_const_cells_agree [(NONE,tops)] cx env es0 /\
+  body_const_cells_agree mods cx env es0 /\
   (contract_inv mods exps ctx c cx /\
      module_body_inv mods c.ce_module tops c cx) /\ expr_body_pre_mods mods c cx env e es0 /\
   type_stmt env ret_ty (For id fty (Array e) n loop_body) = SOME env' /\
@@ -4856,7 +4846,7 @@ Theorem for_nonslot_array_round_source_pre:
      IS_SOME (supported_immutable_type tops nid)) /\
   (~(?ty nid. e = TopLevelName ty nid) ==>
    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
-  stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) n loop_body) /\
+  stmt_loop_calls_ok mods (For id fty (Array e) n loop_body) /\
   (?obs. !tail. eval_expr cx e (es0 with gas_obs := obs ++ tail) =
                  (INL rv,em with gas_obs := tail)) /\
   vv_post (storage_trace_horizon em.storage_trace) ctx func c cx e es0 sa0 sbExpr s0 em rv vv u /\
@@ -4864,7 +4854,7 @@ Theorem for_nonslot_array_round_source_pre:
     ~is_bytestring_type (post_value_type c e) ==>
     vv_own c cx (post_value_type c e) sa0 sbExpr em rv vv u /\
     (!ty p. vv = LocatedValue ty p ==> p.ptr_location = LocMemory)) ==>
-  body_const_cells_agree [(NONE,tops)] cx env em /\
+  body_const_cells_agree mods cx env em /\
   for_nonslot_code_frame mods c cx env ctx func id e loop_body loc rv vv av em u
 Proof
   cheat
@@ -4899,7 +4889,7 @@ Theorem for_nonslot_array_round_contracts:
      IS_SOME (supported_immutable_type tops nid)) /\
   (~(?ty nid. e = TopLevelName ty nid) ==>
    !tgt nid. loop_iterator_place e = SOME tgt ==> target_root tgt <> TopLevelNameTarget nid) /\
-  stmt_loop_calls_ok [(NONE,tops)] (For id fty (Array e) n loop_body) /\
+  stmt_loop_calls_ok mods (For id fty (Array e) n loop_body) /\
   (!target. supported_stmt_expr_exists (expr_abi_decode_target_root target)
       (For id fty (Array e) n loop_body) ==> occurs_abi_decode_target target tops) /\
   call_evaluation_safe cx (int_calls_stmt (For id fty (Array e) n loop_body)) /\

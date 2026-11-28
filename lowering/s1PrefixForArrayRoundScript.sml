@@ -14,6 +14,7 @@ val _ = Parse.hide "cond";
 Proof
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
   mp_tac (Q.INST [`cond : string` |-> `cond_label`,
+    `mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`,
     `B` |-> `\eb t Gf tnf.
       gas_prefix_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG) cx st0
         (finally (try (do eval_stmts cx loop_body; return F od)
@@ -233,7 +234,8 @@ Finalise for_nonslot_array_round_prefix_contracts_at
 Proof
   DISCH_THEN (map_every assume_tac o CONJUNCTS) >>
   drule_all_then (map_every assume_tac o CONJUNCTS o Q.SPEC `av`)
-    for_nonslot_array_round_source_pre >>
+    (Q.INST [`mods` |-> `[(NONE,tops)]`, `exps` |-> `[]`]
+      for_nonslot_array_round_source_pre) >>
   qpat_assum `for_nonslot_layout _ _ _ _ _ _ _`
     (mp_then (Pos hd) (mp_tac o SPEC_ALL) for_nonslot_array_round_prefix_contracts_at) >>
   (impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC)) >>
