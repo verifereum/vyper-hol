@@ -163,7 +163,9 @@ Proof
   `?etv. evaluate_type (get_tenv cx) et = SOME etv /\
     evaluate_type (get_tenv cx) (ArrayT et bd) = SOME (ArrayTV etv bd)` by
     (fs[place_ptr_rel_def, evaluate_type_def, AllCaseEqs()] >> metis_tac[]) >>
-  drule_all place_ptr_rel_memory_current >> strip_tac >>
+  qpat_assum `expr_sim_inv_mods mods cenv cx env mid2`
+    (strip_assume_tac o REWRITE_RULE [exprSimHypsDefsTheory.expr_sim_inv_mods_def]) >>
+  drule_all place_ptr_rel_memory_current_typed >> strip_tac >>
   Cases_on `live` >> gvs[value_has_type_def] >>
   rename1 `value_has_type (ArrayTV etv bd) (ArrayV av)` >>
   drule_all target_memory_array_length_bound >> simp[wordsTheory.dimword_def]
