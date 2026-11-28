@@ -91,7 +91,8 @@ Theorem local_target_place_type:
     ?ty. bvt = Type ty /\ target_place_type cenv bt = SOME (ValPT ty)
 Proof
   rpt strip_tac >> irule local_target_place_type_layout >>
-  qexistsl_tac [`env`,`id`] >>
+  conj_tac >- (qexists_tac `id` >> simp[]) >>
+  qexists_tac `env` >>
   fs[expr_sim_inv_def, env_consistent_def, env_context_consistent_def]
 QED
 
@@ -453,7 +454,8 @@ Theorem local_target_place_type_mods:
     ?ty. bvt = Type ty /\ target_place_type cenv bt = SOME (ValPT ty)
 Proof
   rpt strip_tac >> irule local_target_place_type_layout >>
-  qexistsl_tac [`env`,`id`] >>
+  conj_tac >- (qexists_tac `id` >> simp[]) >>
+  qexists_tac `env` >>
   fs[expr_sim_inv_mods_def, env_consistent_def, env_context_consistent_def]
 QED
 

@@ -1,6 +1,6 @@
 Theory bodySimAugPlaceLoad
 Ancestors
-  bodySimStmtFacts
+  bodySimStmtFacts targetLocalLive[qualified]
   targetPureSourceFrame vyperLocalAccessFrame
   vyperEvalExprPreservesScopesDom vyperEvalPreservesScopes vyperPlaceResultTyping
   bodySimAugPlaceLive bodySimAugPlaceScopes supportedTargets
@@ -422,7 +422,7 @@ Theorem aug_place_target_inv_mods:
   eval_target_place cx t s = (r,s') ==> expr_sim_inv_mods mods cenv cx env s'
 Proof
   simp[Once evaluate_def, bind_def, AllCaseEqs()] >> rpt strip_tac >>
-  imp_res_tac get_place_state >> gvs[] >> metis_tac[eval_base_place_mods_inv]
+  imp_res_tac get_place_state >> gvs[] >> metis_tac[targetLocalLiveTheory.eval_base_place_mods_inv]
 QED
 
 Theorem aug_place_rhs_scopes:
