@@ -147,8 +147,12 @@ Resume annassign_word_prefix_execution_sep[entry]:
      fs[ptrDisciplineTheory.ctx_has_dalloca_def, EXISTS_MEM,
         unitTransformDefsTheory.dalloca_fmp_headroom_def] >> metis_tac[]) >>
   `!H. dead_lo_ok H (DF H) lo cenv' cx` by
-    (qpat_assum `!H. dead_lo_ok H _ _ cenv _` mp_tac >>
-     simp[bodyPtrDefsTheory.dead_lo_ok_def]) >>
+    (qpat_assum `cenv'.ce_modules = cenv.ce_modules` SUBST1_TAC >>
+     qpat_assum `cenv'.ce_is_ctor <=> cenv.ce_is_ctor`
+       (fn th => pure_rewrite_tac[th]) >>
+     qpat_assum `!H. dead_lo_ok H _ _ cenv _` mp_tac >>
+     simp[bodyPtrDefsTheory.dead_lo_ok_def] >>
+     gvs[bodyPtrDefsTheory.dead_lo_ok_def]) >>
   `gas_admissible (bind (eval_expr cx e) (read_result cx)) expr_res_ok es` by
     (drule annassign_admissible_rhs >> simp[]) >>
   suspend "source"
