@@ -407,7 +407,7 @@ local
     simp[p23_call_trace])
   val call_entry_premises = CONJUNCTS (CONJUNCT2
     (REWRITE_RULE [call_premises_deployed]
-      (CONJ p23_source_typing p23_call_state)))
+      (LIST_CONJ [p23_source_typing, p23_call_state, p23_storage_ok])))
   val dep_horizon = prove
     (``horizon_ok ([], [])``,
      simp[horizon_ok_def, regions_consistent_def, storage_locks_separated_def])
@@ -451,8 +451,7 @@ in
                 p23_deploy_typing, dep_entry, dep_bound, dep_horizon, p23_deploy_within])
   val dep_result = MATCH_MP dep_thm dep_prem
   val handoff = prove
-    (``deployed p23_tops p23_runtime_bc p23_am_call p23_call_tx.target /\
-       storage_ok ([], []) p23_am_call p23_call_tx``,
+    (``deployed ([], []) p23_tops p23_runtime_bc p23_am_call p23_call_tx.target``,
      mp_tac dep_result >>
      simp[p23_dep_run, p23_dep_trace, dep_not_starved, dep_survives,
           pairTheory.PAIR_EQ] >>
@@ -465,15 +464,13 @@ in
          Cases >> simp[]) >>
      simp[] >>
      disch_then (qspecl_then [`p23_am_dep_post`, `[]`] mp_tac o CONJUNCT2) >>
-     simp[p23_load] >>
-     disch_then (CONJUNCTS_THEN2 mp_tac (qspec_then `p23_call_tx` mp_tac)) >>
-     simp[p23_am_call_def, call_target])
+     simp[p23_load, p23_am_call_def, call_target])
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `p23_tops`,
       `p23_deploy_bc`, `p23_runtime_bc`, `p23_am_call`, `p23_call_tx`,
       `p23_es_call`, `([], [])`] vyper_call_correct_deployed)
-    (LIST_CONJ ([accepted, p23_compile, CONJUNCT1 handoff] @ call_entry_premises @
-                [call_bound, CONJUNCT2 handoff, p23_call_within]))
+    (LIST_CONJ ([accepted, p23_compile, handoff] @ call_entry_premises @
+                [call_bound, p23_call_within]))
 end
 
 (* ===== The witness ===== *)

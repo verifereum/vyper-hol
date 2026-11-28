@@ -1,9 +1,10 @@
 # Deployment hypotheses
 
-The constructor result and the handoff use the same gas filling. The handoff
-establishes `deployed` after successful source deployment if the target is not
-queued for deletion, and establishes `storage_ok H` on the next source machine
-for later transactions targeting that address.
+The constructor result and the handoff use the same gas filling. After
+successful source deployment at a surviving target, the next source machine
+satisfies `deployed H`. This supplies installed code and gives source typing,
+source deployment and `storage_ok H` for every well-typed transaction to the
+deployed address.
 
 ## IN
 

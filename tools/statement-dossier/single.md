@@ -10,8 +10,12 @@ The compiler produces deployment bytecode and runtime bytecode for the module.
 
 ## deployed
 
-Deployment establishes the installed code and the source-side typing and deployment
-facts at the target. `call_preserves_deployed` shows when a call keeps those facts.
+Deployment establishes the installed code at the target. For every well-typed
+transaction to that address, `deployed H` supplies source typing, source
+deployment and `storage_ok H`. The regions in `H` fit, are pairwise identical
+or disjoint within each storage kind and avoid the transient lock slots. The
+starting storage decodes on those regions. The theorem gives back `deployed H`
+in the next transaction world after a root call whose target survives.
 
 ## call_tx_well_typed
 
@@ -25,12 +29,6 @@ The EVM starts in a fresh frame for this transaction, with the entry value trans
 ## LENGTH
 
 The call trace has fewer than 2⁶⁴ entries.
-
-## storage_ok
-
-The regions in `H` fit and are pairwise identical or disjoint within each storage
-kind. They are clear of the transient lock slots, and the initial storage decodes on
-them. This predicate does not read `tx.function_name` or `tx.args`.
 
 ## call_within
 

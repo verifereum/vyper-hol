@@ -619,7 +619,8 @@ local
     simp[erc20_transfer_trace])
   val call_entry_premises = CONJUNCTS (CONJUNCT2
     (REWRITE_RULE [call_premises_deployed]
-      (CONJ erc20_source_typing erc20_call_state)))
+      (LIST_CONJ [erc20_source_typing, erc20_call_state,
+                  SPEC ``erc20_am_call`` erc20_storage_ok])))
   val dep_horizon = prove
     (``horizon_ok ^erc20_horizon``,
      mp_tac (SPEC ``erc20_am_call`` erc20_storage_ok) >>
@@ -660,8 +661,8 @@ in
                              dep_h_transient])),
                 dep_bound, dep_horizon, erc20_deploy_within])
   val handoff = prove
-    (``deployed erc20_tops erc20_runtime_bc erc20_am_call erc20_transfer_tx.target /\
-       storage_ok ^erc20_horizon erc20_am_call erc20_transfer_tx``,
+    (``deployed ^erc20_horizon erc20_tops erc20_runtime_bc erc20_am_call
+         erc20_transfer_tx.target``,
      mp_tac dep_result >>
      simp[erc20_dep_run, erc20_dep_trace, dep_not_starved, dep_survives,
           pairTheory.PAIR_EQ] >>
@@ -674,15 +675,13 @@ in
          Cases >> simp[]) >>
      simp[] >>
      disch_then (qspecl_then [`erc20_am_dep_post`, `[]`] mp_tac o CONJUNCT2) >>
-     simp[erc20_load] >>
-     disch_then (CONJUNCTS_THEN2 mp_tac (qspec_then `erc20_transfer_tx` mp_tac)) >>
-     simp[erc20_am_call_def, erc20_transfer_target, erc20_dep_target])
+     simp[erc20_load, erc20_am_call_def, erc20_transfer_target, erc20_dep_target])
   val _ = MATCH_MP
     (Q.SPECL [`K SOME`, `o1_policy all_capabilities`, `erc20_tops`,
       `erc20_deploy_bc`, `erc20_runtime_bc`, `erc20_am_call`,
       `erc20_transfer_tx`, `erc20_es_transfer`, `^erc20_horizon`] vyper_call_correct_deployed)
-    (LIST_CONJ ([accepted, erc20_compile, CONJUNCT1 handoff] @ call_entry_premises @
-                [call_bound, CONJUNCT2 handoff, erc20_call_within]))
+    (LIST_CONJ ([accepted, erc20_compile, handoff] @ call_entry_premises @
+                [call_bound, erc20_call_within]))
 end
 
 Theorem erc20_deploy_transfer_lifecycle:

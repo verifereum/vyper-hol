@@ -246,9 +246,10 @@ makes `bytecode_stack_check` succeed at `stack_limit` on the actual entry code.
 That code includes immutables for calls and constructor arguments for deploys.
 
 The companion `vyper_call_gas_sufficient_deployed`
-(`lowering/e2eDeployedScript.sml`) takes a fixed horizon with `storage_ok H`
-at entry. It gives a threshold `g` such that adding any `g' >= g` gas to the
-frame yields a run. When `calldata_dispatch` selects a source call, the gas
+(`lowering/e2eDeployedScript.sml`) takes `deployed H` at entry, which supplies
+`storage_ok H` for the well-typed call transaction. It gives a threshold `g`
+such that adding any `g' >= g` gas to the frame yields a run. When
+`calldata_dispatch` selects a source call, the gas
 guarantee requires `call_within H` on the raised-gas run, a trace length below
 `2 ** 64`, and `~gas_source_exempt` for every source observation of that call. Under those conditions, the entry frame cannot
 raise `OutOfGas`. The same guarantee applies to unmatched calldata.
