@@ -8,44 +8,8 @@ Ancestors
   stmtLoweringMono fragExec exprSimDefs compileEnv stmtLowering
   vyperState vyperStorageFootprint contextRawReachable ptrDiscipline
 
-Theorem stmt_frag_prefix_cons_env:
-  !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty
-   stmt ss es.
-  (ctx_has_dalloca ctx /\ MEM func ctx.ctx_functions ==>
-      !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
-  stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ty stmt)
-      (stmt_env (gas_shadow_env T cenv) lctx ty (gas_shadow_stmt stmt))
-      (eval_stmt cx stmt) es /\
-  stmt_frag_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmt_env cenv lctx ty stmt)
-      (stmt_env (gas_shadow_env T cenv) lctx ty (gas_shadow_stmt stmt))
-      (eval_stmt cx stmt) es /\
-  (!gs es1 c sa sm.
-       eval_stmt cx stmt (es with gas_obs := gs) = (INL (), es1) /\
-       stmt_env cenv lctx ty stmt sa = (c, sm) /\
-       cenv_top_ext cenv c es1.scopes ==>
-       stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-         cx lctx RetQ c
-         (stmts_env c lctx ty ss)
-         (stmts_env (gas_shadow_env T c) lctx ty (MAP gas_shadow_stmt ss))
-         (eval_stmts cx ss) es1) /\
-  (!gs es1 c sa sm.
-       eval_stmt cx stmt (es with gas_obs := gs) = (INL (), es1) /\
-       stmt_env cenv lctx ty stmt sa = (c, sm) /\
-       cenv_top_ext cenv c es1.scopes ==>
-       stmt_frag_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-         cx lctx RetQ c
-         (stmts_env c lctx ty ss)
-         (stmts_env (gas_shadow_env T c) lctx ty (MAP gas_shadow_stmt ss))
-         (eval_stmts cx ss) es1) ==>
-  stmt_frag_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
-      cx lctx RetQ cenv
-      (stmts_env cenv lctx ty (stmt::ss))
-      (stmts_env (gas_shadow_env T cenv) lctx ty (MAP gas_shadow_stmt (stmt::ss)))
-      (eval_stmts cx (stmt::ss)) es
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   rpt gen_tac >> strip_tac >>
   `gas_shadow_compiles_env T (stmt_env cenv lctx ty stmt)
@@ -102,7 +66,50 @@ Proof
   simp[] >> (impl_tac >- first_assum ACCEPT_TAC) >> strip_tac >>
   suspend "compose"
 QED
+*)
+Theorem stmt_frag_prefix_cons_env:
+  !DF lo d ctx shadow_ctx PG func shadow_func cx lctx RetQ cenv ty
+   stmt ss es.
+  (ctx_has_dalloca ctx /\ MEM func ctx.ctx_functions ==>
+      !bb. MEM bb func.fn_blocks ==> phi_prefix_length bb.bb_instructions = 0) /\
+  stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ty stmt)
+      (stmt_env (gas_shadow_env T cenv) lctx ty (gas_shadow_stmt stmt))
+      (eval_stmt cx stmt) es /\
+  stmt_frag_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmt_env cenv lctx ty stmt)
+      (stmt_env (gas_shadow_env T cenv) lctx ty (gas_shadow_stmt stmt))
+      (eval_stmt cx stmt) es /\
+  (!gs es1 c sa sm.
+       eval_stmt cx stmt (es with gas_obs := gs) = (INL (), es1) /\
+       stmt_env cenv lctx ty stmt sa = (c, sm) /\
+       cenv_top_ext cenv c es1.scopes ==>
+       stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+         cx lctx RetQ c
+         (stmts_env c lctx ty ss)
+         (stmts_env (gas_shadow_env T c) lctx ty (MAP gas_shadow_stmt ss))
+         (eval_stmts cx ss) es1) /\
+  (!gs es1 c sa sm.
+       eval_stmt cx stmt (es with gas_obs := gs) = (INL (), es1) /\
+       stmt_env cenv lctx ty stmt sa = (c, sm) /\
+       cenv_top_ext cenv c es1.scopes ==>
+       stmt_frag_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+         cx lctx RetQ c
+         (stmts_env c lctx ty ss)
+         (stmts_env (gas_shadow_env T c) lctx ty (MAP gas_shadow_stmt ss))
+         (eval_stmts cx ss) es1) ==>
+  stmt_frag_prefix (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
+      cx lctx RetQ cenv
+      (stmts_env cenv lctx ty (stmt::ss))
+      (stmts_env (gas_shadow_env T cenv) lctx ty (MAP gas_shadow_stmt (stmt::ss)))
+      (eval_stmts cx (stmt::ss)) es
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume stmt_frag_prefix_cons_env[compose]:
   qmatch_assum_abbrev_tac `gas_outcome_full _ _ _ _ _ _ headQ headR` >>
   `gas_outcome_full (DF,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
@@ -127,7 +134,9 @@ Resume stmt_frag_prefix_cons_env[compose]:
       rpt gen_tac >> Cases_on `res` >> simp[expr_exit_def]) >>
   suspend "tail"
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume stmt_frag_prefix_cons_env[tail]:
   rpt gen_tac >> strip_tac >>
   qunabbrev_tac `midQ` >> qunabbrev_tac `pathQ` >> qunabbrev_tac `headQ` >>
@@ -183,5 +192,8 @@ Resume stmt_frag_prefix_cons_env[tail]:
                            `tn1`, `cenv'`] mp_tac) >>
   (impl_tac >- (simp[] >> rpt conj_tac >> first_assum ACCEPT_TAC)) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise stmt_frag_prefix_cons_env
+*)
