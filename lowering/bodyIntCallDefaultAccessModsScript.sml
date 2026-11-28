@@ -2,7 +2,7 @@
    selects a key; it is not evidence that the interpreter reached that key. *)
 Theory bodyIntCallDefaultAccessMods
 Ancestors
-  bodyFullPredsMods bodyFullPostsMods bodyInvSplit stateRelProj
+  bodyFullPreds bodyFullPredsMods bodyFullPostsMods bodyInvSplit stateRelProj
   loweringStateRelDefs supportedExprTraverse exprLowering
   vyperStoragePlaceProvenance vyperStorageLayoutSafety vyperState
   list pair alist finite_map words

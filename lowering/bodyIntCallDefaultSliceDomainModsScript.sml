@@ -1,6 +1,6 @@
 Theory bodyIntCallDefaultSliceDomainMods
 Ancestors
-  runtimeDefaultCompile bodyFullPredsMods constSubstMods constSubstCorrect
+  runtimeDefaultCompile bodyFullPreds bodyFullPredsMods constSubstMods constSubstCorrect
   vyperTypeContract vyperTypeEvalProofs vyperContext gasShadow
   supportedExprTraverse gasShadowShape whitelistCheckerConsts
   constSubstModsCorrect vyperTypeExternalDefaults vyperTypeContractContext
