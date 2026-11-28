@@ -347,7 +347,7 @@ Proof
   TRY (rename1 `read_result _ _ _ <> _` >> disch_tac >>
        drule_then (qspec_then `tops` mp_tac) gasExemptCertTheory.read_result_no_exempt_error >> simp[]) >>
   qx_gen_tac `w` >> rpt gen_tac >> disch_tac >> Cases_on `w` >>
-  simp[vyperValueTheory.array_value_CASE_rator, vyperStateTheory.return_def,
+  simp[NoAsms, vyperValueTheory.array_value_CASE_rator, vyperStateTheory.return_def,
        vyperStateTheory.raise_def, AllCaseEqs()] >>
   rpt strip_tac >> gvs[unspecified_behaviour_exempt_def]
 QED

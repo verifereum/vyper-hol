@@ -1483,7 +1483,9 @@ Proof
   `type_memory_bytes cenv (lowered_value_type cenv e) = type_memory_size stv` by
     metis_tac[expr_sim_inv_mods_memory_layout] >>
   `type_widens_to env.type_defs (expr_type e) ty` by
-    fs[vyperTypeSystemTheory.type_stmt_def, AllCaseEqs()] >>
+    (qpat_assum `IS_SOME (type_stmt env ty (Return (SOME e)))`
+       (mp_tac o REWRITE_RULE [typedCopyPtrTheory.type_stmt_return_some_iff]) >>
+     simp[]) >>
   `env.type_defs = get_tenv cx` by
     (drule_then assume_tac expr_sim_inv_mods_env >>
      drule_then ACCEPT_TAC env_consistent_type_defs_get_tenv) >>
