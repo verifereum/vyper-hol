@@ -492,91 +492,6 @@ Proof
   fs[expr_vv_res_ok_def, handle_function_def, raise_def]
 QED
 
-Theorem intcall_callee_body_admissible[local]:
-  gas_admissible (intcall_rest cx name mut nr ss prev rtv)
-    expr_vv_res_ok es /\
-  (!gs. lock_if_nr cx nr (is_view_mut mut) (es with gas_obs := gs) =
-    (INL (), locked with gas_obs := gs)) ==>
-  gas_admissible (eval_stmts (cx with stk updated_by CONS (NONE,name)) ss)
-    (stmt_res_ok NoLoop) locked
-Proof
-  REWRITE_TAC[intcall_rest_singleton_def] >>
-  MATCH_ACCEPT_TAC intcall_callee_body_admissible_mods
-QED
-
-Theorem intcall_callee_typed_env[local]:
-  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sb vv
-    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
-  body_const_cells_agree [(NONE,tops)] cx tenv es1 ==>
-  ?env env_after.
-    env.current_src = NONE /\ env.type_defs = tenv.type_defs /\
-    env.fn_sigs = tenv.fn_sigs /\ env.bare_globals = tenv.bare_globals /\
-    env.bare_global_assignable = tenv.bare_global_assignable /\
-    env.toplevel_vtypes = tenv.toplevel_vtypes /\ env.flag_members = tenv.flag_members /\
-    env.event_fields = tenv.event_fields /\
-    type_stmts env ret (subst_consts_stmts (module_consts_env tops []) ss) = SOME env_after /\
-    (?env_raw. type_stmts env ret ss = SOME env_raw) /\
-    (!id ty. MEM (id,ty) args ==> FLOOKUP env.var_types id = SOME ty) /\
-    (!id ty. FLOOKUP env.var_types id = SOME ty ==> MEM (id,ty) args) /\
-    env_scopes_consistent env cx es1
-Proof
-  strip_tac >>
-  qhdtm_assum `intcall_entry_full`
-    (fn th => map_every STRIP_ASSUME_TAC
-      (List.take (CONJUNCTS (REWRITE_RULE [intcall_entry_full_def] th), 8))) >>
-  `env_context_consistent tenv cx` by
-    fs[exprSimHypsDefsTheory.expr_sim_inv_def, env_consistent_def] >>
-  qpat_assum `body_const_cells_agree _ cx tenv es1`
-    (strip_assume_tac o REWRITE_RULE [body_const_cells_agree_def]) >>
-  `check_function_body cx.layouts cx.txn.target [(NONE,tops)] art NONE Internal mut nr
-      args dflts ret ss` by
-    (drule_all_then ACCEPT_TAC checked_singleton_internal_function_body) >>
-  qabbrev_tac `checked = function_entry_env art [(NONE,tops)] NONE Internal args` >>
-  qabbrev_tac `env = checked with
-    <|toplevel_vtypes := tenv.toplevel_vtypes; flag_members := tenv.flag_members|>` >>
-  `static_maps_transfer_env checked env` by
-    (qunabbrev_tac `env` >> qunabbrev_tac `checked` >>
-     irule vyperTypeContractFunctionTheory.function_entry_env_static_maps_transfer >>
-     fs[constSubstCorrectTheory.frame_maps_def] >> qexists_tac `cx` >> simp[]) >>
-  `?env_after. type_stmts env ret
-      (subst_consts_stmts (module_consts_env tops []) ss) = SOME env_after` by
-    (irule vyperTypeContractFunctionTheory.type_stmts_static_maps_transfer >>
-     qpat_assum `static_maps_transfer_env checked env` (irule_at Any) >>
-     fs[check_function_body_def, Abbr `checked`, optionTheory.IS_SOME_EXISTS,
-        constSubstModsTheory.consts_env_mods_singleton,
-        constSubstModsTheory.subst_consts_mods_singleton]) >>
-  `?env_raw. type_stmts env ret ss = SOME env_raw` by
-    (irule vyperTypeContractFunctionTheory.type_stmts_static_maps_transfer >>
-     qpat_assum `static_maps_transfer_env checked env` (irule_at Any) >>
-     fs[check_function_body_def, Abbr `checked`, optionTheory.IS_SOME_EXISTS]) >>
-  `ALL_DISTINCT (MAP FST args)` by fs[check_function_body_def, vyperTypeContractTheory.params_ok_def] >>
-  `(!id ty. MEM (id,ty) args ==>
-       FLOOKUP env.var_types id = SOME ty /\ IS_SOME (FLOOKUP env.var_assignable id)) /\
-   (!n ty. FLOOKUP env.var_types n = SOME ty ==> MEM (n,ty) args) /\
-   (!n b. FLOOKUP env.var_assignable n = SOME b ==> ?ty. MEM (n,ty) args)` by
-    (simp[Abbr `env`, Abbr `checked`, function_entry_env_def, artifact_env_def] >>
-     rpt conj_tac >> rpt strip_tac
-     >- (drule_all vyperTypeContractContextTheory.FOLDL_extend_local_args_formal_lookup >> simp[])
-     >- (drule_all vyperTypeContractContextTheory.FOLDL_extend_local_args_formal_lookup >> simp[])
-     >- (drule_all vyperTypeContractContextTheory.FOLDL_extend_local_args_var_types_range >> simp[]) >>
-     drule_all vyperTypeContractContextTheory.FOLDL_extend_local_args_var_assignable_range >>
-     simp[] >> metis_tac[]) >>
-  qexistsl_tac [`env`, `env_after`] >>
-  `es1 = es1 with scopes := [penv]` by
-    simp[evaluation_state_component_equality] >>
-  `env_scopes_consistent env cx es1` by
-    (pop_assum (fn th => CONV_TAC (RAND_CONV (REWR_CONV th))) >>
-     irule vyperTypeBindArgumentsTheory.bind_arguments_env_scopes_consistent >>
-     goal_assum (drule_at Any) >> metis_tac[]) >>
-  fs[Abbr `env`, Abbr `checked`, function_entry_env_def, artifact_env_def,
-     vyperTypeContractContextTheory.FOLDL_extend_local_args_static,
-     constSubstCorrectTheory.frame_maps_def, env_context_consistent_def,
-     get_tenv_def] >>
-  metis_tac[]
-QED
-
 Theorem intcall_callee_lock_fields[local]:
   lock_if_nr cx nr view es = (res,locked) ==>
   locked.scopes = es.scopes /\ locked.immutables = es.immutables /\
@@ -604,99 +519,6 @@ Proof
        bare_global_assignable_complete_def, flag_members_complete_def,
        get_tenv_stk_irrelevant, get_module_code_stk_irrelevant] >>
   strip_tac >> gs[] >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-Theorem intcall_callee_enter_context[local]:
-  env_context_consistent old cx /\
-  env.current_src = NONE /\ env.type_defs = old.type_defs /\
-  env.fn_sigs = old.fn_sigs /\ env.bare_globals = old.bare_globals /\
-  env.bare_global_assignable = old.bare_global_assignable /\
-  env.toplevel_vtypes = old.toplevel_vtypes /\ env.flag_members = old.flag_members ==>
-  env_context_consistent env (cx with stk updated_by CONS (NONE,name))
-Proof
-  MATCH_ACCEPT_TAC intcall_callee_enter_context_mods
-QED
-
-Theorem intcall_callee_locked_source[local]:
-  body_inv tops ctx cenv cx /\
-  lookup_callable_function cx.in_deploy name tops = SOME (mut,nr,args,dflts,ret,ss) /\
-  intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sb vv
-    s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn /\
-  MEM (FunctionDecl Internal mut nr rr name args dflts ret ss) tops /\
-  body_const_cells_agree [(NONE,tops)] cx tenv es1 /\
-  lock_if_nr cx nr (is_view_mut mut) es1 = (INL (),locked) ==>
-  ?env env_after.
-    env.type_defs = tenv.type_defs /\ env.fn_sigs = tenv.fn_sigs /\ env.bare_globals = tenv.bare_globals /\
-    env.bare_global_assignable = tenv.bare_global_assignable /\
-    env.toplevel_vtypes = tenv.toplevel_vtypes /\
-    env.event_fields = tenv.event_fields /\
-    type_stmts env ret (subst_consts_stmts (module_consts_env tops []) ss) = SOME env_after /\
-    (?env_raw. type_stmts env ret ss = SOME env_raw) /\
-    (!id ty. MEM (id,ty) args ==> FLOOKUP env.var_types id = SOME ty) /\
-    (!id ty. FLOOKUP env.var_types id = SOME ty ==> MEM (id,ty) args) /\
-    env_consistent env (cx with stk updated_by CONS (NONE,name)) locked /\
-    state_well_typed locked /\ popped_keys_indexed locked.scopes /\
-    locked.accounts = es1.accounts /\ locked.outcomes = es1.outcomes
-Proof
-  strip_tac >>
-  drule_all intcall_callee_typed_env >> strip_tac >>
-  drule_all intcall_callee_lock_fields >> strip_tac >>
-  qhdtm_x_assum `intcall_entry_full`
-    (fn th => map_every STRIP_ASSUME_TAC
-      (List.take (CONJUNCTS (REWRITE_RULE [intcall_entry_full_def] th), 8))) >>
-  rename1 `type_stmts env ret (subst_consts_stmts (module_consts_env tops []) ss) = SOME env_after` >>
-  qexistsl [`env`, `env_after`] >> simp[] >>
-  `env_context_consistent tenv cx /\
-   env_immutables_consistent tenv cx (es1 with scopes := prev) /\
-   state_well_typed (es1 with scopes := prev)` by
-    fs[exprSimHypsDefsTheory.expr_sim_inv_def, env_consistent_def] >>
-  conj_tac >-
-    (simp[env_consistent_def] >>
-     conj_tac >- (irule intcall_callee_enter_context >> simp[] >> qexists `tenv` >> simp[]) >>
-     conj_tac >-
-       (qpat_x_assum `env_scopes_consistent env cx es1` mp_tac >>
-        simp[env_scopes_consistent_stk_irrelevant, env_scopes_consistent_def] >>
-        strip_tac >> first_assum ACCEPT_TAC) >>
-     qpat_x_assum `env_immutables_consistent tenv cx _` mp_tac >>
-     simp[env_immutables_consistent_def, get_tenv_stk_irrelevant, get_module_code_stk_irrelevant] >>
-     strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  drule_then assume_tac vyperTypeBindArgumentsTheory.bind_arguments_scope_well_typed_from_success >>
-  drule_then assume_tac external_bind_arguments_popped >>
-  fs[state_well_typed_def]
-QED
-
-Theorem intcall_callee_final_horizon_bytes[local]:
-  body_inv tops ctx cenv cx /\ (!H. dead_lo_ok H (DF H) lo cenv cx) /\
-  (!H. valid_horizon cx st0 H es1.storage_trace ==>
-    intcall_entry_full (DF,lo,d) H tops ctx func cenv cx tenv name es sa sb
-      vv s0 es0 G0 tn0 (mut,nr,args,ret,ss,rr) prev penv rtv es1 t G tn) /\
-  gas_invoke_entry (ctx,func) t callee entered /\
-  lookup_block t.vs_current_bb func.fn_blocks = SOME bb /\
-  get_instruction bb t.vs_inst_idx = SOME inst /\
-  decode_invoke inst = SOME (lbl,arg_ops) /\
-  eval_operands arg_ops t = SOME argv /\
-  intcall_callee_src cx name mut nr ss (es1 with gas_obs := xs) =
-    (res,ee with gas_obs := ys) /\
-  valid_horizon cx st0 H ee.storage_trace /\
-  gas_origin_ptr_path (DF H,lo,gas_explicit_sites ctx shadow_ctx,ctx,callee,
-    MAP (op_prov G) arg_ops) (entered,FEMPTY,tn with t_var := FEMPTY)
-    marks (IntRet ir s',G',tn') ==>
-  !b sz. (cenv.ce_is_ctor ==> imm_len_mods cenv.ce_modules <= b) /\
-    b + sz <= t.vs_alloca_next /\
-    (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
-      sa.cs_next_id <= aid /\ aid < sb.cs_next_id ==>
-      regions_disjoint b sz off asz) ==>
-    mem_bytes_at b sz s'.vs_memory = mem_bytes_at b sz t.vs_memory
-Proof
-  strip_tac >>
-  qpat_assum `body_inv tops ctx cenv cx` (fn inv =>
-    map_every assume_tac
-      [MATCH_MP contract_inv_cenv_modules (MATCH_MP bodySimTheory.body_inv_contract inv),
-       CONJUNCT2 (MATCH_MP body_inv_main_code inv)]) >>
-  drule_all intcall_callee_entry_horizon >> strip_tac >>
-  mp_tac intcall_callee_caller_memory_bytes >>
-  impl_tac >- (rpt conj_tac >> first_assum ACCEPT_TAC) >>
-  simp[imm_len_mods_singleton]
 QED
 
 Theorem intcall_callee_step_prov_protected_sites[local]:
@@ -2222,32 +2044,6 @@ Proof
   simp[compile_env_component_equality]
 QED
 
-Theorem intcall_callee_param_capture_names[local]:
-  !params i st caps next st'.
-    compile_internal_param_decls params i st = ((caps,next),st') ==>
-    MAP FST caps = MAP FST params /\
-    EVERY (\c. ?p. SND (SND c) = Var p) caps
-Proof
-  Induct >- simp[moduleLoweringTheory.compile_internal_param_decls_def, comp_return_def] >>
-  PairCases >> simp[moduleLoweringTheory.compile_internal_param_decls_def,
-    emit_op_def, emit_void_def, comp_bind_def, comp_return_def, comp_ignore_bind_def,
-    fresh_id_def, fresh_var_def, emit_def] >>
-  rpt gen_tac >> rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  qmatch_asmsub_rename_tac `compile_internal_param_decls _ _ _ = (r,_)` >>
-  PairCases_on `r` >> gvs[] >> first_x_assum (drule_then strip_assume_tac) >> simp[]
-QED
-
-Theorem intcall_callee_prefix_capture_names[local]:
-  compile_internal_entry_prefix ce params has_rb st = ((ce1,caps,rpc),st') ==>
-  MAP FST caps = MAP FST params /\ EVERY (\c. ?p. SND (SND c) = Var p) caps
-Proof
-  Cases_on `has_rb` >>
-  simp[compile_internal_entry_prefix_def, comp_bind_def, comp_return_def] >>
-  rpt (pairarg_tac >> gvs[]) >> strip_tac >>
-  qmatch_asmsub_rename_tac `compile_internal_param_decls _ _ _ = (r,_)` >>
-  PairCases_on `r` >> gvs[] >> drule intcall_callee_param_capture_names >> simp[]
-QED
-
 (* This is the actual body environment, not a comparison with the
    entry variant that omits constructor reservation. *)
 Theorem intcall_callee_body_env[local]:
@@ -2265,22 +2061,6 @@ Proof
   rpt conj_tac >>
   qpat_assum `ce2 = _` (fn th => simp[Once th]) >>
   qpat_assum `ce1 = _` (fn th => simp[Once th])
-QED
-
-Theorem intcall_callee_classified[local]:
-  MEM (FunctionDecl Internal mut nr rr name args ds ret ss) tops /\
-  classify_functions tops = (exts,ints,fb,ctor) ==>
-  MEM (subst_consts_fn (module_consts_env tops [])
-    (mut,nr,rr,name,args,ds,ret,ss)) ints
-Proof
-  strip_tac >>
-  `MEM (subst_consts_fn (module_consts_env tops [])
-      (mut,nr,rr,name,args,ds,ret,ss))
-      (FST (SND (classify_functions tops)))` by
-    (pure_rewrite_tac[constSubstTheory.subst_consts_fn_def, loweringShapePropsTheory.MEM_classify_internal] >>
-     qexistsl_tac [`ds`, `ss`] >> simp[constSubstTheory.subst_consts_fn_def]) >>
-  qpat_assum `classify_functions tops = (exts,ints,fb,ctor)`
-    (fn eq => first_assum (ACCEPT_TAC o SIMP_RULE (srw_ss()) [eq]))
 QED
 
 (* Updates made by the internal entry do not change module metadata. *)
@@ -3192,18 +2972,6 @@ Proof
   simp[ignore_bind_def, bind_def, return_def, try_def]
 QED
 
-Theorem intcall_callee_body_gas_source[local]:
-  lock_if_nr cx nr (is_view_mut mut) es = (INL (),locked) ==>
-  !gs. intcall_callee_src cx name mut nr ss (es with gas_obs := gs) =
-    case eval_stmts (cx with stk updated_by CONS (NONE,name)) ss
-           (locked with gas_obs := gs) of
-      (INL _,ee) => (INL NoneV,ee)
-    | (INR err,ee) => handle_function err ee
-Proof
-  REWRITE_TAC[intcall_callee_src_singleton_def] >>
-  MATCH_ACCEPT_TAC intcall_callee_body_gas_source_mods
-QED
-
 Theorem intcall_callee_handle_frame[local]:
   handle_function err (ee with gas_obs := gs) =
     (FST (handle_function err ee),ee with gas_obs := gs)
@@ -3293,133 +3061,6 @@ Proof
   simp[]
 QED
 
-(* The target Return has performed the unlock. Match it to the source
-   release and transport the scope-empty state relation to the caller. *)
-Theorem intcall_callee_intret_post[local]:
-  body_inv tops ctx cenv cx /\
-  body_inv tops ctx ce (cx with stk updated_by CONS (NONE,name)) /\
-  ce.ce_returns_count = ret_count /\
-  ce.ce_nonreentrant = (nr,key,T,view) /\
-  (nr ==> cx.nonreentrant_slot = SOME key /\ view = is_view_mut mut) /\
-  (nr /\ ~view ==> regions_consistent (FST H) /\
-     storage_locks_separated (FST H) (SND H) /\
-     storage_observations_ok cx H trace /\ MEM (StorageLock key) trace) /\
-  storage_well_formed_on cx ee (FST H) /\
-  intret_q H callee ce (cx with stk updated_by CONS (NONE,name)) rtv v
-    (ee with scopes := []) (IntRet ir u) ==>
-  ?ee'. unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),ee') /\
-    storage_well_formed_on cx ee' (FST H) /\
-    state_rel H func cenv cx (ee' with scopes := []) u /\
-    LENGTH ir.iret_values = ret_count /\ ir.iret_adopt_fmp = NONE /\
-    intret_vals_match rtv v ir.iret_values
-Proof
-  strip_tac >>
-  `LENGTH ir.iret_values = ret_count` by
-    (qpat_assum `intret_q _ _ _ _ _ _ _ _` (mp_tac o REWRITE_RULE [intret_q_def]) >>
-     simp[] >> strip_tac >> first_assum ACCEPT_TAC) >>
-  drule_all stmtSimReturnTheory.intret_q_source_epilogue >>
-  disch_then (qx_choose_then `out` strip_assume_tac) >>
-  qpat_x_assum `result_rel H callee rtv ce _ (INR (ReturnException v),out) (IntRet ir u)`
-    (strip_assume_tac o REWRITE_RULE [loweringStateRelDefsTheory.result_rel_def]) >>
-  `unlock_if_nr cx nr (is_view_mut mut) (ee with scopes := []) = (INL (),out)` by
-    (Cases_on `nr` >> Cases_on `view` >>
-     fs[unlock_if_nr_def, return_def]) >>
-  Cases_on `unlock_if_nr cx nr (is_view_mut mut) ee` >>
-  rename1 `unlock_if_nr _ _ _ _ = (result,ee')` >>
-  qpat_assum `unlock_if_nr cx nr (is_view_mut mut) ee = (result,ee')`
-    (mp_tac o MATCH_MP
-      (Q.INST [`sc` |-> `[]`] externalCallSelectedTheory.unlock_if_nr_with_scopes)) >>
-  qpat_assum `unlock_if_nr cx nr (is_view_mut mut) (ee with scopes := []) = (INL (),out)`
-    (pure_rewrite_tac o single) >> simp[NoAsms] >> strip_tac >>
-  asm_rewrite_tac [] >>
-  conj_tac
-  >- (`(nr /\ ~is_view_mut mut) <=> nr /\ ~view` by
-        (Cases_on `nr` >> fs[Excl "is_view_mut_def"]) >>
-      Cases_on `nr /\ ~view`
-      >- (`nr` by fs[] >>
-          qpat_assum `nr ==> cx.nonreentrant_slot = SOME key /\ _`
-            (drule_then strip_assume_tac) >>
-          `~is_view_mut mut` by
-            (qpat_assum `view <=> is_view_mut mut` (pure_rewrite_tac o single o SYM) >>
-             qpat_assum `nr /\ ~view` (ACCEPT_TAC o cj 2)) >>
-          `release_nonreentrant_lock cx.txn.target key ee = (INL (),ee')` by
-            (qpat_assum `unlock_if_nr cx nr (is_view_mut mut) ee = _` mp_tac >>
-             pure_rewrite_tac[unlock_if_nr_def] >>
-             qpat_assum `(nr /\ ~is_view_mut mut) <=> nr /\ ~view`
-               (pure_rewrite_tac o single) >>
-             asm_simp_tac bool_ss [optionTheory.option_case_def]) >>
-          irule vyperFiniteStoragePreservationTheory.release_lock_preserves_storage_well_formed_on >>
-          qpat_assum `nr /\ ~view ==> regions_consistent (FST H) /\ _`
-            (fn guard => qpat_assum `nr /\ ~view`
-               (strip_assume_tac o MATCH_MP guard)) >>
-          rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-          qexistsl_tac [`cx.txn.target`,`key`,`trace`,`INL ()`,`ee`] >>
-          fs[Excl "is_view_mut_def"]) >>
-      `~(nr /\ ~is_view_mut mut)` by
-        (qpat_assum `(nr /\ ~is_view_mut mut) <=> nr /\ ~view`
-           (pure_rewrite_tac o single) >> first_assum ACCEPT_TAC) >>
-      `ee' = ee` by
-        (qpat_assum `unlock_if_nr cx nr (is_view_mut mut) ee = _` mp_tac >>
-         pure_rewrite_tac[unlock_if_nr_def] >>
-         qpat_assum `(nr /\ ~is_view_mut mut) <=> nr /\ ~view`
-           (pure_rewrite_tac o single) >>
-         asm_simp_tac bool_ss [return_def, pairTheory.PAIR_EQ]) >>
-      simp[]) >>
-  `state_rel H callee ce cx (ee' with scopes := []) u` by
-    (qpat_assum `out = ee' with scopes := []`
-       (fn scope => qpat_assum `state_rel H callee ce _ out u`
-          (mp_tac o PURE_REWRITE_RULE [scope])) >>
-     simp[loweringStateRelDefsTheory.state_rel_def,
-          loweringStateRelDefsTheory.storage_vars_rel_def,
-          loweringStateRelDefsTheory.transient_vars_rel_def,
-          loweringStateRelDefsTheory.accounts_rel_def, lookup_var_slot_from_layout_def,
-          get_module_code_stk_irrelevant, get_tenv_stk_irrelevant]) >>
-  once_rewrite_tac[Q.INST [`f1` |-> `func`,`f2` |-> `callee`]
-                       stateRelProjTheory.state_rel_scopes_nil_func] >>
-  irule exprLoweringPropsTheory.state_rel_cenv_cong >> qexists_tac `ce` >>
-  qpat_assum `body_inv tops ctx cenv cx` (strip_assume_tac o MATCH_MP body_inv_module_locations) >>
-  qpat_assum `body_inv tops ctx ce _` (strip_assume_tac o MATCH_MP body_inv_module_locations) >>
-  qpat_assum `body_inv tops ctx cenv cx`
-    (assume_tac o MATCH_MP contract_inv_constructor o MATCH_MP bodySimTheory.body_inv_contract) >>
-  qpat_assum `body_inv tops ctx ce _`
-    (assume_tac o MATCH_MP contract_inv_constructor o MATCH_MP bodySimTheory.body_inv_contract) >>
-  `cenv.ce_modules = [(NONE,tops)] /\ ce.ce_modules = [(NONE,tops)]` by
-    metis_tac[bodySimTheory.body_inv_contract, contract_inv_cenv_modules] >>
-  fs[vyperStateTheory.lookup_scopes_def]
-QED
-
-Theorem intcall_callee_exit_assemble[local]:
-  unlock_if_nr cx nr (is_view_mut mut) ee = (INL (),out) /\
-  storage_well_formed_on cx out (FST H) /\
-  state_rel H func cenv cx (out with scopes := []) s /\
-  intret_vals_match rtv v ir.iret_values /\
-  LENGTH ir.iret_values = ret_count /\ ir.iret_adopt_fmp = NONE /\
-  (!b sz. (cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b) /\
-     b + sz <= t.vs_alloca_next /\
-     (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
-       n <= aid /\ aid < m ==> regions_disjoint b sz off asz) ==>
-     mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz t.vs_memory) /\
-  stor_taint_ok_at (DF H) tn' s /\
-  (!i. i < lo /\ i IN tn'.t_mem ==>
-     imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo s.vs_memory) i) /\
-  (!i. lo <= i /\ i < t.vs_alloca_next /\ i IN tn'.t_mem /\
-     (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
-       n <= aid /\ aid < m ==> i < off \/ off + asz <= i) ==> i IN tn.t_mem) /\
-  (!p. rb = SOME p ==>
-     !mem. mem_agree_outside tn'.t_mem s.vs_memory mem ==>
-     val_in_memory rtv v (w2n p) mem) ==>
-  intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv ret_count rb n m t tn
-    (INL v) ee (G',tn') (IntRet ir s)
-Proof
-  strip_tac >>
-  rewrite_tac[intcall_callee_exit_full_def, bodyIntCallSeamsTheory.intcall_callee_exit_def] >>
-  conj_tac
-  >- (disj2_tac >> qexistsl_tac [`v`,`ir`,`s`,`out`] >>
-      simp[] >> rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-      rpt strip_tac >> first_assum irule >> simp[bodyPtrDefsTheory.mem_agree_outside_def]) >>
-  simp[] >> metis_tac[arithmeticTheory.ADD_COMM]
-QED
-
 Theorem intcall_callee_intret_clear_scopes[local]:
   intret_q H callee ce cx rtv v ee r ==>
   intret_q H callee ce cx rtv v (ee with scopes := []) r
@@ -3450,87 +3091,6 @@ Proof
   qpat_assum `ce' with <|ce_vars := _;ce_var_type := _;ce_dynarray_capacity := _|> = ce`
     (once_rewrite_tac o single o SYM) >> simp[]
 QED
-
-Theorem intcall_callee_return_to_caller[local]:
-  body_inv tops ctx cenv cx /\
-  body_inv tops ctx ce (cx with stk updated_by CONS (NONE,name)) /\
-  ce.ce_returns_count = ret_count /\
-  ce.ce_nonreentrant = (nr,global_nonreentrant_slot,T,view) /\
-  (nr ==> cx.nonreentrant_slot = SOME global_nonreentrant_slot /\ view = is_view_mut mut) /\
-  valid_horizon cx st0 H locked.storage_trace /\
-  (nr /\ ~view ==>
-    MEM (StorageLock global_nonreentrant_slot) locked.storage_trace) /\
-  storage_well_formed_on cx ee (FST H) /\
-  intret_q H callee ce (cx with stk updated_by CONS (NONE,name)) rtv v (ee with scopes := []) (IntRet ir s) /\
-  (!b sz. (cenv.ce_is_ctor ==> imm_len (cx_tops cx) <= b) /\
-     b + sz <= t.vs_alloca_next /\
-     (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
-       n <= aid /\ aid < m ==> regions_disjoint b sz off asz) ==>
-     mem_bytes_at b sz s.vs_memory = mem_bytes_at b sz t.vs_memory) /\
-  stor_taint_ok_at (DF H) tn' s /\
-  (!i. i < lo /\ i IN tn'.t_mem ==>
-     imm_section_dead (cx_tops cx) (mem_bytes_at 0 lo s.vs_memory) i) /\
-  (!i. lo <= i /\ i < t.vs_alloca_next /\ i IN tn'.t_mem /\
-     (!aid off asz. FLOOKUP t.vs_allocas aid = SOME (off,asz) /\
-       n <= aid /\ aid < m ==> i < off \/ off + asz <= i) ==> i IN tn.t_mem) /\
-  (!p. rb = SOME p ==>
-     !mem. mem_agree_outside tn'.t_mem s.vs_memory mem ==>
-     val_in_memory rtv v (w2n p) mem) ==>
-  intcall_callee_exit_full (DF,lo) H func cenv cx mut nr rtv ret_count rb n m t tn
-    (INL v) ee (G',tn') (IntRet ir s)
-Proof
-  strip_tac >>
-  qpat_assum `valid_horizon cx st0 H locked.storage_trace`
-    (strip_assume_tac o REWRITE_RULE [valid_horizon_def]) >>
-  mp_tac (Q.INST [`key` |-> `global_nonreentrant_slot`, `trace` |-> `locked.storage_trace`,
-     `u` |-> `s`, `ret_count` |-> `ret_count`]
-     intcall_callee_intret_post) >>
-  (impl_tac >- (simp[] >> rpt strip_tac >> first_assum ACCEPT_TAC)) >>
-  disch_then (qx_choose_then `out` strip_assume_tac) >>
-  irule intcall_callee_exit_assemble >>
-  rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-  qexists_tac `out` >> rpt conj_tac >> first_assum ACCEPT_TAC
-QED
-
-(* The full and observation rules share the same entry and landing facts. *)
-fun intcall_locked_body_outcome_tac th =
-  mp_tac (Q.INST [`caller` |-> `cenv`, `ds` |-> `dflts`,
-    `H` |-> `storage_trace_horizon es1.storage_trace`, `dret` |-> `ret_dest`,
-    `ce2` |-> `entry_info0`, `imm` |-> `entry_info2`, `rpc` |-> `entry_info1`,
-    `body_ce` |-> `body_ce`,
-    `ss'` |-> `compiled_ss`, `ss_comp` |-> `compiled_ss`,
-    `ds_comp` |-> `subst_consts_exprs (module_consts_env tops []) dflts`,
-    `policy` |-> `rpolicy`,
-    `ilen` |-> `if cx.in_deploy then
-          compute_immutables_len (get_struct_fields (make_struct_fields_map tops)) tops
-        else 0`, `ilen'` |-> `ilen`,
-    `body_start` |-> `a`, `body_end` |-> `b`, `shadow_start` |-> `aS`,
-    `shadow_end` |-> `bS`, `env_end` |-> `body_out`,
-    `Gbody` |-> `Gl`, `tnbody` |-> `tnl`, `RetQ` |-> `RetQ`,
-    `PG` |-> `MAP (op_prov G) arg_ops`] th) >>
-  (impl_tac >-
-    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-     TRY (qpat_assum `Abbrev (pushed = _)`
-            (pure_rewrite_tac o single o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-          qpat_assum `subst_consts_stmts _ _ = compiled_ss`
-            (pure_rewrite_tac o single o SYM) >>
-          first_assum ACCEPT_TAC >> NO_TAC) >>
-     TRY (REFL_TAC >> NO_TAC) >>
-     TRY (qpat_assum `subst_consts_stmts _ _ = compiled_ss` (ACCEPT_TAC o SYM) >> NO_TAC) >>
-     TRY (qpat_assum `subst_consts_stmts _ _ = compiled_ss` (fn body =>
-            qpat_assum `set_internal_package_target _
-              (package_internal_fn _ _ _ cx.in_deploy _ _) = _`
-              (ACCEPT_TAC o PURE_REWRITE_RULE [body])) >> NO_TAC) >>
-     qpat_assum `Abbrev (body_ce = _)`
-       (ACCEPT_TAC o REWRITE_RULE [markerTheory.Abbrev_def]))) >>
-  rewrite_tac[LET_THM] >> BETA_TAC >>
-  qpat_assum `Abbrev (pushed = cx with stk updated_by CONS (NONE,name))`
-    (pure_rewrite_tac o single o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  qpat_assum `Abbrev (body_ty = case rt of NONE => BaseT BoolT | SOME ty => ty)`
-    (pure_rewrite_tac o single o SYM o REWRITE_RULE [markerTheory.Abbrev_def]) >>
-  (impl_tac >-
-    (rpt conj_tac >> TRY (first_assum ACCEPT_TAC >> NO_TAC) >>
-     simp[NoAsms] >> first_assum ACCEPT_TAC));
 
 val intcall_callee_full_with_prefix_statement = ``
   !B Run Out DF lo d ctx shadow_ctx func mods exps caller_src caller_tops src tops vis cenv cx tenv name es st0 sa sb vv s0 es0
