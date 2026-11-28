@@ -7390,7 +7390,7 @@ Proof
   `well_typed_target env bt sty` by fs[well_typed_atarget_def] >>
   rpt conj_tac >> TRY (first_assum ACCEPT_TAC)
   >- fs[well_typed_target_def]
-  >- simp[target_pre_def] >>
+  >- simp[target_pre_mods_def] >>
   `call_evaluation_safe cx (int_calls_target bt)` by
     qpat_assum `call_evaluation_safe cx (int_calls_atargets (_ :: todo))`
       (mp_then Any ACCEPT_TAC call_evaluation_safe_append_left o REWRITE_RULE [int_calls_atarget_def]) >>

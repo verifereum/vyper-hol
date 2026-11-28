@@ -23,6 +23,14 @@ Proof
   irule tuple_base_store_prefix_from_place >>
   Cases_on `immutable_root cx bt`
   >- suspend "immutable" >>
+  `target_pre cenv cx env bt src` by
+    (`immutable_section_layout_mods [(NONE,tops)] cenv` by
+       metis_tac[bodySimTheory.body_inv_contract,
+                 bodyInvSplitTheory.contract_inv_immutable_section_layout] >>
+     `cenv.ce_modules = [(NONE,tops)] /\ cenv.ce_module = NONE /\
+      ALOOKUP cx.sources cx.txn.target = SOME [(NONE,tops)]` by
+       fs[bodySimTheory.body_inv_def, bodySimTheory.cenv_module_pins_def] >>
+     fs[bodyFullPredsModsTheory.target_pre_mods_singleton]) >>
   irule body_target_sim_prefix >> simp[] >>
   conj_tac >- first_assum ACCEPT_TAC >>
   qexistsl [`cenv`,`d`,`env`,`r`,`cur`,`sc`,`shadow_func`,`shadow_cur`,
