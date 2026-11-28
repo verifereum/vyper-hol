@@ -103,7 +103,7 @@ Definition extcall_positional_post_def:
       wb_frame cenv es ee sa s0 t /\
       (keep_pure /\ ~EXISTS expr_has_effect xs ==> pure_frame cenv func es sa s0 t) /\
       MAP FDOM ee.scopes = MAP FDOM es.scopes /\
-      expr_sim_inv cenv cx env ee /\
+      expr_sim_inv_mods cenv.ce_modules cenv cx env ee /\
       (!x w. not_fresh_at sa x /\ lookup_var x s0 = SOME w ==> lookup_var x t = SOME w) /\
       (!aid b. FLOOKUP s0.vs_allocas aid = SOME b ==> FLOOKUP t.vs_allocas aid = SOME b)
 End

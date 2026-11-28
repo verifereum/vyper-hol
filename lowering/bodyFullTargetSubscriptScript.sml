@@ -7,6 +7,7 @@
      target_subscript_sim_full -- base and index compose with a tail *)
 Theory bodyFullTargetSubscript
 Ancestors
+  gasOutcomeFullMods[qualified]
   bodyFullShadowBodyInv bodySim bodyInvMetadataProps targetSubscriptContinuation
   bodyFullTargetDefs bodyFullTargetRoots bodyFullTargetImmutableArray bodyFullTargetImmutableWrite
   bodyFullSubscriptLiveImmSelect bodySimAugPlaceLoad immutableDeployAssignFacts
@@ -77,7 +78,7 @@ Definition subscript_tail_full_def:
               not_fresh_at sa x) /\
       (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==>
               not_fresh_at sa x) /\
-      expr_sim_inv cenv cx env mid1 /\ mid1.gas_obs = [] /\
+      expr_sim_inv_mods cenv.ce_modules cenv cx env mid1 /\ mid1.gas_obs = [] /\
       eval_base_place cx bt (es with gas_obs := base_gas) =
         (INL pv, mid1) /\
       bind (eval_expr cx e) (read_result cx)
@@ -109,9 +110,9 @@ Definition subscript_tail_full_def:
         (~is_word_type (post_value_type cenv e) ==>
          ptr_buf_ok cenv e iop G2 t2) /\
         ghost_kept_at lo cenv mid1 sm G1 tn1 t1 G2 tn2) ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (extend_place cx pv (ValueSubscript v))
+        cenv.ce_modules cx st0 (extend_place cx pv (ValueSubscript v))
         (mid2, t2, G2, tn2)
         (\H res ee G tn t. ?pv'. res = INL pv' /\
           target_post H ctx func cenv cx es sa sb s0 ee pv' vt r t /\
@@ -646,7 +647,10 @@ Theorem immutable_target_subscript_sim_full:
   body_base_target_full_ok_mods mods exps cx (SubscriptTarget bt e) /\
   body_const_cells_agree mods cx env es /\
   expr_sim_inv_mods mods cenv cx env es /\
-  target_indices_pre cenv cx env (SubscriptTarget bt e) /\
+  target_indices_pre_mods mods cenv cx env bt /\
+  ~target_subscript_overlap cenv bt e /\
+  (!ix. expr_sim_inv_mods mods cenv cx env ix ==>
+        expr_body_pre_mods mods cenv cx env e ix) /\
   cx.in_deploy /\ immutable_root cx bt /\ ~cx_const_name cx (NONE,id) /\
   target_root bt = TopLevelNameTarget (NONE,id) /\
   imm_target_place_sim_full (DF,lo,d,ctx,shadow_ctx,PG,func,shadow_func)

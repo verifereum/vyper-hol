@@ -119,7 +119,7 @@ End
    are (c,es) at the condition and increment, and (bc,eb) at body entry.
    Neither the cursor nor a claim about future execution is part of live. *)
 Definition for_nonslot_live_def:
-  for_nonslot_live (D, lo, d, ctx, func, cx, c, id, env, loop_body)
+  for_nonslot_live exps (D, lo, d, ctx, func, cx, c, id, env, loop_body)
     (es0, sa0, s0, G0, tn0)
     (e, sbExpr, saL, loc, vv, bd, stv, vs, rv, av, xs, em, u, Gu, tu)
     (len_op, idx, bw) (xd, dw, capacity, aidItem)
@@ -174,9 +174,9 @@ Definition for_nonslot_live_def:
     eval_operand len_op s = SOME (n2w (LENGTH vs)) /\
     op_prov G len_op = NONE /\ op_taint tn len_op = {} /\
     lookup_var idx s = SOME (n2w k) /\ FLOOKUP G idx = NONE /\ op_taint tn (Var idx) = {} /\
-    expr_sim_inv c cx env es /\ ce_locals_declared c env /\ locals_alloc_ok c env /\
+    expr_sim_inv_mods c.ce_modules c cx env es /\ ce_locals_declared c env /\ locals_alloc_ok c env /\
     lookup_scopes id es.scopes = NONE /\
-    (k <> 0 ==> body_stmts_full_ok cx loop_body) /\
+    (k <> 0 ==> body_stmts_full_ok_mods c.ce_modules exps cx loop_body) /\
     cenv_top_ext c cc ee.scopes /\
     stmt_state_rel H ctx func cc cx ee s /\ storage_well_formed_on cx ee (FST H) /\
     ghost_inv_at D lo d cc cx ee G tn s /\
@@ -219,10 +219,10 @@ Definition for_nonslot_live_def:
 End
 
 Definition for_nonslot_body_entry_def:
-  for_nonslot_body_entry (D, lo, d, ctx, func, cx, c, id, env, loop_body)
+  for_nonslot_body_entry exps (D, lo, d, ctx, func, cx, c, id, env, loop_body)
     original captured operands (xd, dw, capacity, aidItem)
     (bc, benv, sbCopy, dtv, v) (H, k, rs, es, eb, G, tn, t) <=>
-    for_nonslot_live (D, lo, d, ctx, func, cx, c, id, env, loop_body)
+    for_nonslot_live exps (D, lo, d, ctx, func, cx, c, id, env, loop_body)
       original captured operands (xd, dw, capacity, aidItem)
       (H, k, rs, es, bc, eb, G, tn, t) /\
     push_scope_with_var id dtv v es = (INL (),eb) /\
@@ -231,8 +231,8 @@ Definition for_nonslot_body_entry_def:
     val_in_memory dtv v (w2n dw) t.vs_memory /\
     (!mem. mem_agree_outside tn.t_mem t.vs_memory mem ==>
       val_in_memory dtv v (w2n dw) mem) /\
-    expr_sim_inv bc cx benv eb /\ ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
-    body_stmts_full_ok cx loop_body /\
+    expr_sim_inv_mods c.ce_modules bc cx benv eb /\ ce_locals_declared bc benv /\ locals_alloc_ok bc benv /\
+    body_stmts_full_ok_mods c.ce_modules exps cx loop_body /\
     FLOOKUP bc.ce_vars id = SOME (PtrVar (Var xd) capacity) /\
     return_buf_frame d bc sbCopy t /\ ret_pc_ok bc sbCopy t /\
     t.vs_current_bb = sbCopy.cs_current_bb /\ t.vs_inst_idx = LENGTH sbCopy.cs_current_insts
@@ -2742,12 +2742,12 @@ QED
 (* A code-backed iterator retains the captured path and address, not the
    containing immutable's entire value. The caller supplies the body frame. *)
 Definition for_nonslot_code_frame_def:
-  for_nonslot_code_frame c cx env ctx func id e body loc rv vv av em u <=>
+  for_nonslot_code_frame mods c cx env ctx func id e body loc rv vv av em u <=>
     (loc = LocCode ==> ?src name path.
       rv = PlaceR (ImmutablePlace src name path) /\
       !es eb obs raw ef ep dtv v
        (H : (bool # bytes32 # type_value) list # num list) z bw.
-        expr_sim_inv c cx env es /\ expr_sim_inv c cx env ep /\
+        expr_sim_inv_mods mods c cx env es /\ expr_sim_inv_mods mods c cx env ep /\
         push_scope_with_var id dtv v es = (INL (),eb) /\
         read_result cx rv es = (INL (ArrayV av),es) /\
         eval_stmts cx body (eb with gas_obs := obs) = (raw,ef) /\

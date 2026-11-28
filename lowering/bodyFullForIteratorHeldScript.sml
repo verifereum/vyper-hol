@@ -77,13 +77,15 @@ Theorem compile_for_storage_subplace_array_frag_full:
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ~(?ty nid. e = TopLevelName ty nid) /\
-    (?tgt nid. loop_iterator_place e = SOME tgt /\
-       target_root tgt = TopLevelNameTarget nid /\
-       ((?vis kind ty slot.
-          supported_variable_decl tops nid = SOME (vis,kind,ty,SOME slot) /\
-          (kind = Storage \/ kind = Transient)) \/
-        (?vis transient kt vt slot.
-          supported_hashmap_decl tops nid = SOME (vis,transient,kt,vt,SOME slot)))) ==>
+    (?tgt src name ts. loop_iterator_place e = SOME tgt /\
+       target_root tgt = TopLevelNameTarget (src,name) /\
+       ALOOKUP mods src = SOME ts /\
+       ((?tr ty slot.
+           find_var_decl_by_name name ts = SOME (StorageVarDecl tr ty,name) /\
+           lookup_var_slot_from_layout cx tr src name = SOME slot) \/
+        (?tr kt vt slot.
+           find_var_decl_by_name name ts = SOME (HashMapVarDecl tr kt vt,name) /\
+           lookup_var_slot_from_layout cx tr src name = SOME slot))) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))
@@ -274,8 +276,9 @@ Theorem compile_for_immutable_subplace_array_frag_full:
     frame_ret_ok_full_mods mods (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx RetQ cenv ret_ty /\
     ~(?ty nid. e = TopLevelName ty nid) /\
-    (?tgt nid. loop_iterator_place e = SOME tgt /\ target_root tgt = TopLevelNameTarget nid /\
-       IS_SOME (supported_immutable_type tops nid)) ==>
+    (?tgt src name ts. loop_iterator_place e = SOME tgt /\
+       target_root tgt = TopLevelNameTarget (src,name) /\
+       ALOOKUP mods src = SOME ts /\ is_immutable_decl name ts) ==>
     stmt_frag_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cx lctx RetQ cenv
       (stmt_env cenv lctx ret_ty (For id typ (Array e) n body))

@@ -41,7 +41,7 @@ Proof
   qpat_x_assum `compile_get_target_ptr _ _ (NameTarget _) sa = _` mp_tac >>
   simp[compile_get_target_ptr_def, comp_return_def] >> strip_tac >> gvs[] >>
   `not_fresh_at sa p` by metis_tac[local_ptrs_reserved_def] >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  irule gas_outcome_full_mods_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es`, `INL (PlaceR (MemoryPlace id []))`, `s0`, `tn0`] >>
   conj_tac
   >- simp[Once evaluate_def, bind_def, ignore_bind_def, get_scopes_def,
@@ -94,7 +94,7 @@ Resume target_toplevel_sim_full[storage]:
     metis_tac[toplevel_target_env] >>
   qabbrev_tac `es1 = es with storage_trace :=
                  es.storage_trace ++ [StorageRoot tr slot tv]` >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  irule gas_outcome_full_mods_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es1`, `INL (PlaceR (StoragePlace tr (n2w slot) tv))`,
                 `s0`, `tn0`] >>
   conj_tac
@@ -132,7 +132,7 @@ QED
 Resume target_toplevel_sim_full[mapping]:
   `?tr'. cenv.ce_hashmap_info (src,id) = SOME (tr',kt,vt')` by
     metis_tac[toplevel_target_env] >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  irule gas_outcome_full_mods_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`, `es`, `INL (HashMapRef tr (n2w slot) kt vt')`,
                 `s0`, `tn0`] >>
   conj_tac
@@ -247,7 +247,7 @@ Proof
   Cases_on `FLOOKUP (get_source_immutables NONE imms) id` >>
   gvs[get_source_immutables_def] >>
   rename1 `_ = SOME entry` >> PairCases_on `entry` >>
-  irule gas_outcome_full_pure >> reverse conj_tac >- simp[] >>
+  irule gas_outcome_full_mods_pure >> reverse conj_tac >- simp[] >>
   qexistsl_tac [`G0`,`es`,`INL (ImmutablePlace NONE id [])`,`s0`,`tn0`] >>
   conj_tac >-
     (simp[Once evaluate_def, bind_def] >>

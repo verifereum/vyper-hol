@@ -5565,7 +5565,7 @@ Definition intcall_args_stage_post_def:
     (flags,dtys,newops,ops,vals,ptys,pflags,pin,clean_words,keep_sites)
     H res ee G1 tn1 t <=>
     ?xs. res = INL xs /\
-      LENGTH xs = LENGTH es /\ expr_sim_inv cenv cx tenv ee /\
+      LENGTH xs = LENGTH es /\ expr_sim_inv_mods cenv.ce_modules cenv cx tenv ee /\
       (?ws1.
         LENGTH ws1 = LENGTH (ops ++ newops) /\
         LENGTH (vals ++ xs) = LENGTH (ops ++ newops) /\

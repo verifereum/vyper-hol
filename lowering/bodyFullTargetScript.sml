@@ -75,7 +75,9 @@ Theorem body_imm_target_place_sim_full:
      module_body_inv mods cenv.ce_module tops cenv cx) /\ shadow_body_inv_mods mods exps ctx shadow_ctx /\
     body_base_target_full_ok_mods mods exps cx bt /\
     body_const_cells_agree mods cx env es /\
-    expr_sim_inv_mods mods cenv cx env es /\ target_indices_pre cenv cx env bt /\
+    expr_sim_inv_mods mods cenv cx env es /\ target_indices_pre_mods mods cenv cx env bt /\
+    (!e ix. MEM e (target_indices bt) /\ expr_sim_inv_mods mods cenv cx env ix ==>
+            expr_body_pre_mods mods cenv cx env e ix) /\
     cx.in_deploy /\ immutable_root cx bt /\
     target_root bt = TopLevelNameTarget (NONE,id) /\
     ~cx_const_name cx (NONE,id) ==>
@@ -115,7 +117,7 @@ Theorem body_target_sim_full:
     shadow_body_inv_mods mods exps ctx shadow_ctx /\
     body_base_target_full_ok_mods mods exps cx bt /\
     body_const_cells_agree mods cx env es /\
-    target_pre cenv cx env bt es ==>
+    target_pre_mods mods cenv cx env bt es ==>
     target_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx env bt es
 Proof
@@ -132,7 +134,7 @@ Theorem body_target_place_sim_full:
     shadow_body_inv_mods mods exps ctx shadow_ctx /\
     body_base_target_full_ok_mods mods exps cx bt /\
     body_const_cells_agree mods cx env es /\
-    target_pre cenv cx env bt es ==>
+    target_pre_mods mods cenv cx env bt es ==>
     target_place_sim_full (DF, lo, d, ctx, shadow_ctx, PG, func, shadow_func)
       cenv cx env bt es
 Proof

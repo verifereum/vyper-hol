@@ -9,6 +9,7 @@
  *)
 Theory bodyFullTargetDefs
 Ancestors
+  gasOutcomeFullMods[qualified] gasOutcomeFullBindMods[qualified]
   exprSimDefs unitMemInv contextRawReachable
   bodySimFull targetPlaceSimCases targetPlaceSimDefs
   gasShadow gasOutcomeFull loweringPosts exprLowering compileEnv
@@ -97,9 +98,9 @@ Definition imm_target_place_sim_full_def:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_target_place cx bt) (es,s0,G0,tn0)
+        cenv.ce_modules cx st0 (eval_target_place cx bt) (es,s0,G0,tn0)
         (\H res ee G tn t. ?id path. res = INL (ImmutablePlace NONE id path) /\
           target_root bt = TopLevelNameTarget (NONE,id) /\
           imm_target_post H ctx func cenv cx es sa sb s0 ee id path ty r t /\
@@ -155,9 +156,9 @@ Definition target_sim_full_def:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_base_place cx bt) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_base_place cx bt) (es, s0, G0, tn0)
         (\H res ee G tn t. ?pv. res = INL pv /\
           target_post H ctx func cenv cx es sa sb s0 ee pv vt r t /\
           t.vs_current_bb = sb.cs_current_bb /\
@@ -208,9 +209,9 @@ Definition target_place_sim_full_def:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_target_place cx bt) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_target_place cx bt) (es, s0, G0, tn0)
         (\H res ee G tn t. ?p. res = INL p /\
           target_post H ctx func cenv cx es sa sb s0 ee (PlaceR p) (Type ty)
             r t /\
@@ -273,9 +274,9 @@ Definition assign_target_place_sim_full_def:
         ghost_inv_at (DF H) lo d cenv cx es G0 tn0 s0) /\ ~s0.vs_halted /\
       s0.vs_current_bb = sa.cs_current_bb /\
       s0.vs_inst_idx = LENGTH sa.cs_current_insts ==>
-      gas_outcome_full
+      gas_outcome_full_mods
         (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-        (cx_tops cx) cx st0 (eval_target_place cx bt) (es, s0, G0, tn0)
+        cenv.ce_modules cx st0 (eval_target_place cx bt) (es, s0, G0, tn0)
         (\H res ee G tn t. ?p. res = INL p /\
           assign_target_post (immutable_root cx bt) H ctx func cenv cx
             es sa sb s0 ee p ty r G t /\
@@ -309,7 +310,7 @@ Proof
   simp[assign_target_place_sim_full_def,imm_target_place_sim_full_def,
        target_place_sim_full_def] >> strip_tac >> rpt gen_tac >> strip_tac
   >- (first_x_assum drule_all >> strip_tac >>
-      irule gas_outcome_full_post_mono >> first_assum (irule_at Any) >>
+      irule gasOutcomeFullBindModsTheory.gas_outcome_full_mods_post_mono >> first_assum (irule_at Any) >>
       simp[assign_target_post_def] >> rpt strip_tac >> gvs[] >> metis_tac[]) >>
   first_x_assum drule_all >>
   simp[assign_target_post_def]

@@ -12,7 +12,7 @@ Definition make_array_completed_def:
     D lo d ctx func ce cx env e es sa sm sb s0 si
     G0 tn0 ee v tv base cap q G tn t gs <=>
     (?ann elem bnd args. e = Builtin ann (MakeArray elem bnd) args) /\
-    expr_body_pre ce cx env e es /\
+    expr_body_pre_mods ce.ce_modules ce cx env e es /\
     eval_expr cx e (es with gas_obs := gs) = (INL (Value v),ee) /\
     lowered_value_type ce e = expr_type e /\
     ~is_word_type (expr_type e) /\

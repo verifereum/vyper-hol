@@ -1,6 +1,6 @@
 Theory bodyFullTargetMappingOutcome
 Ancestors
-  bodyFullTargetDefs gasOutcomeFull fragGasOriginPtr targetSubscriptMapping
+  bodyFullTargetDefs gasOutcomeFull gasOutcomeFullMods[qualified] fragGasOriginPtr targetSubscriptMapping
   targetSubscriptSplit bodyPtrDefs gasContext targetPlaceSimDefs
   vyperStorageTrace vyperStorageFootprint vyperInterpreter vyperState
   loweringPosts exprLoweringProps vyperStorage compileEnv gasSummary
@@ -25,7 +25,7 @@ Theorem mapping_extension_full_outcome:
     ghost_inv_at (DF H) lo d cenv cx mid2 G tn t /\
     gas_origin_ptr_path (DF H,lo,explicit,ctx,func,PG)
       (t2,G2,tn2) [] (OK t,G,tn)) ==>
-  gas_outcome_full (DF,lo,explicit,ctx,func,PG) (cx_tops cx) cx st0
+  gas_outcome_full_mods (DF,lo,explicit,ctx,func,PG) cenv.ce_modules cx st0
     (extend_place cx (HashMapRef tr base_slot kt vt) (ValueSubscript v))
     (mid2,t2,G2,tn2)
     (\H res ee G tn t. ?pv'. res = INL pv' /\
@@ -59,7 +59,7 @@ Proof
         (qpat_assum `ee = _` (fn th => once_rewrite_tac[th]) >> simp[]) >>
       `ee with gas_obs := [] = ee` by
         (qpat_assum `ee.gas_obs = []` (fn th => rewrite_tac[GSYM th]) >> simp[]) >>
-      simp[gas_outcome_full_def] >> qexists_tac `[]` >>
+      simp[gasOutcomeFullModsTheory.gas_outcome_full_mods_def] >> qexists_tac `[]` >>
       disj2_tac >> disj1_tac >>
       qexistsl_tac [`INL pv'`, `ee`, `OK t`, `G`, `tn`] >>
       simp[gas_explicit_def] >> gen_tac >> disch_tac >>
@@ -77,7 +77,7 @@ Proof
       rename1 `PlaceR p` >> Cases_on `p` >>
       gvs[target_ptr_ok_def, place_ptr_rel_def, slot_loc_def] >>
       Cases_on `tr` >> gvs[]) >>
-  simp[gas_outcome_full_def] >> qexists_tac `[]` >> disj1_tac >>
+  simp[gasOutcomeFullModsTheory.gas_outcome_full_mods_def] >> qexists_tac `[]` >> disj1_tac >>
   conj_tac
   >- (irule gas_bad_storage_at_endpoint >>
       qexistsl_tac [`ee`, `res`] >> simp[gas_explicit_def]) >>

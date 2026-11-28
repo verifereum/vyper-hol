@@ -1,6 +1,8 @@
 (* Array suffix on the frozen source and runtime contract. *)
 Theory bodyFullTargetArraySuffix
 Ancestors
+  targetPlaceSim[qualified]
+  gasOutcomeFullMods[qualified] bodyInvSplit[qualified]
   bodyFullTargetSubscript bodyFullTargetArraySource bodyFullTargetArrayLoad
   bodyFullTargetArrayScalar bodyFullTargetAttribute targetSubscriptMemory
   targetSubscriptStorage bodyPtrDefs loweringPosts freshWrites fragGasOriginPtrDead
@@ -13,11 +15,12 @@ Ancestors
   exprSimHypsDefs[qualified]
 
 Definition array_tail_packet_def:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 <=>
-  body_inv tops ctx cenv cx /\
-  target_pre cenv cx env (SubscriptTarget bt e) es /\
+  contract_inv mods exps ctx cenv cx /\
+  module_body_inv mods cenv.ce_module tops cenv cx /\
+  target_pre_mods mods cenv cx env (SubscriptTarget bt e) es /\
   type_place_target env bt = SOME (Type (ArrayT et bd)) /\
   type_place_target env (SubscriptTarget bt e) = SOME vt /\
   compile_get_target_ptr compile_expr cenv bt sa = (rb, sm) /\
@@ -30,7 +33,7 @@ Definition array_tail_packet_def:
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   (!x sz. cenv.ce_return_buf = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
   (!x sz. cenv.ce_return_pc = SOME (PtrVar (Var x) sz) ==> not_fresh_at sa x) /\
-  expr_sim_inv cenv cx env mid1 /\ mid1.gas_obs = [] /\
+  expr_sim_inv_mods mods cenv cx env mid1 /\ mid1.gas_obs = [] /\
   eval_base_place cx bt (es with gas_obs := base_gas) = (INL pv, mid1) /\
   bind (eval_expr cx e) (read_result cx)
     (mid1 with gas_obs := index_gas) = (INL v, mid2) /\
@@ -62,7 +65,7 @@ Definition array_tail_packet_def:
 End
 
 Theorem array_tail_packet_base_at_index[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace ==>
@@ -125,7 +128,7 @@ Proof
 QED
 *)
 Theorem array_tail_packet_source_index:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace ==>
@@ -161,7 +164,7 @@ Proof
 QED
 *)
 Theorem array_tail_packet_memory_source[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace /\
@@ -179,7 +182,7 @@ Proof
 QED
 
 Theorem array_tail_packet_storage_source[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace /\
@@ -254,7 +257,7 @@ Proof
 QED
 *)
 Theorem array_tail_packet_source_bounds:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace ==>
@@ -334,7 +337,7 @@ Proof
 QED
 *)
 Theorem array_tail_packet_index_post:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace ==>
@@ -344,7 +347,7 @@ Proof
 QED
 
 Theorem array_tail_packet_index_kept:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace ==>
@@ -489,7 +492,7 @@ Proof
 QED
 *)
 Theorem array_tail_packet_memory_loader:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et (Dynamic cap)
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et (Dynamic cap)
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace /\
@@ -570,7 +573,7 @@ Proof
 QED
 *)
 Theorem array_tail_packet_storage_loader:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et (Dynamic cap)
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et (Dynamic cap)
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace /\
@@ -624,7 +627,7 @@ Proof
 QED
 
 Theorem array_tail_packet_compile_parts[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
   ?loc len sl sc p.
@@ -660,7 +663,7 @@ Proof
 QED
 
 Theorem array_tail_packet_scalar_inputs[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
   allocas_from lo t2 /\
@@ -685,7 +688,7 @@ Proof
 QED
 
 Theorem array_tail_packet_operands_old[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
   (!x. FST rb = Var x ==> not_fresh_at sn x) /\
@@ -717,7 +720,7 @@ Proof
 QED
 
 Theorem array_tail_packet_dynamic_length[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et (Dynamic cap)
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et (Dynamic cap)
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   compile_ptr_load cenv.ce_is_ctor cenv.ce_imm_alloca
@@ -815,7 +818,7 @@ Proof
 QED
 
 Theorem array_tail_packet_initialized_source:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
   ?loc len sl sc p w t G tn b iw.
@@ -919,7 +922,7 @@ Proof
 QED
 
 Theorem array_tail_packet_initialized:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
   ?loc len sl sc p w t G tn b iw.
@@ -1061,7 +1064,7 @@ Proof
 QED
 
 Theorem array_tail_packet_finite_source:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
   ?loc b iw nw t3 G3 tn3.
@@ -1160,7 +1163,7 @@ Proof
 QED
 
 Theorem array_tail_packet_finite:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
   ?loc b iw nw t3 G3 tn3.
@@ -1208,7 +1211,7 @@ Proof
 QED
 *)
 Theorem array_tail_packet_extend_result:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   eval_operand iop t2 = SOME iw /\
@@ -1231,7 +1234,7 @@ Proof
 QED
 
 Theorem array_tail_packet_endpoint_frame[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace /\
@@ -1369,7 +1372,7 @@ Proof
 QED
 *)
 Theorem array_tail_packet_child_post[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace /\
@@ -1408,7 +1411,7 @@ Proof
 QED
 *)
 Theorem array_tail_packet_child_ptr_ok[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   valid_horizon cx st0 H mid2.storage_trace /\
@@ -1422,7 +1425,7 @@ Proof
 QED
 
 Theorem array_tail_packet_code_frame[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
   sb.cs_current_bb = sn.cs_current_bb /\
@@ -1446,7 +1449,7 @@ Proof
 QED
 
 Theorem array_tail_packet_alloca_frame[local]:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 /\
   u with <|vs_vars := t2.vs_vars; vs_inst_idx := t2.vs_inst_idx|> = t2 /\
@@ -1477,12 +1480,12 @@ Proof
 QED
 
 Theorem target_array_suffix_full:
-  array_tail_packet tops DF lo d ctx func cenv cx env bt e es et bd
+  array_tail_packet mods exps tops DF lo d ctx func cenv cx env bt e es et bd
     st0 vt sa sm sn sb rb iop r s0 G0 tn0 pv v base_gas index_gas
     mid1 t1 G1 tn1 mid2 t2 G2 tn2 ==>
-  gas_outcome_full
+  gas_outcome_full_mods
     (DF, lo, gas_explicit_sites ctx shadow_ctx, ctx, func, PG)
-    (cx_tops cx) cx st0 (extend_place cx pv (ValueSubscript v))
+    cenv.ce_modules cx st0 (extend_place cx pv (ValueSubscript v))
     (mid2, t2, G2, tn2)
     (\H res ee G tn t. ?pv'. res = INL pv' /\
       target_post H ctx func cenv cx es sa sb s0 ee pv' vt r t /\
@@ -1499,7 +1502,7 @@ Proof
   drule_all array_tail_packet_extend_result >> strip_tac >>
   `storage_trace_domain cx st0 mid2.storage_trace /\ mid2.gas_obs = []` by
     fs[array_tail_packet_def] >>
-  simp[gas_outcome_full_def] >> qexists `[]` >> disj2_tac >> disj1_tac >>
+  simp[gasOutcomeFullModsTheory.gas_outcome_full_mods_def] >> qexists `[]` >> disj2_tac >> disj1_tac >>
   qexistsl [`res`, `mid2`,
     `if idx_in_range (is_signed_type (expr_type e)) iw nw then OK t3 else Abort Revert_abort t3`,
     `G3`, `tn3`] >>

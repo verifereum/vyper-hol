@@ -1,5 +1,6 @@
 Theory forCapturedStorageRound
 Ancestors
+  bodyFullPredsMods[qualified]
   forCapturedStorageLive bodyFullForStorage bodyFullPreds bodyFullForFrame
   loweringStateRelDefs stmtSimDefs bodyPtrDefs allocaHistory ptrDiscipline
   compileEnv vyperStorageFootprint vyperState fragExec venomState venomInst
@@ -259,9 +260,9 @@ QED
 
 (* The scalar/copy endpoint supplies the resources for the scoped body. *)
 Definition for_captured_storage_round_entry_def:
-  for_captured_storage_round_entry (DF,lo,d,ctx,func) (cx,c0,bc,env,sb0,stmts)
+  for_captured_storage_round_entry exps (DF,lo,d,ctx,func) (cx,c0,bc,env,sb0,stmts)
     (e0,sa0,s0,G0,tn0) (idx,p,dst,lvo,len,inst,nb) (H,eb,j,z,GG,tt) <=>
-    expr_sim_inv bc cx env eb /\
+    expr_sim_inv_mods c0.ce_modules bc cx env eb /\
     ce_locals_declared bc env /\ locals_alloc_ok bc env /\
     cenv_top_ext c0 bc eb.scopes /\ stmt_state_rel H ctx func bc cx eb z /\
     storage_well_formed_on cx eb (FST H) /\
@@ -284,7 +285,7 @@ Definition for_captured_storage_round_entry_def:
     op_taint tt (Var idx) = {} /\ lookup_var p z = SOME dst /\
     eval_operand lvo z = SOME (n2w len) /\ op_prov GG lvo = NONE /\ op_taint tt lvo = {} /\
     FLOOKUP z.vs_allocas inst.inst_id = SOME (w2n dst,nb) /\ ptr_covers GG tt p z nb /\
-    body_stmts_full_ok cx stmts
+    body_stmts_full_ok_mods c0.ce_modules exps cx stmts
 End
 
 (* Run one nonempty round. Cleanup and the backedge both use the actual

@@ -1,13 +1,16 @@
 (* Shared entry invariant for the full and request-prefix Concat loops. *)
 Theory bodyFullBuiltinConcatReady
 Ancestors bodyFullPreds bodySimFull gasShadowState gasShadowUnit
+  bodyFullShadowBodyInv[qualified]
+  bodyInvSplit[qualified]
+  bodyFullPredsMods[qualified]
   bodyPtrDefs exprSimHypsDefs exprLowering compileEnv loweringStateRelDefs
   loweringPosts unitTransformDefs vyperStorageTrace vyperStorageFootprint
   vyperState venomState words list finite_map pred_set
 
 Definition concat_loop_ready_def:
   concat_loop_ready args P k DF lo d ctx shadow_ctx (PG : (num # num) option list)
-    tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
+    mods exps tops func shadow_func cenv cx env st0 es sa sb shadow_sa shadow_sb
     s0 G0 tn0 dv ov ow binst B bsz oinst <=>
     compile_concat compile_expr cenv args (Var dv)
       (MAP (\e.
@@ -27,12 +30,14 @@ Definition concat_loop_ready_def:
     fn_inst_ids_distinct func /\ local_ptrs_reserved cenv sa /\
     EVERY (\e. is_bytestring_type (expr_type e) \/
                  ?m. expr_type e = BaseT (BytesT (Fixed m))) args /\
-    body_const_cells_agree [(NONE,tops)] cx env es /\
-    expr_sim_inv cenv cx env es /\
-    (!e st. MEM e args /\ expr_sim_inv cenv cx env st ==>
-       expr_body_pre cenv cx env e st) /\
-    body_exprs_full_ok cx args /\ body_inv tops ctx cenv cx /\
-    shadow_body_inv tops ctx shadow_ctx /\
+    body_const_cells_agree mods cx env es /\
+    expr_sim_inv_mods mods cenv cx env es /\
+    (!e st. MEM e args /\ expr_sim_inv_mods mods cenv cx env st ==>
+       expr_body_pre_mods mods cenv cx env e st) /\
+    body_exprs_full_ok_mods mods exps cx args /\
+    contract_inv mods exps ctx cenv cx /\
+    module_body_inv mods cenv.ce_module tops cenv cx /\
+    shadow_body_inv_mods mods exps ctx shadow_ctx /\
     (!fn inst z. frag_reachable ctx func s0 fn inst z ==> dalloca_fmp_headroom inst z) /\
     (ctx_has_dalloca ctx ==> allocas_below_fmp s0) /\
     (!H. dead_lo_ok H (DF H) lo cenv cx) /\

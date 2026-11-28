@@ -29,11 +29,11 @@ Ancestors
 
 (* Each operand is ok, a later one where the one before evaluates. *)
 Definition bool_chain_full_ok_def:
-  bool_chain_full_ok cx [] = T /\
-  bool_chain_full_ok cx (e::es) =
-    (body_expr_full_ok cx e /\
+  bool_chain_full_ok mods exps cx [] = T /\
+  bool_chain_full_ok mods exps cx (e::es) =
+    (body_expr_full_ok_mods mods exps cx e /\
      ((?s tv s'. eval_expr cx e s = (INL tv, s')) ==>
-      bool_chain_full_ok cx es))
+      bool_chain_full_ok mods exps cx es))
 End
 
 (* SCRATCH MEASUREMENT: the original proof failed after widening the body

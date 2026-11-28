@@ -1,5 +1,7 @@
 Theory forCapturedStorageLive
 Ancestors
+  exprSimHypsDefs[qualified]
+  bodyFullPredsMods[qualified]
   bodyFullForStorageCapture bodyFullPreds bodyFullForFrame loweringStateRelDefs
   stmtSimDefs bodyPtrDefs allocaHistory ptrDiscipline compileEnv
   vyperStorageFootprint vyperStoragePlaceObserved vyperStoragePlaceRegion
@@ -11,7 +13,7 @@ Ancestors
    The captured array is a subregion of an earlier trace root; no equality
    of storage contents between the capture and the loop head is required. *)
 Definition for_captured_storage_live_def:
-  for_captured_storage_live (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
+  for_captured_storage_live exps (DF,lo,d,ctx,func,cx,c0,id,env,typ,loop_body)
     (e0,sa0,s0,G0,tn0) (em,sbExpr,bop,tr,slot,tyv,bd,vs,len)
     (lvo,idx,cond) (p,dst,nb,sd)
     (H : (bool # 256 word # type_value) list # num list,k,rs,ee,G,tn,s) <=>
@@ -40,12 +42,12 @@ Definition for_captured_storage_live_def:
     (!name b sz. local_region c0 ee.scopes s name b sz ==>
       w2n dst + nb <= b \/ b + sz <= w2n dst) /\
     lookup_scopes id ee.scopes = NONE /\
-    expr_sim_inv c0 cx env ee /\ ce_locals_declared c0 env /\
+    expr_sim_inv_mods c0.ce_modules c0 cx env ee /\ ce_locals_declared c0 env /\
     locals_alloc_ok c0 env /\ cenv_top_ext c0 c0 ee.scopes /\
     stmt_state_rel H ctx func c0 cx ee s /\ storage_well_formed_on cx ee (FST H) /\
     ghost_inv_at (DF H) lo d c0 cx ee G tn s /\
     return_buf_frame d c0 sa0 s /\ ret_pc_ok c0 sa0 s /\ return_buf_sep d c0 ee s /\
-    (k <> 0 ==> body_stmts_full_ok cx loop_body) /\
+    (k <> 0 ==> body_stmts_full_ok_mods c0.ce_modules exps cx loop_body) /\
     alloca_history func s /\ (ctx_has_dalloca ctx ==> allocas_below_fmp s) /\
     s0.vs_alloca_next <= s.vs_alloca_next /\
     (!x w. not_fresh_at sa0 x /\ lookup_var x s0 = SOME w ==>
