@@ -13096,7 +13096,7 @@ Proof
   `fn_has_code shadow_ss shadow_sb shadow_func` by metis_tac[fn_has_code_split] >>
   `assign_tuple_targets cx (TupleTarget gs) v' = assign_tuple_target_list cx gs vs` by
     (qpat_assum `v' = ArrayV _` SUBST1_TAC >> simp[Once evaluate_def]) >>
-  `tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+  `tupleWidenedStoreEntry$tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
       (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) 0
       ss shadow_ss ee t Gf tf []` by suspend "entry" >>
   `!mem. mem_agree_outside tf.t_mem t.vs_memory mem ==>
@@ -13162,7 +13162,7 @@ Theorem tuple_widened_load_entry_zero:
       val_in_memory (TupleTV tvs) (ArrayV (TupleV vs)) (w2n w) mem) /\
     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (v,G',tn') [] (OK t,Gf,tf)) /\
-    tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+    tupleWidenedStoreEntry$tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
       (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) 0
       ss shadow_ss ee t Gf tf []
 Proof
@@ -13514,7 +13514,7 @@ QED
    definitions. Temporarily admit it to test its downstream consumers.
 Proof
   strip_tac >>
-  qpat_x_assum `tupleWidenedStoreEntry$tuple_widened_store_entry _ _ _ _ _ _ _ _ _ _ _ _`
+  qpat_x_assum `tupleWidenedStoreEntry$tuple_widened_store_entry _ _ _ _ _ _ _ _ _ _ _ _ _`
     (strip_assume_tac o REWRITE_RULE [tupleWidenedStoreEntryTheory.tuple_widened_store_entry_def]) >>
   drule_all tuple_widened_head_static >> strip_tac >>
   drule_all tuple_widened_head_source >> strip_tac >>
@@ -13589,7 +13589,7 @@ Theorem tuple_widened_place_head_parts:
   (!H. dead_lo_ok H (DF H) lo cenv cx) /\
   i < LENGTH gs /\
   (!bt. EL i gs = BaseTarget bt ==> ~immutable_root cx bt) /\
-  tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+  tupleWidenedStoreEntry$tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
     (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) i c sh src s G tn obs ==>
   ?head r place_cs shadow_place_cs write_cs shadow_write_cs loc dty.
     EL i gs = BaseTarget head /\ supported_target tops bindings head /\
@@ -14041,13 +14041,13 @@ Theorem tuple_widened_immutable_name_advance:
   assignable_type (get_tenv cx) dty /\
   type_widens_to (get_tenv cx) (EL i tys) dty /\
   evaluate_type (get_tenv cx) (EL i tys) = SOME (EL i tvs) /\
-  tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+  tupleWidenedStoreEntry$tuple_widened_store_entry [] (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
     (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) i c sh src s G tn obs ==>
   ?write_cs shadow_write_cs ff q Gq tq.
     (!tail. assign_tuple_targets cx (BaseTarget (TopLevelNameTarget (ns,id))) (EL i vs)
       (src with gas_obs := tail) = (INL (),ff with gas_obs := tail)) /\
     (!D. gas_origin_ptr_path (D,lo,explicit,ctx,func,PG) (s,G,tn) [] (OK q,Gq,tq)) /\
-    tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+    tupleWidenedStoreEntry$tuple_widened_store_entry [] (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
       (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
       (SUC i) write_cs shadow_write_cs ff q Gq tq obs
 Proof
@@ -14237,7 +14237,7 @@ Proof
        (src,s,G,tn) stmtQ stmtR` suffices_by
     (disch_then (qspecl_then [`LENGTH gs`,`0`,`ss`,`shadow_ss`,`ee`,`t`,`Gf`,`tf`,`[]`] mp_tac) >>
      `entry 0 ss shadow_ss ee t Gf tf []` by
-       (qpat_assum `tupleWidenedStoreEntry$tuple_widened_store_entry _ _ _ _ 0 _ _ _ _ _ _ []`
+       (qpat_assum `tupleWidenedStoreEntry$tuple_widened_store_entry _ _ _ _ _ 0 _ _ _ _ _ _ []`
           (mp_tac o REWRITE_RULE [tupleWidenedStoreEntryTheory.tuple_widened_store_entry_def]) >>
         simp[NoAsms,Abbr `entry`,Abbr `frame`,Abbr `joint`,Abbr `cursor_ok`,
              Abbr `pending`,Abbr `snapshot`] >>
@@ -14358,7 +14358,7 @@ Proof
   >- (Cases_on `?nsid. head = TopLevelNameTarget nsid`
       >- (pop_assum (qx_choose_then `nsid` SUBST_ALL_TAC) >>
   PairCases_on `nsid` >> rename1 `EL i gs = BaseTarget (TopLevelNameTarget (ns,id))` >>
-  `tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+  `tupleWidenedStoreEntry$tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
       (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) i c sh src s G tn obs` by
     (qpat_assum `entry i c sh src s G tn obs` mp_tac >>
      simp[NoAsms,tupleWidenedStoreEntryTheory.tuple_widened_store_entry_def,Abbr `frame`,Abbr `joint`,
@@ -14370,7 +14370,7 @@ Proof
   disch_then (qspecl_then [`gas_explicit_sites ctx shadow_ctx`,`PG`]
     (qx_choosel_then [`wc`,`swc`,`ff`,`q`,`Gq`,`tq`] strip_assume_tac)) >>
   `ff.gas_obs = []` by
-    (qpat_assum `tupleWidenedStoreEntry$tuple_widened_store_entry _ _ _ _ (SUC i) wc swc ff q Gq tq obs`
+    (qpat_assum `tupleWidenedStoreEntry$tuple_widened_store_entry _ _ _ _ _ (SUC i) wc swc ff q Gq tq obs`
        (strip_assume_tac o REWRITE_RULE [tupleWidenedStoreEntryTheory.tuple_widened_store_entry_def]) >>
      first_assum ACCEPT_TAC) >>
   `gas_outcome_full cfg (cx_tops cx) cx st0
@@ -14380,7 +14380,7 @@ Proof
       (qspecl_then [`SUC i`,`wc`,`swc`,`ff`,`q`,`Gq`,`tq`,`obs`]
         (mp_tac o BETA_RULE)) >>
      (impl_tac >- (conj_tac >- decide_tac >>
-       qpat_assum `tupleWidenedStoreEntry$tuple_widened_store_entry _ _ _ _ (SUC i) wc swc ff q Gq tq obs` mp_tac >>
+       qpat_assum `tupleWidenedStoreEntry$tuple_widened_store_entry _ _ _ _ _ (SUC i) wc swc ff q Gq tq obs` mp_tac >>
        simp[NoAsms,tupleWidenedStoreEntryTheory.tuple_widened_store_entry_def,Abbr `frame`,Abbr `joint`,
             Abbr `cursor_ok`,Abbr `pending`,Abbr `snapshot`,AC CONJ_ASSOC CONJ_COMM] >>
        rpt (disch_then (map_every assume_tac o CONJUNCTS)) >>
@@ -15210,7 +15210,7 @@ Proof
                   (INL (),ff with gas_obs := tail)) /\
                 (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
                   (sp,Gp,tp) [] (OK q,Gq,tq)) /\
-                tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+                tupleWidenedStoreEntry$tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
                   (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
                   (SUC i) write_cs shadow_write_cs ff q Gq tq
                   (obs ++ gas_explicit headmarks s.vs_gas_readings)` by
@@ -17049,7 +17049,7 @@ Proof
 QED
 *)
 Theorem tuple_widened_place_write_advance:
-  tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+  tupleWidenedStoreEntry$tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
     (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf) i c sh src s G tn obs /\
   (contract_inv mods exps ctx cenv cx /\
      module_body_inv mods cenv.ce_module tops cenv cx) /\ MEM func ctx.ctx_functions /\ fn_inst_ids_distinct func /\
@@ -17120,7 +17120,7 @@ Theorem tuple_widened_place_write_advance:
       (INL (),ff with gas_obs := tail)) /\
     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (sp,Gp,tp) [] (OK q,Gq,tq)) /\
-    tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+    tupleWidenedStoreEntry$tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
       (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
       (SUC i) write_cs shadow_write_cs ff q Gq tq (obs ++ gas_explicit headmarks s.vs_gas_readings)) \/
   ((!tail. write_place cx p (EL i vs) (mid with gas_obs := tail) =
@@ -17135,7 +17135,7 @@ QED
 
 (* SCRATCH MEASUREMENT: original continuation.
 Resume tuple_assign_widened_with_immutable_paths[regular_write]:
-  `tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func)
+  `tupleWidenedStoreEntry$tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func)
      (cenv,cx,env,st0,es,ee) (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
      i c sh src s G tn obs` by
    (qpat_assum `_ i c sh src s G tn obs` mp_tac >>
@@ -17154,7 +17154,7 @@ Resume tuple_assign_widened_with_immutable_paths[regular_write]:
        (INL (),ff with gas_obs := tail)) /\
      (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
        (sp,Gp,tp) [] (OK q,Gq,tq)) /\
-     tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
+     tupleWidenedStoreEntry$tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func) (cenv,cx,env,st0,es,ee)
        (sa,sb,shadow_sb,s0,G0,tn0) (tys,gs,elems,tvs,vs,w,t,tf)
        (SUC i) write_cs shadow_write_cs ff q Gq tq (obs ++ gas_explicit headmarks s.vs_gas_readings)) \/
    ((!tail. write_place cx p (EL i vs) (mid with gas_obs := tail) =
@@ -17189,7 +17189,7 @@ Resume tuple_assign_widened_with_immutable_paths[regular_write]:
           simp[NoAsms,eq,SIMP_RULE (srw_ss()) [LET_THM] th])) >> NO_TAC) ORELSE
      (qpat_assum `(?st u z. assign_tuple_targets cx (BaseTarget head) _ st = (INL u,z)) ==> _`
          (MATCH_ACCEPT_TAC o SIMP_RULE (srw_ss()) []))) )
-  >- (rename1 `tupleWidenedStoreEntry$tuple_widened_store_entry _ _ _ _ _ _ _ ff q Gq tq _` >>
+  >- (rename1 `tupleWidenedStoreEntry$tuple_widened_store_entry _ _ _ _ _ _ _ _ ff q Gq tq _` >>
       qhdtm_x_assum `tupleWidenedStoreEntry$tuple_widened_store_entry`
         (map_every assume_tac o CONJUNCTS o REWRITE_RULE [tupleWidenedStoreEntryTheory.tuple_widened_store_entry_def]) >>
       `pending (SUC i) write_cs q Gq tq` by
@@ -17765,7 +17765,7 @@ Proof
 QED
 *)
 Theorem tuple_widened_nested_write_advance:
-  tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func)
+  tupleWidenedStoreEntry$tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func)
     (cenv,cx,env,st0,es,ee) (sa,sb,shadow_sb,s0,G0,tn0)
     (tys,gs,elems,tvs,vs,w,t,tf) i c sh src s G tn obs /\
   (contract_inv mods exps ctx cenv cx /\
@@ -17840,7 +17840,7 @@ Theorem tuple_widened_nested_write_advance:
     ff.storage_trace = mid.storage_trace /\
     (!D. gas_origin_ptr_path (D,lo,gas_explicit_sites ctx shadow_ctx,ctx,func,PG)
       (sp,Gp,tp) [] (OK q,Gq,tq)) /\
-    tupleWidenedStoreEntry$tuple_widened_store_entry (DF,lo,d,ctx,func,shadow_func)
+    tupleWidenedStoreEntry$tuple_widened_store_entry exps (DF,lo,d,ctx,func,shadow_func)
       (cenv,cx,env,st0,es,ee) (sa,sb,shadow_sb,s0,G0,tn0)
       (tys,gs,elems,tvs,vs,w,t,tf) (SUC i) write_cs shadow_write_cs ff q Gq tq
       (obs ++ gas_explicit headmarks s.vs_gas_readings)
