@@ -7,7 +7,7 @@ Ancestors
   bodyIntCallDefaultSliceOccurrenceAccessMods gasShadowCompileHelpers
   vyperTypeEvalProofs vyperFiniteStoragePreservation vyperStorageFootprint
   gasOutcomeFullMods exprSimHypsDefs exprLowering compileEnv pair list alist
-  bodyIntCallArgMetadataMods bodyFullPredsMods bodyInvSplit compileUnit
+  bodyIntCallArgMetadataMods bodyFullPreds bodyFullPredsMods bodyInvSplit compileUnit
   loweringShapeProps constSubstMods vyperTypeContract vyperTypeContractStaticMaps
   linkedNsidProps venomFnInstsProofs
 

@@ -81,7 +81,7 @@ Proof
        mk_ptr_def, eval_operand_def, mem_path_offset_def] >>
   conj_tac >-
     (simp[immutable_holds_mods_def] >> qexistsl [`src`,`tops`] >>
-     simp[immutable_holds_def] >> qexistsl [`id`,`off`,`rt`,`v`,`0`] >>
+     simp[immutable_holds_def] >> qexistsl [`src`,`id`,`off`,`rt`,`v`,`0`] >>
      simp[sub_layout_def]) >>
   fs[immutable_frame_mods_def, immutables_rel_mods_def] >>
   `immutables_rel cenv cx.txn.target src cenv.ce_is_ctor es s` by metis_tac[] >>

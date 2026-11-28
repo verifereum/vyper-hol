@@ -1,6 +1,6 @@
 Theory bodyIntCallDefaultPushedInvMods
 Ancestors
-  bodyFullPredsMods bodyInvSplit bodyCallSupport exprSimHypsDefs placeTypingProps
+  bodyFullPreds bodyFullPredsMods bodyInvSplit bodyCallSupport exprSimHypsDefs placeTypingProps
   constSubstCorrect constSubstStmts vyperTypeContract
   vyperTypeInvariants vyperTypeEvalProofs vyperLookupStorage vyperContext compileEnv
   alist list

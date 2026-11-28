@@ -1,7 +1,7 @@
 (* Qualified reads at the selected default cut, without repinning the caller. *)
 Theory bodyIntCallDefaultSelectedReadsMods
 Ancestors
-  bodyFullPredsMods bodyInvCodeProps bodyQualifiedLookupPlaceMods
+  bodyFullPreds bodyFullPredsMods bodyInvCodeProps bodyQualifiedLookupPlaceMods
   immutableRegionTypingProps exprBodyPreProps exprSimHypsDefs vyperContext
   bodyFullPostsMods bodyInvSplit loweringStateRelDefs finite_map vyperState
   exprSimProps valueEncodingProofs venomState words
@@ -191,7 +191,10 @@ Proof
      goal_assum (drule_at Any)) >>
   drule_then assume_tac check_contract_runtime_namespaces >>
   `ALL_DISTINCT (MAP FST mods)` by fs[contract_namespaces_ok_def] >>
-  drule_then assume_tac body_const_cells_agree_mods_sources >>
+  `ALOOKUP cx.sources cx.txn.target = SOME mods` by
+    (qpat_assum `body_const_cells_agree _ _ _ _`
+       (strip_assume_tac o PURE_REWRITE_RULE [body_const_cells_agree_def]) >>
+     first_assum ACCEPT_TAC) >>
   conj_tac
   >- (rpt gen_tac >> strip_tac >>
       drule_all_then strip_assume_tac (cj 3 default_name_occurrence_declared) >>
