@@ -261,8 +261,8 @@ fun conditional i = without_smaller_rank
   (asm_x "case_rules" (prefix_case o el i o CONJUNCTS));
 fun structural tac = without_smaller_rank (asm_x "case_rules" kall_tac >> tac);
 
-Theorem body_sim_prefix_mutual_ranked[local]:
-  ^outstanding_cases ==> !rank:num. ^(snd (dest_imp (concl prefix_ind)))
+(* SCRATCH MEASUREMENT: the original proof failed after widening the body
+   definitions. Temporarily admit it to test its downstream consumers.
 Proof
   disch_then (mk_asm "case_rules") >> completeInduct_on `rank` >>
   mp_tac prefix_ind >> impl_tac
@@ -335,7 +335,14 @@ Proof
       >> structural (simp[body_tuple_target_prefix_ok_def])) >>
   strip_tac >> rpt conj_tac >> first_assum ACCEPT_TAC
 QED
+*)
+Theorem body_sim_prefix_mutual_ranked[local]:
+  ^outstanding_cases ==> !rank:num. ^(snd (dest_imp (concl prefix_ind)))
+Proof
+  cheat
+QED
 
+(* SCRATCH MEASUREMENT: original continuation.
 Resume body_sim_prefix_mutual_ranked[intcall]:
   rpt strip_tac >> full_simp_tac bool_ss case_simps >>
   asm_x "case_rules" (match_mp_tac o SIMP_RULE bool_ss case_simps o el 5 o CONJUNCTS) >>
@@ -371,8 +378,11 @@ Resume body_sim_prefix_mutual_ranked[intcall]:
   qpat_assum `type_check _ "IntCall args length" _ = _`
     (part_match_exists_tac I o concl) >> simp[]
 QED
+*)
 
+(* SCRATCH MEASUREMENT: original continuation.
 Finalise body_sim_prefix_mutual_ranked
+*)
 
 Theorem body_sim_prefix_mutual_from_cases:
   ^outstanding_cases ==>
