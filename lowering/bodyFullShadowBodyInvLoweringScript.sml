@@ -462,6 +462,7 @@ Proof
                         rpol_frontend_dispatch := Linear;
                         rpol_final_assembly := FAP_Optimize |>`, `unit`] >>
       simp[EQ_SYM_EQ]) >>
+  TRY (EVAL_TAC >> NO_TAC) >>
   metis_tac[supported_program_declaration, foo_supported, foo_bar_supported, MEM]
 QED
 

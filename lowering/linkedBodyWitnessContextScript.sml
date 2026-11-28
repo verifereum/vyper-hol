@@ -151,6 +151,8 @@ Triviality linked_witness_entry_static_gate:
   ALOOKUP cx.sources cx.txn.target = SOME linked_witness_mods /\
   cx.nonreentrant_slot = SOME global_nonreentrant_slot /\
   layouts_agree_mods linked_witness_mods linked_witness_exports am tx /\
+  check_linked_state_ownership cx.layouts cx.txn.target linked_witness_mods
+    (linked_live_functions linked_witness_mods linked_witness_exports) /\
   cx.stk = [(src,name)] /\ context_function_live cx (src,name) /\
   check_contract cx.in_deploy cx.layouts cx.txn.target linked_witness_mods =
     SOME art /\
@@ -223,6 +225,13 @@ Theorem linked_witness_constructor_entry_gate:
 Proof
   strip_assume_tac linked_witness_constructor_context >>
   strip_assume_tac linked_witness_constructor_body_checks >>
+  `check_linked_state_ownership (^constructor_context).layouts
+       ((^constructor_context).txn).target linked_witness_mods
+       (linked_live_functions linked_witness_mods linked_witness_exports)` by
+    (mp_tac linked_witness_deploy_premises >>
+     simp[deploy_typing_ok_mods_def, deploy_evaluation_context_mods_def, initial_evaluation_context_def] >>
+     metis_tac[REWRITE_RULE [linked_state_ownership_ok_def]
+       check_contract_linked_state_ownership_ok]) >>
   rename1 `check_contract T _ _ _ = SOME checked_art` >>
   mp_tac (INST [``am : abstract_machine`` |-> ``linked_witness_initial_machine``,
                ``tx : call_txn`` |-> ``linked_witness_deploy_tx``,
@@ -239,6 +248,13 @@ Theorem linked_witness_external_entry_gate:
 Proof
   strip_assume_tac linked_witness_external_context >>
   strip_assume_tac linked_witness_external_body_checks >>
+  `check_linked_state_ownership (^external_context).layouts
+       ((^external_context).txn).target linked_witness_mods
+       (linked_live_functions linked_witness_mods linked_witness_exports)` by
+    (mp_tac linked_witness_call_premises >>
+     simp[source_typing_ok_mods_def, initial_evaluation_context_def] >>
+     metis_tac[REWRITE_RULE [linked_state_ownership_ok_def]
+       check_contract_linked_state_ownership_ok]) >>
   rename1 `check_contract F _ _ _ = SOME checked_art` >>
   mp_tac (INST [``am : abstract_machine`` |-> ``linked_witness_am_call``,
                ``tx : call_txn`` |-> ``linked_witness_call_tx``,
